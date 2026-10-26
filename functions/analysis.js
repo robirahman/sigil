@@ -247,8 +247,10 @@ async function resumeStalledAnalyses(db, now, enqueue, limit) {
 			out.dropped++;
 			continue;
 		}
-		await ref.update({ resumes: resumes + 1, at: now });
+		// Counted only once a task is queued: a failed enqueue (thrown to the
+		// sweep) leaves the entry for the next minute, its resumes unspent.
 		await enqueue(gameId, 'resume' + (resumes + 1) + '-' + (typeof v.next === 'number' ? v.next : 'start'), v.winner || null);
+		await ref.update({ resumes: resumes + 1, at: now });
 		out.resumed++;
 	}
 	return out;

@@ -185,6 +185,10 @@ test('a chain that lost its task is resumed from its progress, a few times at mo
 	const enqueue = async (gameId, step, winner) => { queued.push([gameId, step, winner]); };
 	assert.deepStrictEqual(await resumeStalledAnalyses(db, Date.now() + 60_000, enqueue), { resumed: 0, dropped: 0 }, 'not yet stalled');
 	let now = Date.now() + STALL_MS + 1;
+	// An enqueue that fails spends no resume and leaves the entry as it was.
+	const before = db.dump().game_evals_progress.G;
+	await assert.rejects(resumeStalledAnalyses(db, now, async () => { throw new Error('tasks down'); }), /tasks down/);
+	assert.deepStrictEqual(db.dump().game_evals_progress.G, before);
 	for (let k = 1; k <= STALL_RESUMES; k++, now += STALL_MS + 1) {
 		assert.deepStrictEqual(await resumeStalledAnalyses(db, now, enqueue), { resumed: 1, dropped: 0 });
 	}

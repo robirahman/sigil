@@ -676,35 +676,34 @@ function aiReviewMixin() {
 			//     overwriting the cached entry
 			const gameId = this._roomCodeForReview;
 			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
-			// The Rust engine's stored evaluation (game_evals/<roomCode>) beats
-			// any Caveman review when it describes this game: the offline depth-6
-			// documents for either mode, the server's Quick analysis of a rated
-			// game (functions/analysis.js) for a Quick review.
+			// Stored reviews, best first: the Rust engine's offline depth-6
+			// evaluation (game_evals/<roomCode>, when it describes this game), a
+			// cached Deep Review, then for a Quick request the server's analysis
+			// of a rated game (functions/analysis.js, also in game_evals) or a
+			// cached Quick review.
+			let stored = null, cached = null;
 			if (db && gameId && typeof loadGameEvals === 'function') {
 				try {
 					const doc = await loadGameEvals(db, gameId);
-					const adapted = doc ? rustEvalsToReview(doc, gameLog) : null;
-					if (adapted && (adapted.mode === 'deep' || mode === 'quick')) {
-						this.aiReview = adapted;
-						if (!this.reviewMode) this.startReview();
-						this.reviewFirst();
-						return;
-					}
-				} catch (e) { /* fall through to the Caveman review */ }
+					stored = doc ? rustEvalsToReview(doc, gameLog) : null;
+				} catch (e) { /* fall through to the cached review */ }
 			}
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
-					const cached = await loadGameReview(db, gameId);
-					if (cached && okVersions.includes(cached.modelVersion)) {
-						const cachedMode = cached.mode || 'quick';
-						if (cachedMode === 'deep' || mode === 'quick') {
-							this.aiReview = cached;
-							if (!this.reviewMode) this.startReview();
-							this.reviewFirst();
-							return;
-						}
-					}
+					const c = await loadGameReview(db, gameId);
+					cached = c && okVersions.includes(c.modelVersion) ? c : null;
 				} catch (e) { /* fall through to compute */ }
+			}
+			const cachedMode = cached ? (cached.mode || 'quick') : null;
+			const pick = (stored && stored.mode === 'deep') ? stored
+				: cachedMode === 'deep' ? cached
+				: (mode === 'quick' && stored) ? stored
+				: (mode === 'quick' && cached) ? cached : null;
+			if (pick) {
+				this.aiReview = pick;
+				if (!this.reviewMode) this.startReview();
+				this.reviewFirst();
+				return;
 			}
 
 			this.aiReviewComputing = true;
