@@ -3,7 +3,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { DAY_MS, daysLeft, onVacation, startRecord, endRecord, missingPauses } = require('../vacation');
+const { DAY_MS, daysLeft, onVacation, startRecord, endRecord, missingPauses, pauseKey } = require('../vacation');
+const { vacationMaxDays } = require('../engine-loader').requireShared('vacation-bank.js');
 const { roomTimeLeft } = require('../engine-loader').requireShared('room-clock.js');
 
 const T = Date.UTC(2026, 9, 26, 12);
@@ -70,7 +71,10 @@ test('a player on vacation in several games is paused in each correspondence gam
 	const rooms = {
 		A: corr('alice', 'bob'),
 		B: corr('carol', 'alice'),
-		C: corr('alice', 'dave', { pauses: { p: { color: 'red', from: T, to: v.until } } }),
+		C: corr('alice', 'dave', { pauses: { [pauseKey('alice', v.from, 'red')]: { color: 'red', from: T, to: v.until } } }),
+		// Only an older vacation's pause (still running in this snapshot,
+		// about to be ended by the same sweep): this vacation's is missing.
+		G: corr('alice', 'gus', { pauses: { [pauseKey('alice', v.from - 5 * DAY_MS, 'red')]: { color: 'red', from: T - DAY_MS, to: v.until } } }),
 		D: Object.assign(corr('alice', 'erin'), { timeControl: { type: 'realtime', initialTime: 60_000 } }),
 		E: corr('alice', 'frank', { status: 'finished' }),
 		F: corr('bob', 'carol'),
@@ -81,6 +85,7 @@ test('a player on vacation in several games is paused in each correspondence gam
 		A: [{ uid: 'alice', color: 'red', to: v.until }],
 		B: [{ uid: 'alice', color: 'blue', to: v.until }],
 		C: [], D: [], E: [], F: [],
+		G: [{ uid: 'alice', color: 'red', to: v.until }],
 	});
 	// Each pause holds that game's clock for the vacation's length.
 	const room = corr('alice', 'bob', { turns: { t: { color: 'blue', timestamp: T - 3_600_000 } },
@@ -134,3 +139,21 @@ test('a pause whose vacation has ended is due to end then', () => {
 	// Other players' pauses are left to their own records.
 	assert.strictEqual(pauseDueEnd(k, p, { bob: ended }, T + 2 * DAY_MS), null);
 });
+
+test('the days picker offers what the server accepts, across New Year too', () => {
+	assert.strictEqual(vacationMaxDays(null, T), 14);
+	assert.strictEqual(vacationMaxDays({ used: { 2026: 10 } }, T), 4);
+	assert.strictEqual(vacationMaxDays({ used: { 2026: 14 } }, T), 0);
+	// 31 December with 13 days used: one day this year, thirteen next.
+	const nye = Date.UTC(2026, 11, 31, 12);
+	assert.strictEqual(vacationMaxDays({ used: { 2026: 13 } }, nye), 14);
+	assert.strictEqual(vacationMaxDays({ used: { 2026: 14 } }, nye), 0);
+	assert.strictEqual(vacationMaxDays({ used: { 2026: 13, 2027: 10 } }, nye), 5);
+	// Whatever it offers, startRecord accepts, and one more it refuses.
+	for (const [v, t] of [[null, T], [{ used: { 2026: 13 } }, nye], [{ used: { 2026: 13, 2027: 10 } }, nye], [{ used: { 2026: 2 } }, Date.UTC(2026, 11, 25)]]) {
+		const n = vacationMaxDays(v, t);
+		assert.ok(!startRecord(v, n, t).error, JSON.stringify([v, n]));
+		if (n < 14) assert.strictEqual(startRecord(v, n + 1, t).error, 'not-enough-days');
+	}
+});
+

@@ -393,10 +393,10 @@
 				<template x-if="!vacationActive">
 					<div>
 						<p class="vacation-card__left" x-text="vacationDaysLeft + (vacationDaysLeft === 1 ? ' day' : ' days') + ' left this year.'"></p>
-						<div x-show="vacationDaysLeft > 0">
+						<div x-show="vacationMaxDays > 0">
 							<label for="vacation-days">Days</label>
 							<select id="vacation-days" x-model.number="vacationDays" x-bind:disabled="vacationBusy">
-								<template x-for="n in vacationDaysLeft" x-bind:key="n"><option x-bind:value="n" x-text="n"></option></template>
+								<template x-for="n in vacationMaxDays" x-bind:key="n"><option x-bind:value="n" x-text="n"></option></template>
 							</select>
 							<button class="account-button vacation-card__start" x-on:click="startVacation" x-bind:disabled="vacationBusy">Start vacation</button>
 						</div>
@@ -476,6 +476,7 @@
 	</script>
 
 	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/engine/vacation-bank.js?v=34"></script>
 	<script src="static/scripts/auth-status.js"></script>
 
 	<script>
@@ -514,14 +515,17 @@
 					const d = new Date(this.vacation.until);
 					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 				},
-				// Same bank as functions/vacation.js daysLeft: 14 a calendar year
-				// (UTC), each day charged to the year it begins in.
+				// The server's bank (engine/vacation-bank.js): 14 days a calendar
+				// year (UTC), each day charged to the year it begins in.
 				get vacationDaysLeft() {
 					void this._vacationTick;
-					const v = this.vacation;
-					const y = new Date().getUTCFullYear();
-					const used = !v ? 0 : v.used ? (v.used[y] || 0) : (v.year === y ? (v.usedDays || 0) : 0);
-					return Math.max(0, 14 - used);
+					return vacationDaysLeft(this.vacation, Date.now());
+				},
+				// The longest vacation the server would accept now (near New
+				// Year it may draw on next year's bank too).
+				get vacationMaxDays() {
+					void this._vacationTick;
+					return vacationMaxDays(this.vacation, Date.now());
 				},
 				deleteOpen: false,
 				deleteConfirm: '',
@@ -622,7 +626,7 @@
 					} catch (e) {
 						this.vacation = null;
 					}
-					this.vacationDays = Math.min(Math.max(1, this.vacationDays), Math.max(1, this.vacationDaysLeft));
+					this.vacationDays = Math.min(Math.max(1, this.vacationDays), Math.max(1, this.vacationMaxDays));
 					this._vacationTick++;
 					// When the vacation ends on its own, show the bank again (read
 					// afresh: it may have been ended or changed elsewhere).

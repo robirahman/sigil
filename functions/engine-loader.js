@@ -26,7 +26,7 @@ const ENGINE_FILES = [
 
 // Engine files the functions require() directly (CommonJS-aware), not part
 // of the replay bundle.
-const SHARED_FILES = ['room-clock.js'];
+const SHARED_FILES = ['room-clock.js', 'vacation-bank.js'];
 
 function engineDir() {
 	const copied = path.join(__dirname, 'engine');

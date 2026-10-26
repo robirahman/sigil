@@ -20,29 +20,14 @@
  * the clients could not.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const VACATION_DAYS_PER_YEAR = 14;
-
-const yearOf = (ms) => new Date(ms).getUTCFullYear();
-
-/** The calendar year (UTC) of each day of a vacation from `from`: day i begins at from + i days. */
-function dayYears(from, days) {
-	return Array.from({ length: days }, (_, i) => yearOf(from + i * DAY_MS));
-}
-
-/** Days used per year, { [year]: n }, for the stored record `v` (may be null). */
-function usedByYear(v) {
-	if (!v) return {};
-	if (v.used && typeof v.used === 'object') return Object.assign({}, v.used);
-	// The first form of the record: one year's count.
-	return typeof v.year === 'number' ? { [v.year]: v.usedDays || 0 } : {};
-}
-
-/** Days left in `year`'s bank (that of `now` by default) for the stored record `v`. */
-function daysLeft(v, now, year) {
-	const y = year === undefined ? yearOf(now) : year;
-	return Math.max(0, VACATION_DAYS_PER_YEAR - (usedByYear(v)[y] || 0));
-}
+// The bank's arithmetic is shared with account.html's days picker
+// (docs/static/scripts/engine/vacation-bank.js).
+const bank = require('./engine-loader').requireShared('vacation-bank.js');
+const DAY_MS = bank.VACATION_DAY_MS;
+const VACATION_DAYS_PER_YEAR = bank.VACATION_DAYS_PER_YEAR;
+const daysLeft = bank.vacationDaysLeft;
+const dayYears = bank.vacationDayYears;
+const usedByYear = bank.vacationUsedByYear;
 
 /** Is the record `v` a vacation running at `now`? */
 function onVacation(v, now) {
@@ -57,11 +42,9 @@ function onVacation(v, now) {
 function startRecord(v, days, now) {
 	if (!Number.isInteger(days) || days < 1) return { error: 'invalid-days' };
 	if (onVacation(v, now)) return { error: 'already-on-vacation' };
-	const used = {};
-	// Past years' counts are no longer needed.
-	for (const [y, n] of Object.entries(usedByYear(v))) if (Number(y) >= yearOf(now)) used[y] = n;
-	for (const y of dayYears(now, days)) used[y] = (used[y] || 0) + 1;
-	if (Object.values(used).some((n) => n > VACATION_DAYS_PER_YEAR)) return { error: 'not-enough-days' };
+	const charged = bank.vacationCharge(v, days, now);
+	if (!charged) return { error: 'not-enough-days' };
+	const used = charged.used;
 	// The last vacation's span stays, so the sweep can still end its pauses.
 	const prev = v && typeof v.from === 'number' ? { from: v.from, until: v.until } : null;
 	return { used, from: now, until: now + days * DAY_MS, days, prev };
@@ -96,7 +79,7 @@ function pausable(room) {
 /**
  * The pauses a room still needs at `now`, for the players in `active`
  * ({uid: vacation record}) who are on vacation: [{ uid, color, to }].
- * A colour that already has a pause running needs none.
+ * A seat that already holds this vacation's pause (by key) needs none.
  */
 function missingPauses(room, active, now) {
 	if (!pausable(room)) return [];
@@ -105,12 +88,9 @@ function missingPauses(room, active, now) {
 		const uid = room[c] && room[c].uid;
 		const v = uid && active[uid];
 		if (!onVacation(v, now)) continue;
-		const pauses = room.pauses || {};
-		const running = Object.keys(pauses).some((k) => {
-			const p = pauses[k];
-			return p && p.color === c && typeof p.from === 'number' && typeof p.to === 'number' && p.from <= now && now < p.to;
-		});
-		if (!running) out.push({ uid, color: c, to: v.until });
+		// This vacation's own pause (another, such as a stale one from an
+		// earlier vacation, does not count).
+		if (!(room.pauses && room.pauses[pauseKey(uid, v.from, c)])) out.push({ uid, color: c, to: v.until });
 	}
 	return out;
 }

@@ -65,6 +65,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/turn-notify.js',
 	'./static/scripts/engine/room-clock.js',
 	'./static/scripts/engine/room-clock.js?v=34',
+	'./static/scripts/engine/vacation-bank.js',
+	'./static/scripts/engine/vacation-bank.js?v=34',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/settings-panel.js',

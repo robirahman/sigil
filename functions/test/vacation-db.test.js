@@ -102,3 +102,23 @@ test('ending an old vacation leaves the pause of a newer one alone', async () =>
 	const after = (await db.ref('rooms/A/pauses/' + nk).once('value')).val();
 	assert.strictEqual(after.to, fresh.until);
 });
+
+test('one sweep both ends an old vacation\'s pause and adds the current one\'s', async () => {
+	await setVacation(db, 'alice', 1, Date.now());
+	const old = (await db.ref('vacations/alice').once('value')).val();
+	await setVacation(db, 'alice', 0, Date.now());
+	await new Promise((r) => setTimeout(r, 5));
+	await setVacation(db, 'alice', 2, Date.now());
+	const cur = (await db.ref('vacations/alice').once('value')).val();
+	// A room holding only the old vacation's pause, still running (its end
+	// was missed), and not yet the current one's.
+	await db.ref('rooms/S').set(Object.assign(room('playing', corr, 'alice', 'bob'),
+		{ pauses: { [pauseKey('alice', old.from, 'red')]: { color: 'red', from: old.from, to: old.until } } }));
+	await pauseNewGames(db, Date.now());
+	const p = (await db.ref('rooms/S/pauses').once('value')).val();
+	const oldP = p[pauseKey('alice', old.from, 'red')];
+	const curP = p[pauseKey('alice', cur.from, 'red')];
+	assert.ok(oldP.to < old.until, JSON.stringify(oldP));
+	assert.ok(curP && curP.to === cur.until, JSON.stringify(p));
+});
+
