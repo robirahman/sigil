@@ -76,7 +76,7 @@ test('a game record is written by one of its players, and only before it is rate
 
 const waiting = { spellNames: ['a'], status: 'waiting', created: Date.now(), ranked: false,
 	red: { uid: 'alice', displayName: 'Alice', connected: true }, blue: { connected: false },
-	timeControl: { type: 'none' }, variant: 'standard', allowSpectators: true };
+	timeControl: { type: 'none' }, variant: 'standard', allowSpectators: true, seq: true };
 
 test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db(null), 'rooms/R1'), waiting));
@@ -164,8 +164,10 @@ test('rooms: an abort names the side that aborts', async () => {
 });
 
 test('rooms: a takeback removes turns only when the opponent accepts', async () => {
+	// A room created before turn sequencing (no `seq`): the old rule.
 	const playing = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true },
 		turns: { t1: { color: 'red', actions: ['a1'], timestamp: 1 }, t2: { color: 'blue', actions: ['b2'], timestamp: 2 } } });
+	delete playing.seq;
 	await seed({ rooms: { R3: playing } });
 	await assertFails(remove(ref(db('alice'), 'rooms/R3/turns/t2')));
 	await assertFails(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'blue', keys: { t1: true, t2: true } }));
@@ -176,7 +178,7 @@ test('rooms: a takeback removes turns only when the opponent accepts', async () 
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null, currentSfn: null }));
 	// A move built on a turn that was taken back is refused; on the latest turn it lands.
 	await assertFails(set(ref(db('alice'), 'rooms/R3/turns/t3'), { color: 'red', actions: ['a2'], timestamp: serverTimestamp(), after: 't2' }));
-	await assertSucceeds(update(ref(db('alice'), 'rooms/R3'), { 'turns/t3': { color: 'red', actions: ['a2'], timestamp: serverTimestamp() }, last: { key: 't3', color: 'red' }, takeback: null }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R3'), { 'turns/t3': { color: 'red', actions: ['a2'], timestamp: serverTimestamp() }, takeback: null }));
 	// Without a request naming them, turns stay.
 	await seed({ rooms: { R4: playing } });
 	await assertFails(remove(ref(db('bob'), 'rooms/R4/turns/t1')));
@@ -374,6 +376,7 @@ test('turns: a room from a position starts with its side to move', async () => {
 
 test('turns: a room begun before `last` keeps the old rule until it ends', async () => {
 	const legacy = playingRoom({ turns: { t1: { color: 'red', actions: ['a'], timestamp: 1 }, t2: { color: 'blue', actions: ['b'], timestamp: 2 } } });
+	delete legacy.seq;
 	await seed({ rooms: { O1: legacy } });
 	await assertSucceeds(set(ref(db('alice'), 'rooms/O1/turns/t3'), T('red', 't2')));
 	await assertSucceeds(set(ref(db('bob'), 'rooms/O1/turns/t4'), T('blue')));
@@ -383,20 +386,25 @@ test('turns: a room begun before `last` keeps the old rule until it ends', async
 	await assertSucceeds(update(ref(db('alice'), 'rooms/O1'), { 'turns/t4': null, takeback: null }));
 });
 
-test('turns: a room that started before the rules change may open without `last`; one started since may not', async () => {
-	// config/turnSeqSince, written once at deploy (the server's time): a
-	// pre-deploy client in a game it joined before then writes no `last`.
-	const since = Date.now() - 60000;
-	await seed({ config: { turnSeqSince: since },
-		rooms: { Z1: playingRoom({ startedAt: since - 60000 }), Z2: playingRoom({ startedAt: since + 1000 }), Z3: playingRoom({ startedAt: since - 60000 }) } });
+test('turns: sequencing is fixed at creation (rooms/{id}/seq); rooms created before it keep the old rule', async () => {
+	// New rooms must sequence: no room is created without `seq`, and it never changes.
+	const noSeq = Object.assign({}, waiting);
+	delete noSeq.seq;
+	await assertFails(set(ref(db('alice'), 'rooms/Q1'), noSeq));
+	await assertFails(set(ref(db('alice'), 'rooms/Q1'), Object.assign({}, waiting, { seq: false })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/Q1'), waiting));
+	await assertFails(set(ref(db('alice'), 'rooms/Q1/seq'), false));
+	await assertFails(remove(ref(db('alice'), 'rooms/Q1/seq')));
+	// A room created before (no `seq`), still without turns: a client from
+	// before the deploy opens it without `last`, as before.
+	const old = playingRoom();
+	delete old.seq;
+	await seed({ rooms: { Z1: old, Z2: playingRoom() } });
 	await assertSucceeds(set(ref(db('alice'), 'rooms/Z1/turns/a1'), T('red')));
+	await assertFails(set(ref(db('bob'), 'rooms/Z1/last'), { key: 'a1', color: 'red' }));
 	await assertFails(set(ref(db('alice'), 'rooms/Z2/turns/a1'), T('red')));
 	await assertFails(set(ref(db('bob'), 'rooms/Z2/turns/b1'), T('blue')));
 	await assertSucceeds(move('alice', 'Z2', 'a1', 'red'));
-	// Clients cannot move the cutoff; without it every room sequences.
-	await assertFails(set(ref(db('alice'), 'config/turnSeqSince'), Date.now() + 86400000));
-	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'config'), null));
-	await assertFails(set(ref(db('alice'), 'rooms/Z3/turns/a1'), T('red')));
 });
 
 test('takeback: the acceptor moves `last` back to the turn kept, in the same write', async () => {

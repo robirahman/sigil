@@ -187,6 +187,8 @@ class FirebaseSync {
 			variant: this.variant,
 			// The joiner takes the other seat (joinRoom).
 			creatorColor: me,
+			// Turns follow rooms/{id}/last (database.rules.json).
+			seq: true,
 		};
 		this.isPublic = !!(opts && opts.public);
 		this.casual = !!(opts && opts.casual);
@@ -200,6 +202,7 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
+		this._seq = true;
 		// rooms/ is not listable: a public room is announced in open_rooms/
 		// (the rules check it against the room). Best-effort: a missing
 		// entry only keeps the room off the lobby list.
@@ -274,6 +277,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = undefined;
 
 		const snap = await roomRef.once('value');
 		const data = snap.val();
@@ -561,6 +565,22 @@ class FirebaseSync {
 		}
 	}
 
+	/** The room's turns in the order played: by server timestamp, as room-clock.js roomTurns. */
+	_orderedTurnKeys() {
+		const info = this._turnInfo || {};
+		return (this._turnKeys || []).filter((k) => info[k])
+			.sort((a, b) => (info[a].ts - info[b].ts) || (a < b ? -1 : a > b ? 1 : 0));
+	}
+
+	/**
+	 * Does the room sequence its turns (rooms/{id}/seq, fixed at creation)?
+	 * Then each turn writes rooms/{id}/last with it (database.rules.json).
+	 */
+	async _isSequenced() {
+		if (this._seq === undefined) this._seq = (await this.roomRef.child('seq').once('value')).val() === true;
+		return this._seq;
+	}
+
 	/**
 	 * Send a completed turn's actions as a batch.
 	 * Optionally includes an atomic timer update.
@@ -577,11 +597,10 @@ class FirebaseSync {
 			// takeback can no longer remove turns once the request is gone,
 			// so a move and an acceptance can never both land.
 			const turnKey = this.roomRef.child('turns').push().key;
-			const keys = this._turnKeys || [];
-			if (!this._lastLoaded) {
-				this._last = (await this.roomRef.child('last').once('value')).val();
-				this._lastLoaded = true;
-			}
+			// Our own view of the last turn, in the server's order (push
+			// keys carry each client's clock): if the room moved on without
+			// us (a takeback), the rules refuse the move.
+			const keys = this._orderedTurnKeys();
 			const turn = {
 				color: this.myColor,
 				actions: actions,
@@ -589,9 +608,10 @@ class FirebaseSync {
 			};
 			if (keys.length) turn.after = keys[keys.length - 1];
 			const updates = { ['turns/' + turnKey]: turn, takeback: null };
-			// The turn moves `last` on in the same write. A room begun
-			// before `last` existed (turns but no `last`) stays without it.
-			if (this._last || !keys.length) updates.last = { key: turnKey, color: this.myColor };
+			// A sequenced room (rooms/{id}/seq, set at creation): the turn
+			// moves `last` on in the same write. Rooms created before turn
+			// sequencing keep the old rule until they finish.
+			if (await this._isSequenced()) updates.last = { key: turnKey, color: this.myColor };
 			if (timerUpdate) {
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -799,22 +819,19 @@ class FirebaseSync {
 		// Every turn in the room, including those before a reload (the
 		// controller's log holds only the turns since).
 		this._turnKeys = [];
-		this._turnColors = {};
-		// The room's last turn, { key, color } (database.rules.json): each
-		// turn must follow it and move it on. Rooms begun before it existed
-		// have none and keep the old rule until they finish.
-		this.roomRef.child('last').on('value', (snap) => {
-			this._last = snap.val();
-			this._lastLoaded = true;
-		});
+		// key -> { color, ts }: the order of play is the server timestamps'
+		// (_orderedTurnKeys), not the push keys'.
+		this._turnInfo = {};
 		// A takeback both players agreed to removes turns: start over from
 		// the room (the reconnect path rebuilds from currentSfn).
-		turnsRef.on('child_removed', () => {
+		turnsRef.on('child_removed', (snap) => {
+			delete this._turnInfo[snap.key];
 			if (this.onTurnsRemoved) this.onTurnsRemoved();
 		});
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
-			this._turnColors[snap.key] = (snap.val() || {}).color;
+			const v = snap.val() || {};
+			this._turnInfo[snap.key] = { color: v.color, ts: typeof v.timestamp === 'number' ? v.timestamp : 0 };
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -989,6 +1006,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = roomData.seq === true;
 
 		await this._goOnline(me);
 
@@ -1093,7 +1111,8 @@ class FirebaseSync {
 	async requestTakeback() {
 		if (!this.roomRef || !this._turnKeys || !this._turnKeys.length) return false;
 		const turns = (await this.roomRef.child('turns').once('value')).val() || {};
-		const keys = this._turnKeys.filter((k) => turns[k]);
+		const keys = this._turnKeys.filter((k) => turns[k])
+			.sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
 		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
 		const undo = keys.slice(lastMine ? -1 : -2);
 		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
@@ -1139,7 +1158,8 @@ class FirebaseSync {
 	async acceptTakeback(req, sfn) {
 		if (!this.roomRef || !req || !req.keys) return false;
 		const undo = Object.keys(req.keys);
-		const tail = (this._turnKeys || []).slice(-undo.length);
+		const ordered = this._orderedTurnKeys();
+		const tail = ordered.slice(-undo.length);
 		if (undo.some((k) => !tail.includes(k))) {
 			await this.clearTakeback();
 			return false;
@@ -1148,10 +1168,9 @@ class FirebaseSync {
 		for (const k of undo) updates['turns/' + k] = null;
 		// `last` goes back to the turn kept, in the same write (the rules
 		// require it), or away with the last turn.
-		if (this._last) {
-			const kept = this._turnKeys.filter((k) => !undo.includes(k));
-			const tip = kept[kept.length - 1];
-			updates.last = tip ? { key: tip, color: this._turnColors[tip] } : null;
+		if (await this._isSequenced()) {
+			const tip = ordered[ordered.length - undo.length - 1];
+			updates.last = tip ? { key: tip, color: this._turnInfo[tip].color } : null;
 		}
 		// The requester is to move again: their clock runs (a correspondence
 		// deadline restarts from now).
@@ -1328,6 +1347,7 @@ class FirebaseSync {
 			// The rules seat both players at once only for a rematch of
 			// a room they both sat in.
 			rematchOf: this.roomCode,
+			seq: true,
 		};
 		// A rematch of a room from a position replays the same start.
 		if (fromPosition && fromPosition.startSfn) {

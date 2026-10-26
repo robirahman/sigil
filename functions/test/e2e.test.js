@@ -69,7 +69,7 @@ async function playRoom(alice, bob, upTo, timeControl) {
 	await set(ref(alice.db, 'rooms/' + code), {
 		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
 		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
-		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard',
+		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard', seq: true,
 	});
 	await update(ref(bob.db, 'rooms/' + code), {
 		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
