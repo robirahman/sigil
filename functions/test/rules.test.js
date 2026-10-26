@@ -403,6 +403,10 @@ test('challenges: by a room\'s creator, for its invited player, unless blocked',
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { at: 5 })));
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { variant: 'deathmatch' })));
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { note: 'hi' })));
+	// Not from an account being deleted (deleteUserData marks it first).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users/alice'), 1));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'deleted_users')));
 	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C1'), ch));
 	// Not overwritten; read by the target and the room's players only.
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
