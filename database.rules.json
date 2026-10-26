@@ -189,9 +189,9 @@
         "giftAt": {
           "$color": {
             ".write": "auth !== null && newData.exists() && ($color === 'red' || $color === 'blue') && root.child('rooms/' + $roomId + '/' + $color + '/uid').val() === auth.uid && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
-            ".validate": "newData.hasChildren(['key', 'at']) && newData.child('at').val() === now && newData.child('key').isString() && newData.parent().parent().child('gifts/' + newData.child('key').val()).exists() && !root.child('rooms/' + $roomId + '/gifts/' + newData.child('key').val()).exists()",
+            ".validate": "newData.hasChildren(['key', 'at']) && newData.child('at').val() === now && newData.child('key').isString() && newData.parent().parent().child('gifts/' + newData.child('key').val()).exists() && !root.child('rooms/' + $roomId + '/gifts/' + newData.child('key').val()).exists() && newData.child('n').isNumber() && newData.child('n').val() <= 20 && ((!data.exists() && newData.child('n').val() === 1) || (data.exists() && newData.child('n').val() === data.child('n').val() + 1))",
             "$other": {
-              ".validate": "$other === 'key' || $other === 'at'"
+              ".validate": "$other === 'key' || $other === 'at' || $other === 'n'"
             }
           }
         }

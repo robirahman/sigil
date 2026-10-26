@@ -252,7 +252,10 @@ class MultiplayerController {
 		// a flag claimed without them would be the claimer's loss.
 		if (typeof roomTimerView === 'function') {
 			const view = roomTimerView(ts, this._clockRoom(), now);
-			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused });
+			const opp = this.myColor === 'red' ? 'blue' : 'red';
+			const given = Object.values(this._clockRec.gifts || {}).filter((g) => g && g.to === opp).length;
+			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused,
+				giftsLeft: typeof ROOM_GIFT_MAX === 'number' ? Math.max(0, ROOM_GIFT_MAX - given) : 0 });
 			// Not before the records have loaded: a gift not yet seen
 			// would make the claim wrong.
 			if (view.out && !this._timedOut && this._clockRec.ready) this._confirmFlag(view.out);

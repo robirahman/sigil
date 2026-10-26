@@ -298,6 +298,11 @@ test('a gift of 15 s extends the opponent\'s time', () => {
 	room.gifts.r = { to: 'red', ms: 15_000, at: t0 + 62_000 };
 	assert.strictEqual(flagged(room, 'blue', t0 + 107_000), false);
 	assert.strictEqual(flagged(room, 'blue', t0 + 109_000), true);
+	// At most 20 gifts count (the rules allow no more), however many are stored.
+	const many = { timeControl: room.timeControl, turns: room.turns, gifts: {} };
+	for (let i = 0; i < 50; i++) many.gifts['g' + i] = { to: 'blue', ms: 15_000, at: t0 + 60_000 };
+	assert.strictEqual(flagged(many, 'blue', t0 + 80_000 + 20 * 15_000 - 3_000), false);
+	assert.strictEqual(flagged(many, 'blue', t0 + 80_000 + 20 * 15_000), true);
 	// Before the first move too.
 	const fresh = { timeControl: { type: 'realtime', initialTime: 60_000 }, startedAt: t0,
 		gifts: { g: { to: 'red', ms: 15_000, at: t0 + 1000 } } };

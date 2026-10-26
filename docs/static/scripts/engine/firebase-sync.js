@@ -1146,11 +1146,15 @@ class FirebaseSync {
 		const key = this.roomRef.child('gifts').push().key;
 		const ts = firebase.database.ServerValue.TIMESTAMP;
 		try {
+			// giftAt/{seat}/n counts this seat's gifts (at most ROOM_GIFT_MAX).
+			const prev = (await this.roomRef.child('giftAt/' + this.myColor + '/n').once('value')).val();
+			const n = (typeof prev === 'number' ? prev : 0) + 1;
+			if (n > ROOM_GIFT_MAX) return false;
 			// Not _track: a gift refused (too soon after the last) is no
 			// lost move.
 			await this.roomRef.update({
 				['gifts/' + key]: { to, ms: ROOM_GIFT_MS, at: ts },
-				['giftAt/' + this.myColor]: { key, at: ts },
+				['giftAt/' + this.myColor]: { key, at: ts, n },
 			});
 			return true;
 		} catch (e) {

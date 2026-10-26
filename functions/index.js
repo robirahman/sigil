@@ -295,9 +295,10 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
 	const db = database();
 	const now = Date.now();
-	const ended = await expireRooms(db, now);
-	// Games begun while a player was already on vacation.
+	// The pauses first (games begun during a vacation, and pauses of
+	// vacations that have ended), so the clocks below are judged by them.
 	const paused = await vacation.pauseNewGames(db, now);
+	const ended = await expireRooms(db, now);
 	if (ended || paused) logger.info('expireClocks', { ended, paused });
 });
 
