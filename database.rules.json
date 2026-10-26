@@ -263,6 +263,10 @@
       ".read": false,
       ".write": false
     },
+    "eval_quota": {
+      ".read": false,
+      ".write": false
+    },
     "user_games": {
       "$uid": {
         ".read": true,

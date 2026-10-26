@@ -40,12 +40,16 @@ const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = req
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { notifyTurn } = require('./notify');
-const { analyzeStep, evalPositions } = require('./analysis');
+const { analyzeStep, evalPositions, claimEvalQuota, EVAL_CALL_MAX } = require('./analysis');
 const crypto = require('crypto');
 
 initializeApp();
 
 const DB_INSTANCE = 'sigil-js-default-rtdb';
+// The emulators may search shorter than RUST_SERVER_PRESET (SIGIL_ANALYSIS_MS),
+// so a test run that rates many games does not queue minutes of engine time.
+const SEARCH_OPTS = process.env.FUNCTIONS_EMULATOR === 'true' && Number(process.env.SIGIL_ANALYSIS_MS) > 0
+	? { timeMs: Number(process.env.SIGIL_ANALYSIS_MS) } : {};
 const REGION = 'us-central1';
 // By URL rather than the default, which follows the project id: the
 // emulator tests run under a demo project with this instance name.
@@ -189,7 +193,7 @@ exports.rateGame = onValueCreated({
 	// written: nothing here may undo it or make the event retry.
 	if (verdict.rated) {
 		try {
-			await enqueueAnalysis(gameId, 'start');
+			await enqueueAnalysis(gameId, 'start', verdict.winner);
 		} catch (e) {
 			logger.warn('rateGame: analysis not enqueued', { gameId, error: String((e && e.message) || e) });
 		}
@@ -200,10 +204,11 @@ exports.rateGame = onValueCreated({
  * Queue an analyzeGame task. The task id makes a repeat (a retried rateGame,
  * a redelivered task) a no-op.
  */
-async function enqueueAnalysis(gameId, step) {
+async function enqueueAnalysis(gameId, step, winner) {
 	try {
 		await getFunctions().taskQueue('locations/' + REGION + '/functions/analyzeGame')
-			.enqueue({ gameId }, { id: ('analyze-' + gameId + '-' + step).replace(/[^A-Za-z0-9_-]/g, '_') });
+			// The winner as rated (an overturned result differs from the record's).
+			.enqueue({ gameId, winner: winner || null }, { id: ('analyze-' + gameId + '-' + step).replace(/[^A-Za-z0-9_-]/g, '_') });
 	} catch (e) {
 		if (e && e.code === 'functions/task-already-exists') return;
 		throw e;
@@ -220,13 +225,14 @@ exports.analyzeGame = onTaskDispatched({
 	maxInstances: 2,
 	concurrency: 1,
 	memory: '1GiB',
-	timeoutSeconds: 300,
+	timeoutSeconds: 540,
 }, async (req) => {
 	const gameId = req.data && req.data.gameId;
 	if (typeof gameId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(gameId)) return;
-	const res = await analyzeStep(database(), gameId);
+	const winner = req.data.winner === 'red' || req.data.winner === 'blue' ? req.data.winner : null;
+	const res = await analyzeStep(database(), gameId, Object.assign({ winner }, SEARCH_OPTS));
 	if (!res.done) {
-		await enqueueAnalysis(gameId, String(res.next));
+		await enqueueAnalysis(gameId, String(res.next), winner);
 		return;
 	}
 	logger.info('analyzeGame', { gameId, reason: res.reason });
@@ -237,12 +243,19 @@ exports.evalPositions = onCall({
 	maxInstances: 2,
 	concurrency: 1,
 	memory: '1GiB',
-	timeoutSeconds: 120,
+	timeoutSeconds: 300,
 }, async (request) => {
 	if (!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
 	const sfns = request.data && request.data.sfns;
+	if (!Array.isArray(sfns) || sfns.length > EVAL_CALL_MAX) throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
+	// Accounts with a sign-in only (anonymous ones cost nothing to make),
+	// within a daily quota per account and for the site.
+	if (!(await isFullAccount(request.auth.uid))) throw new HttpsError('permission-denied', 'Sign in with an account first.');
+	if (!(await claimEvalQuota(database(), request.auth.uid, sfns.length, Date.now()))) {
+		throw new HttpsError('resource-exhausted', 'Daily engine quota used up.');
+	}
 	try {
-		return await evalPositions(database(), sfns);
+		return await evalPositions(database(), sfns, SEARCH_OPTS);
 	} catch (e) {
 		if (e && e.message === 'bad-request') throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
 		throw e;

@@ -26,6 +26,8 @@ const DB = 'http://' + (process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 // The functions emulator's port (firebase.json's 5001 unless the run uses another config).
 const FN_PORT = Number(process.env.SIGIL_FUNCTIONS_PORT || 5001);
+// The emulators' project (callables are addressed by it).
+const PROJECT = process.env.SIGIL_PROJECT || process.env.GCLOUD_PROJECT || 'demo-sigil';
 const OWNER = { Authorization: 'Bearer owner' };
 const FUNCTIONS = path.join(__dirname, '..', '..', 'functions');
 const { analyzeStep } = require(path.join(FUNCTIONS, 'analysis'));
@@ -33,7 +35,7 @@ const { freshEngine } = require(path.join(FUNCTIONS, 'engine-loader'));
 const { fakeDb } = require(path.join(FUNCTIONS, 'test', 'fake-db'));
 const ONLINE = require(path.join(FUNCTIONS, 'test', 'online-game.json'));
 
-function pageHooks(dbHost, authHost, fnPort) {
+function pageHooks(dbHost, authHost, fnPort, project) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -43,7 +45,7 @@ function pageHooks(dbHost, authHost, fnPort) {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				// The emulators run the demo project: callables are addressed by it.
-				const app = init(Object.assign({}, args[0], { projectId: 'demo-sigil' }), ...args.slice(1));
+				const app = init(Object.assign({}, args[0], { projectId: project }), ...args.slice(1));
 				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
 				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				if (v.functions) app.functions().useEmulator('127.0.0.1', fnPort);
@@ -139,7 +141,7 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 	const errors = [];
 	try {
 		const page = await browser.newPage();
-		await page.evaluateOnNewDocument(pageHooks, DB.replace('http://', ''), AUTH, FN_PORT);
+		await page.evaluateOnNewDocument(pageHooks, DB.replace('http://', ''), AUTH, FN_PORT, PROJECT);
 		await page.setBypassServiceWorker(true);
 		await page.setRequestInterception(true);
 		page.on('request', (req) => {
@@ -165,7 +167,7 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 			return d.aiReview && !d.aiReviewComputing;
 		}, { timeout: 60000, polling: 250 }, BOARD);
 		const st = await boardVal(page, '({ source: B.aiReview.source, preset: B.aiReview.preset, engine: B.aiReviewEngineText(), n: B.aiReview.evalPerPly.length, color: B.learnColor(), plies: B.learnPlies(), label: B.learnButtonText() })');
-		check('the Quick Review opens the stored server analysis', st.source === 'rust' && st.preset === 'quick' && st.n === log.length + 1, st);
+		check('the Quick Review opens the stored server analysis', st.source === 'rust' && st.preset === 'server' && st.n === log.length + 1, st);
 		check('the engine line says where it was analysed', /analysed on the server/.test(st.engine), st.engine);
 
 		// ---- 2. the button

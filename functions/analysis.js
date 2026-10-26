@@ -1,8 +1,8 @@
 'use strict';
 /**
  * Server analysis of rated games: the review the browser's Quick Review
- * computes (game-review.js reviewGameRust: the Rust engine at the Easy
- * preset, RUST_REVIEW_PRESETS.quick, last position to first), written as the
+ * computes (game-review.js reviewGameRust, last position to first), searched
+ * longer (RUST_SERVER_PRESET, 1 s/position), written as the
  * `game_evals/{roomCode}` document the review panel already reads
  * (rustEvalsToReview), so both players find the review ready.
  *
@@ -23,12 +23,17 @@ const crypto = require('crypto');
 const { load } = require('./pricing');
 const { freshEngine } = require('./engine-loader');
 
-// Positions per task. A Quick search is 0.1 s (up to 8.5 s when no depth
-// completes: the retries quadruple the time), so a task stays well inside
-// its timeout.
+// Positions per task. A search is 1 s (RUST_SERVER_PRESET; the retries,
+// quadrupling the time, are for a search that completes no depth), so a
+// task takes about 10 s.
 const ANALYSIS_BATCH = 10;
 // Positions per evalPositions call.
 const EVAL_CALL_MAX = 10;
+// evalPositions quotas, in positions per UTC day (each about 1 s of search):
+// per account, and for the whole site, so neither one player nor many
+// throwaway accounts can run the engine without bound.
+const EVAL_DAILY_PER_UID = 200;
+const EVAL_DAILY_TOTAL = 3000;
 
 /** position_evals / position_prices key of an SFN. */
 function positionEvalKey(sfn) {
@@ -36,6 +41,7 @@ function positionEvalKey(sfn) {
 }
 
 let _engines = null;
+let _worker = null;
 
 /**
  * The wasm engine behind the interface reviewGameRust uses
@@ -43,13 +49,14 @@ let _engines = null;
  * rustReviewSearchPosition runs unchanged. One table per preset size.
  */
 async function engineWorker() {
+	if (_worker) return _worker;
 	const { p } = await load();
 	if (!_engines) _engines = {};
 	const table = (bits) => {
 		if (!_engines[bits]) _engines[bits] = new p.wasm_bindgen.Engine(bits);
 		return _engines[bits];
 	};
-	return {
+	_worker = {
 		p,
 		post(msg) { if (msg && msg.type === 'new_game') table(msg.ttBits || 16).new_game(); },
 		async search(req) {
@@ -58,6 +65,7 @@ async function engineWorker() {
 				req.historySfns || [], req.evalName, a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, () => {}));
 		},
 	};
+	return _worker;
 }
 
 /** The fields of a search result a review row needs (rustReviewRow), plus bookkeeping. */
@@ -80,8 +88,9 @@ async function readCache(db, sfn, tag) {
  * Review position i of `sfns`: from the cache when it may stand for it,
  * else searched (and cached when it may be). Resolves to the red-POV row.
  */
-async function positionRow(db, w, sfns, i, stats) {
+async function positionRow(db, w, sfns, i, stats, preset) {
 	const { p } = w;
+	preset = preset || p.RUST_SERVER_PRESET;
 	const tag = p.positionEvalEngineTag();
 	const cacheable = p.positionEvalCacheable(sfns, i);
 	if (cacheable) {
@@ -96,11 +105,14 @@ async function positionRow(db, w, sfns, i, stats) {
 	let last = null;
 	const tap = { post: (m) => w.post(m), search: async (req) => (last = await w.search(req)) };
 	const t0 = Date.now();
-	const row = await p.rustReviewSearchPosition(tap, sfns, i, p.RUST_REVIEW_PRESETS.quick, 1);
+	// A position the cache may hold is searched as the cache holds it: alone,
+	// with no game history, so the entry does not depend on the game it came
+	// from. The others keep the game's history (threefold repetition).
+	const row = cacheable
+		? await p.rustReviewSearchPosition(tap, [sfns[i]], 0, preset, 1)
+		: await p.rustReviewSearchPosition(tap, sfns, i, preset, 1);
 	const ms = Date.now() - t0;
 	if (stats) { stats.searched++; stats.ms += ms; }
-	// Cached only as searched with no history: the cache entry must not
-	// depend on the game it came from.
 	if (cacheable && last) {
 		await db.ref('position_evals/' + positionEvalKey(sfns[i])).set(cacheEntry(sfns[i], last, tag, ms, Date.now()));
 	}
@@ -136,7 +148,11 @@ async function recordPositions(p, record) {
  */
 async function analyzeStep(db, gameId, opts) {
 	const batch = (opts && opts.batch) || ANALYSIS_BATCH;
+	// The result as rated: rateGame may overturn the record's (a finish the
+	// room does not support is the finisher's resignation).
+	const ratedWinner = opts && (opts.winner === 'red' || opts.winner === 'blue') ? opts.winner : null;
 	const stats = (opts && opts.stats) || null;
+	// Tests and the emulators may search shorter (opts.timeMs).
 	const progressRef = db.ref('game_evals_progress/' + gameId);
 	const record = (await db.ref('completed_games/' + gameId).once('value')).val();
 	if (!record || !record.roomCode) return { done: true, reason: 'no-record' };
@@ -165,10 +181,10 @@ async function analyzeStep(db, gameId, opts) {
 	if (prog.plies !== n) rows.fill(undefined);
 	// A fresh table per task, walked from the last position back as the
 	// browser's review walks.
-	w.post({ type: 'new_game', ttBits: p.RUST_REVIEW_PRESETS.quick.ttBits });
+	w.post({ type: 'new_game', ttBits: p.RUST_SERVER_PRESET.ttBits });
 	for (let k = 0; k < batch && next >= 0; k++, next--) {
 		try {
-			rows[next] = await positionRow(db, w, sfns, next, stats);
+			rows[next] = await positionRow(db, w, sfns, next, stats, presetFor(p, opts));
 		} catch (e) {
 			// The engine refuses the position (a pack it does not play): give up.
 			if (/cannot review|no evaluation/.test(String(e && e.message))) {
@@ -186,9 +202,9 @@ async function analyzeStep(db, gameId, opts) {
 	}
 	// Firebase drops nulls inside stored rows: put the row fields back.
 	const full = rows.map((r) => Object.assign({ eval: null, mate: null, proven: true, best: null, bestSfn: null, depth: null }, r));
-	const winner = record.winner === 'red' || record.winner === 'blue' ? record.winner : null;
+	const winner = ratedWinner || (record.winner === 'red' || record.winner === 'blue' ? record.winner : null);
 	const doc = Object.assign(p.rustReviewDoc(sfns, full, winner ? { winner } : null, p.positionEvalEngineTag()), {
-		gameId, roomCode: record.roomCode, preset: 'quick', source: 'server', walk: 'backward',
+		gameId, roomCode: record.roomCode, preset: 'server', timeMs: presetFor(p, opts).timeMs, source: 'server', walk: 'backward',
 		computedAt: Date.now(),
 	});
 	await db.ref().update({
@@ -199,13 +215,30 @@ async function analyzeStep(db, gameId, opts) {
 }
 
 /**
+ * Take `n` positions of today's evalPositions quota for `uid`
+ * (`eval_quota/{day}/{uid}` and `eval_quota/{day}/_total`, server-only).
+ * Resolves false, taking nothing, when either quota would be exceeded.
+ */
+async function claimEvalQuota(db, uid, n, now) {
+	const day = new Date(now).toISOString().slice(0, 10);
+	const take = (limit) => (cur) => ((cur || 0) + n > limit ? undefined : (cur || 0) + n);
+	const mine = await db.ref('eval_quota/' + day + '/u_' + uid).transaction(take(EVAL_DAILY_PER_UID));
+	if (!mine.committed) return false;
+	const all = await db.ref('eval_quota/' + day + '/_total').transaction(take(EVAL_DAILY_TOTAL));
+	if (all.committed) return true;
+	// Give the account's share back.
+	await db.ref('eval_quota/' + day + '/u_' + uid).transaction((cur) => Math.max(0, (cur || 0) - n));
+	return false;
+}
+
+/**
  * The evalPositions callable: search and cache up to EVAL_CALL_MAX
  * positions a browser review searched for itself. Each SFN must be a
  * well-formed position (it reads back to itself) the engine plays; it is
  * searched here, never taken from the caller, so the cache cannot be
  * poisoned. Resolves to { cached, searched, skipped }.
  */
-async function evalPositions(db, sfns) {
+async function evalPositions(db, sfns, opts) {
 	if (!Array.isArray(sfns) || sfns.length > EVAL_CALL_MAX) throw new Error('bad-request');
 	const w = await engineWorker();
 	const { p } = w;
@@ -216,8 +249,8 @@ async function evalPositions(db, sfns) {
 		seen.add(sfn);
 		const stats = { hits: 0, searched: 0, ms: 0 };
 		try {
-			w.post({ type: 'new_game', ttBits: p.RUST_REVIEW_PRESETS.quick.ttBits });
-			await positionRow(db, w, [sfn], 0, stats);
+			w.post({ type: 'new_game', ttBits: p.RUST_SERVER_PRESET.ttBits });
+			await positionRow(db, w, [sfn], 0, stats, presetFor(p, opts));
 		} catch (e) {
 			if (/cannot review|no evaluation/.test(String(e && e.message))) { out.skipped++; continue; }
 			throw e;
@@ -225,6 +258,12 @@ async function evalPositions(db, sfns) {
 		if (stats.hits) out.cached++; else out.searched++;
 	}
 	return out;
+}
+
+/** RUST_SERVER_PRESET, or a shorter search for tests (`opts.timeMs`). */
+function presetFor(p, opts) {
+	const ms = opts && opts.timeMs;
+	return ms > 0 ? Object.assign({}, p.RUST_SERVER_PRESET, { timeMs: ms }) : p.RUST_SERVER_PRESET;
 }
 
 /** True when `sfn` is a position the site's engine reads back to itself. */
@@ -243,4 +282,5 @@ function wellFormed(p, sfn) {
 	}
 }
 
-module.exports = { analyzeStep, evalPositions, positionEvalKey, wellFormed, engineWorker, ANALYSIS_BATCH, EVAL_CALL_MAX };
+module.exports = { analyzeStep, evalPositions, claimEvalQuota, positionEvalKey, wellFormed, engineWorker,
+	ANALYSIS_BATCH, EVAL_CALL_MAX, EVAL_DAILY_PER_UID, EVAL_DAILY_TOTAL };

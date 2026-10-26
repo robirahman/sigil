@@ -1,0 +1,9 @@
+{
+  "database": { "rules": "database.rules.json" },
+  "functions": { "source": "functions", "runtime": "nodejs22", "ignore": ["node_modules", "test", ".gitignore"] },
+  "emulators": {
+    "database": { "port": 9403 }, "functions": { "port": 5103 }, "auth": { "port": 9503 },
+    "hub": { "port": 4403 }, "logging": { "port": 4503 }, "tasks": { "port": 9603 }, "eventarc": { "port": 9703 },
+    "ui": { "enabled": false }
+  }
+}

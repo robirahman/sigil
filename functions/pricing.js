@@ -41,7 +41,7 @@ async function load() {
 		// (the glue checks its prototype), so it is built in here.
 		+ '\n;\nglobalThis.__p = { wasm_bindgen, positionRedWinProb, RUST_REVIEW_SEARCH, POSITION_EVAL_MS,'
 		// The review's search and document packing (analysis.js).
-		+ ' RUST_REVIEW_PRESETS, rustReviewSearchPosition, rustReviewRow, rustReviewDoc, rustEvalsToReview,'
+		+ ' RUST_REVIEW_PRESETS, RUST_SERVER_PRESET, rustReviewSearchPosition, rustReviewRow, rustReviewDoc, rustEvalsToReview,'
 		+ ' positionEvalCacheable, positionEvalEngineTag, _reviewPositions, SigilBoard, boardToSfn, sfnToDict,'
 		+ ' normalizeSfnString, normalizeVariant, variantHasDuplicates, variantHasScramble,'
 		+ ' init: (bytes) => wasm_bindgen({ module_or_path: bytes }) };';

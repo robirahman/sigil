@@ -256,7 +256,7 @@ test('a rated game is analysed by the server, and the eval cache is filled only 
 	// rateGame enqueues analyzeGame (the Cloud Tasks emulator), which runs
 	// a chain of tasks and writes the review panel's document.
 	const doc = await waitFor(alice.db, `game_evals/${code}`, 240000);
-	assert.deepStrictEqual([doc.gameId, doc.roomCode, doc.preset, doc.plies], [gameId, code, 'quick', ONLINE.turns.length]);
+	assert.deepStrictEqual([doc.gameId, doc.roomCode, doc.preset, doc.plies], [gameId, code, 'server', ONLINE.turns.length]);
 	assert.strictEqual(doc.moverPerPly.length, ONLINE.turns.length + 1);
 	// A client cannot write the cache; the callable searches what it is given.
 	const sfn = doc.finalSfn;
@@ -264,6 +264,9 @@ test('a rated game is analysed by the server, and the eval cache is filled only 
 	await assert.rejects(httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(11).fill(sfn) }));
 	const res = await httpsCallable(alice.fns, 'evalPositions')({ sfns: ['not a position'] });
 	assert.deepStrictEqual(res.data, { cached: 0, searched: 0, skipped: 1 });
+	// The daily quota per account: 200 positions.
+	for (let k = 0; k < 19; k++) await httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(10).fill('x' + k) });
+	await assert.rejects(httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(10).fill('z') }), /quota/);
 });
 
 test.after(() => setTimeout(() => process.exit(0), 100));

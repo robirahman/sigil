@@ -40,6 +40,11 @@ const RUST_REVIEW_PRESETS = {
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
 const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_mt256', adaptive: [0.10, 2, 6] };
+// The server's analysis of every rated game (functions/analysis.js) and the
+// position_evals cache: 1 s/position, as the Medium tier. The browser's Quick
+// preset (0.1 s) reaches depth 1-2 in the middlegame, where the review then
+// flagged about half of a player's turns as mistakes.
+const RUST_SERVER_PRESET = { tier: 'Medium', timeMs: 1000, ttBits: 18 };
 /** Deep review (Hard) searches on every thread the page can give it. */
 function rustReviewThreads(mode) {
 	return (mode === 'deep' && typeof rustThreadCount === 'function') ? rustThreadCount() : 1;
@@ -89,7 +94,7 @@ async function reviewGameRust(gameLog, mode, onProgress, winner, opts) {
 		|| (typeof variantHasScramble === 'function' && variantHasScramble(variant))) {
 		throw new Error('the Rust engine does not play the ' + variant + ' variant');
 	}
-	// Quick reviews take positions the server already searched at this preset
+	// Quick reviews take positions the server already searched, deeper
 	// (position_evals, see positionEvalCacheable); `opts.cached` maps an SFN to
 	// its stored search result. `opts.searched` collects the SFNs searched here
 	// that the cache could take.
@@ -203,9 +208,11 @@ function rustReviewDoc(sfns, rows, terminal, engine) {
 
 /**
  * The position_evals cache (functions/analysis.js writes it; clients only
- * read it). An entry is one Quick-preset search of a position with no
- * history, so it stands for review position i only when the game has not
- * been there before (threefold repetition would count the earlier visits).
+ * read it). An entry is one RUST_SERVER_PRESET search of the position alone
+ * (no game history), so it stands for review position i only when the game
+ * has not been there before (threefold repetition would count the earlier
+ * visits). Within the search the line's earlier positions are not known
+ * either way: the cached value ignores repetitions back into the game.
  */
 function positionEvalCacheable(sfns, i) {
 	const key = _reviewSfnKey(sfns[i]);
@@ -213,10 +220,10 @@ function positionEvalCacheable(sfns, i) {
 	return true;
 }
 
-/** Identity of a position_evals entry: engine build, eval and preset. */
+/** Identity of a position_evals entry: engine build, eval and search time. */
 function positionEvalEngineTag() {
 	return 'rust-v' + (typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : '?')
-		+ '-' + RUST_REVIEW_SEARCH.evalName + '-quick';
+		+ '-' + RUST_REVIEW_SEARCH.evalName + '-t' + RUST_SERVER_PRESET.timeMs;
 }
 
 /** Convert minimax score to win% from the mover's perspective. */
@@ -522,10 +529,11 @@ function rustEvalsToReview(doc, gameLog) {
 		modelVersion: (doc.engine || 'rust') + '-d' + (doc.depth || '?'),
 		engineDepth: doc.depth || null,
 		// Complete by construction: the panel's mode buttons offer no recompute,
-		// except a Deep Review over the server's Quick-preset analysis
-		// (functions/analysis.js: preset 'quick').
-		mode: doc.preset === 'quick' ? 'quick' : 'deep',
+		// except a Deep Review over the server's analysis of a rated game
+		// (functions/analysis.js: `preset` 'server', `timeMs`).
+		mode: doc.preset ? 'quick' : 'deep',
 		preset: doc.preset || null,
+		presetTimeMs: doc.timeMs || null,
 		sigmoidK: REVIEW_DEFAULTS.sigmoidK,
 		forcedWinFloor: floor,
 		timeLimitPerPly: null,
@@ -849,9 +857,9 @@ function aiReviewMixin() {
 			if (r.source === 'rust-live') {
 				return 'Rust engine, ' + r.engineTier + ' (' + r.timeLimitPerPly + ' s/position), depth up to ' + r.engineDepth;
 			}
-			if (r.source === 'rust' && r.preset === 'quick') {
-				const q = RUST_REVIEW_PRESETS.quick;
-				return 'Rust engine, ' + q.tier + ' (' + (q.timeMs / 1000) + ' s/position, analysed on the server), depth up to ' + r.engineDepth;
+			if (r.source === 'rust' && r.preset) {
+				return 'Rust engine, ' + ((r.presetTimeMs || RUST_SERVER_PRESET.timeMs) / 1000)
+					+ ' s/position (analysed on the server), depth up to ' + r.engineDepth;
 			}
 			if (r.source === 'rust') return 'Rust engine, depth ' + r.engineDepth + ' at every position';
 			return '';

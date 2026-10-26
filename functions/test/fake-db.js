@@ -69,6 +69,13 @@ function fakeDb(initial) {
 			},
 			async set(v) { put(ps, v); },
 			async remove() { put(ps, null); },
+			async transaction(fn) {
+				const cur = read(get(ps));
+				const next = fn(cur === null ? null : JSON.parse(JSON.stringify(cur)));
+				if (next === undefined) return { committed: false, snapshot: { val: () => cur } };
+				put(ps, next);
+				return { committed: true, snapshot: { val: () => read(get(ps)) } };
+			},
 			async update(obj) {
 				for (const [k, v] of Object.entries(obj)) put(ps.concat(parts(k)), v);
 			},

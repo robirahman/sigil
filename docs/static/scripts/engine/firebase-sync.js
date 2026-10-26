@@ -1386,7 +1386,7 @@ async function positionEvalKey(sfn) {
 }
 
 /**
- * The server's stored Quick-preset searches of these positions
+ * The server's stored searches of these positions (RUST_SERVER_PRESET)
  * (`position_evals/<key>`, written only by functions/analysis.js), as a Map
  * from SFN to the search result (mover POV, as the engine reports it).
  * Entries of another engine build or eval are skipped.

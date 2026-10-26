@@ -10,7 +10,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { analyzeStep, evalPositions, positionEvalKey, ANALYSIS_BATCH } = require('../analysis');
+const { analyzeStep, evalPositions, claimEvalQuota, engineWorker, positionEvalKey, ANALYSIS_BATCH, EVAL_DAILY_PER_UID, EVAL_DAILY_TOTAL } = require('../analysis');
 const { freshEngine } = require('../engine-loader');
 const { fakeDb } = require('./fake-db');
 const ONLINE = require('./online-game.json');
@@ -18,9 +18,12 @@ const AI = require('./ai-games.json');
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-async function runAll(db, gameId, stats) {
+// Searches after the first test are shortened (opts.timeMs) to keep the run short.
+const FAST = 100;
+
+async function runAll(db, gameId, stats, extra) {
 	let res, tasks = 0;
-	do { res = await analyzeStep(db, gameId, { stats }); tasks++; } while (!res.done && tasks < 100);
+	do { res = await analyzeStep(db, gameId, Object.assign({ stats }, extra)); tasks++; } while (!res.done && tasks < 100);
 	return Object.assign(res, { tasks });
 }
 
@@ -29,7 +32,7 @@ async function hydrate(record) {
 	return e.reconstructGameLog(record.spellNames, e.normalizeVariant(record.variant), record.setupSfn || null, record.turns);
 }
 
-test('a rated game is analysed in batches into a game_evals document the review panel reads', async () => {
+test('a rated game is analysed in batches into a game_evals document the review panel reads', { timeout: 600000 }, async () => {
 	const db = fakeDb({ completed_games: { G1: Object.assign(clone(ONLINE), { roomCode: 'ROOM1' }) } });
 	const stats = { hits: 0, searched: 0, ms: 0 };
 	const res = await runAll(db, 'G1', stats);
@@ -43,13 +46,13 @@ test('a rated game is analysed in batches into a game_evals document the review 
 	assert.strictEqual(all.game_evals_progress, undefined, 'the progress record is removed');
 	const stored = all.game_evals.ROOM1;
 	assert.strictEqual(stored.gameId, 'G1');
-	assert.strictEqual(stored.preset, 'quick');
+	assert.deepStrictEqual([stored.preset, stored.timeMs], ['server', 1000]);
 	// As stored (nulls dropped, arrays as the database returns them), the
 	// review panel's reader accepts it for this game.
 	const review = freshEngine().rustEvalsToReview(stored, log);
 	assert.ok(review, 'rustEvalsToReview accepts the stored document');
 	assert.strictEqual(review.source, 'rust');
-	assert.strictEqual(review.mode, 'quick');
+	assert.strictEqual(review.mode, 'quick', 'a Deep Review may still be computed over it');
 	assert.strictEqual(review.evalPerPly.length, n + 1);
 	assert.strictEqual(review.classificationPerPly.length, n);
 	assert.strictEqual(review.terminalWinner, ONLINE.winner);
@@ -70,10 +73,10 @@ test('the eval cache serves a second game through the same positions', async () 
 		B: Object.assign(clone(AI.N3WMQJ), { roomCode: 'RB' }),
 	} });
 	const first = { hits: 0, searched: 0, ms: 0 };
-	await runAll(db, 'A', first);
+	await runAll(db, 'A', first, { timeMs: FAST });
 	assert.strictEqual(first.hits, 0);
 	const second = { hits: 0, searched: 0, ms: 0 };
-	const res = await runAll(db, 'B', second);
+	const res = await runAll(db, 'B', second, { timeMs: FAST });
 	assert.strictEqual(res.reason, 'written');
 	// Every position the game had not visited before comes from the cache;
 	// only repeated ones (threefold repetition) are searched again.
@@ -84,7 +87,58 @@ test('the eval cache serves a second game through the same positions', async () 
 	assert.ok(freshEngine().rustEvalsToReview(all.game_evals.RB, log));
 	const entry = all.position_evals[positionEvalKey(log[0].sfnBefore)];
 	assert.strictEqual(entry.sfn, log[0].sfnBefore);
-	assert.match(entry.engine, /^rust-v\d+-[a-z0-9_]+-quick$/);
+	assert.match(entry.engine, /^rust-v\d+-[a-z0-9_]+-t1000$/);
+});
+
+test('cached positions are searched alone; repeated ones with the game\'s history', async () => {
+	const db = fakeDb({ completed_games: { A: Object.assign(clone(AI.N3WMQJ), { roomCode: 'RH' }) } });
+	const w = await engineWorker();
+	const calls = [];
+	const search = w.search;
+	w.search = async (req) => { calls.push({ sfn: req.sfn, history: req.historySfns }); return search(req); };
+	try {
+		await runAll(db, 'A', null, { timeMs: FAST });
+	} finally {
+		w.search = search;
+	}
+	const log = await hydrate(AI.N3WMQJ);
+	const sfns = log.map((t) => t.sfnBefore).concat([log[log.length - 1].sfnAfter]);
+	const cached = new Set(Object.values(db.dump().position_evals).map((e) => e.sfn));
+	let repeats = 0;
+	for (let i = 0; i < log.length; i++) {
+		const c = calls.find((x) => x.sfn === sfns[i] && (cached.has(sfns[i]) ? true : x.history.length > 1));
+		assert.ok(c, 'position ' + i + ' was searched');
+		if (cached.has(sfns[i]) && !sfns.slice(0, i).some((x) => x === sfns[i])) {
+			// The cache entry's search knew nothing of the game.
+			assert.deepStrictEqual(calls.filter((x) => x.sfn === sfns[i]).map((x) => x.history), [[sfns[i]]], 'position ' + i);
+		} else {
+			repeats++;
+		}
+	}
+	assert.ok(cached.size > 0 && cached.size + repeats >= log.length);
+});
+
+test('the review document carries the winner as rated, not as the record claims', async () => {
+	const rec = Object.assign(clone(ONLINE), { roomCode: 'OVR', winner: ONLINE.winner === 'red' ? 'blue' : 'red' });
+	const db = fakeDb({ completed_games: { G: rec } });
+	await runAll(db, 'G', null, { timeMs: FAST, winner: ONLINE.winner });
+	assert.deepStrictEqual(db.dump().game_evals.OVR.terminal, { winner: ONLINE.winner });
+});
+
+test('the evalPositions quota: per account and for the site, per day', async () => {
+	const db = fakeDb({});
+	const now = Date.UTC(2026, 9, 26, 12);
+	assert.strictEqual(await claimEvalQuota(db, 'a', EVAL_DAILY_PER_UID - 5, now), true);
+	assert.strictEqual(await claimEvalQuota(db, 'a', 10, now), false);
+	assert.strictEqual(await claimEvalQuota(db, 'a', 5, now), true);
+	assert.strictEqual(await claimEvalQuota(db, 'a', 1, now + 86400000), true, 'a new day');
+	// Many accounts: the site's cap holds, and a refused claim takes nothing.
+	let ok = 0;
+	for (let k = 0; k < 40; k++) if (await claimEvalQuota(db, 'u' + k, 100, now)) ok++;
+	const day = db.dump().eval_quota['2026-10-26'];
+	assert.strictEqual(day._total, EVAL_DAILY_TOTAL);
+	assert.strictEqual(ok, (EVAL_DAILY_TOTAL - EVAL_DAILY_PER_UID) / 100);
+	assert.strictEqual(day.u_u39, 0);
 });
 
 test('games the Rust engine cannot review, and room codes of other games, are left alone', async () => {
@@ -105,10 +159,10 @@ test('evalPositions searches what it caches, and refuses what is not a position'
 	await assert.rejects(evalPositions(db, new Array(11).fill(log[0].sfnBefore)), /bad-request/);
 	await assert.rejects(evalPositions(db, 'x'), /bad-request/);
 	const forged = log[3].sfnBefore.replace(/ (\d+) /, ' 1x ');
-	const r = await evalPositions(db, [log[2].sfnBefore, log[2].sfnBefore, 'garbage', forged, 7]);
+	const r = await evalPositions(db, [log[2].sfnBefore, log[2].sfnBefore, 'garbage', forged, 7], { timeMs: FAST });
 	assert.deepStrictEqual(r, { cached: 0, searched: 1, skipped: 4 });
 	const entry = db.dump().position_evals[positionEvalKey(log[2].sfnBefore)];
 	assert.strictEqual(entry.sfn, log[2].sfnBefore);
 	assert.ok(entry.depth >= 1 && Array.isArray(entry.actions));
-	assert.deepStrictEqual(await evalPositions(db, [log[2].sfnBefore]), { cached: 1, searched: 0, skipped: 0 });
+	assert.deepStrictEqual(await evalPositions(db, [log[2].sfnBefore], { timeMs: FAST }), { cached: 1, searched: 0, skipped: 0 });
 });

@@ -304,14 +304,14 @@ test('rooms: the lobby reads a public index; rooms/ itself is not listable', asy
 test('engine analysis: game_evals and the position eval cache are server-only, and public', async () => {
 	await seed({
 		game_evals: { ROOM1: { gameId: 'g1', plies: 2 } },
-		position_evals: { abc: { sfn: 'x', engine: 'rust-v34-nnue_mt256-quick', stones: 1.5, depth: 3 } },
+		position_evals: { abc: { sfn: 'x', engine: 'rust-v34-nnue_mt256-t1000', stones: 1.5, depth: 3 } },
 		game_evals_progress: { g1: { roomCode: 'ROOM1', next: 3 } },
 	});
 	await assertSucceeds(get(ref(db(null), 'position_evals/abc')));
 	await assertSucceeds(get(ref(db('alice'), 'game_evals/ROOM1')));
 	// Not even a signed-in player may write a cached eval (the evalPositions
 	// callable searches each position itself) or a game's analysis.
-	await assertFails(set(ref(db('alice'), 'position_evals/abc'), { sfn: 'x', engine: 'rust-v34-nnue_mt256-quick', stones: 39 }));
+	await assertFails(set(ref(db('alice'), 'position_evals/abc'), { sfn: 'x', engine: 'rust-v34-nnue_mt256-t1000', stones: 39 }));
 	await assertFails(set(ref(db('alice'), 'position_evals/new'), { sfn: 'y', stones: 0 }));
 	await assertFails(remove(ref(db('alice'), 'position_evals/abc')));
 	await assertFails(set(ref(db('alice'), 'game_evals/ROOM2'), { gameId: 'g2' }));
@@ -319,4 +319,7 @@ test('engine analysis: game_evals and the position eval cache are server-only, a
 	await assertFails(get(ref(db('alice'), 'position_evals')));
 	await assertFails(get(ref(db('alice'), 'game_evals_progress/g1')));
 	await assertFails(set(ref(db('alice'), 'game_evals_progress/g1/next'), 0));
+	// Nor the evalPositions quota counters.
+	await assertFails(get(ref(db('alice'), 'eval_quota')));
+	await assertFails(set(ref(db('alice'), 'eval_quota/2026-10-26/u_alice'), 0));
 });
