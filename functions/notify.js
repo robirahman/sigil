@@ -163,7 +163,9 @@ async function notifyChallenge(db, target, code, send) {
 	]);
 	const from = challenge && typeof challenge.from === 'string' ? challenge.from : null;
 	const [blocked, fromName] = from ? await Promise.all([
-		db.ref('blocks/' + target + '/' + from).once('value').then((s) => s.exists()),
+		// Either way: a sender who just blocked the target is withdrawing it.
+		Promise.all([db.ref('blocks/' + target + '/' + from).once('value'), db.ref('blocks/' + from + '/' + target).once('value')])
+			.then(([a, b]) => a.exists() || b.exists()),
 		db.ref('users/' + from + '/displayName').once('value').then((s) => s.val()),
 	]) : [false, null];
 	const notice = challengeNotice(target, room, challenge, blocked, fromName);

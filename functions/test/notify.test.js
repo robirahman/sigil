@@ -182,4 +182,8 @@ test('notifyChallenge sends to the target\'s tokens through sendPush', async () 
 	data.blocks = { bob: { alice: true } };
 	assert.strictEqual(await notifyChallenge(fakeDb(data, []), 'bob', 'C1', send), null);
 	assert.strictEqual(sent.length, 1);
+	// ... or the sender blocked the target.
+	data.blocks = { alice: { bob: true } };
+	assert.strictEqual(await notifyChallenge(fakeDb(data, []), 'bob', 'C1', send), null);
+	assert.strictEqual(sent.length, 1);
 });

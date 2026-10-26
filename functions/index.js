@@ -191,6 +191,11 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		throw new HttpsError('failed-precondition', 'requires-recent-login');
 	}
 	const db = database();
+	// First, so a game rated after this point writes nothing for the uid
+	// (rateGame checks deleted_users), and before the snapshots below: the
+	// rules refuse a new follow, block or challenge by or of a marked uid,
+	// so none can appear after them.
+	await db.ref('deleted_users/' + uid).set(Date.now());
 	const [games, active, profile, follows, followers, blocks, blockedBy] = await Promise.all([
 		db.ref('user_games/' + uid).once('value'),
 		db.ref('user_active_games/' + uid).once('value'),
@@ -200,9 +205,6 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		db.ref('blocks/' + uid).once('value'),
 		db.ref('blockedBy/' + uid).once('value'),
 	]);
-	// First, so a game rated after this point writes nothing for the uid
-	// (rateGame checks deleted_users).
-	await db.ref('deleted_users/' + uid).set(Date.now());
 	const updates = {
 		['users/' + uid]: null,
 		['leaderboard/' + uid]: null,
