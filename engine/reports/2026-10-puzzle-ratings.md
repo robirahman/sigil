@@ -50,9 +50,11 @@
 
 **The set is now 1,966 puzzles:**
 - 876 mate-in-1, 710 mate-in-2, 293 mate-in-3, 87 winning turns.
-- Very Hard solves **74%** of it.
+- Very Hard solves **75%** of it.
 
 ## Puzzle ratings
+
+**Judging like the page (re-run 2026-10-26):** in the first calibration, an AI turn off the stored solution was answered by a generic 3-second defender, and a later win counted. The page instead has the engine judge such a turn at once (`judge_move`): a slow win or an escape fails the puzzle. The harness now calls the same judge (`sigil_engine.judge_move`, mirroring the wasm one) and plays its reply. All five tiers re-attempted the 1,003 mate-in-2 and mate-in-3 puzzles under it: about 8% of their results flipped (mostly solved to failed). The ratings below use those results, and the 302 Firebase ratings it changed were rewritten (no player had attempted them yet; only the rating field was written).
 
 **Data:** each puzzle has attempts by all five tiers: Very Easy 1185, Easy 1319, Medium 1445, Hard 1673, Very Hard 1800.
 
@@ -62,30 +64,30 @@
 
 | Tiers that solved it | Puzzles |
 |---|---|
-| all 5 | 1,025 (rated 1048) |
-| 4 | 291 |
-| 3 | 240 |
+| all 5 | 980 (rated 1048) |
+| 4 | 277 |
+| 3 | 245 |
 | 2 | 108 |
-| 1 | 38 |
-| none | 264 (rated 1924) |
+| 1 | 68 |
+| none | 288 (rated 1924) |
 
 | Tier | Solved |
 |---|---|
-| Very Easy | 1,154 |
-| Easy | 1,408 |
-| Medium | 1,604 |
-| Hard | 1,634 |
-| Very Hard | 1,463 |
+| Very Easy | 1,077 |
+| Easy | 1,354 |
+| Medium | 1,544 |
+| Hard | 1,569 |
+| Very Hard | 1,483 |
 
 **Notes:**
-- **Very Hard solves fewer than Hard.** This is a selection effect: the 400 additions were chosen because Very Hard failed them once, and Hard then solved 182 of them.
+- **Very Hard solves fewer than Hard.** This is a selection effect: the 400 additions were chosen because Very Hard failed them once, and Hard then solved 152 of them.
 - **Median rating by class:**
 
   | Class | Median rating |
   |---|---|
   | Mate in 1 | 1048 |
   | Mate in 2 | 1245 |
-  | Mate in 3 | 1245 |
+  | Mate in 3 | 1405 |
   | Winning turn | 1048 |
   | Self-play additions | 1723 |
 
