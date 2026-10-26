@@ -540,10 +540,12 @@
 				} catch (e) { viewer = null; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
 				// Results an earlier visit left unconfirmed are recorded first, each
-				// for the player who earned it (another account signed in since is
-				// not charged; its entries wait for that account).
+				// where it was rated: device-mode entries (no uid -- signed out, or
+				// the account read had failed) on this device's rating whoever is
+				// signed in now; account entries only for that account (another
+				// account signed in since is not charged; they wait for it).
 				const myUid = viewer ? viewer.uid : null;
-				const owed = Object.values(pendingAll()).filter(e => (e.uid || null) === myUid);
+				const owed = Object.values(pendingAll()).filter(e => !e.uid || e.uid === myUid);
 				const deadline = Date.now() + 8000;
 				for (const e of owed) {
 					const pz = all.find(p => p.id === e.id);
@@ -554,7 +556,7 @@
 					if (e.daily) recordDaily(e.daily, e.solved ? 'solved' : 'failed');
 					try {
 						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
-						const done = await Promise.race([recordPuzzleResult(viewer, pz, e.solved, current || undefined).then(() => true),
+						const done = await Promise.race([recordPuzzleResult(e.uid ? viewer : null, pz, e.solved, current || undefined).then(() => true),
 							new Promise(r => setTimeout(() => r(false), 5000))]);
 						if (done) pendingDrop(e.uid, e.id);
 					} catch (err) { /* offline or refused: try again next visit */ }

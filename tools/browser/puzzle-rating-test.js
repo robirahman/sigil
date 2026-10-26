@@ -58,12 +58,20 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 				.on('error', () => Date.now() - t0 > 15000 ? rej(new Error('server')) : setTimeout(tick, 200)); })(); });
 		browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
 		const errors = [];
-		const open = async (q, before) => {
+		// `fakeUser`: firebaseAuthSettled (position-rating.js) reports this account.
+		const open = async (q, before, fakeUser) => {
 			const page = await browser.newPage();
 			await page.setBypassServiceWorker(true);
 			await page.setRequestInterception(true);
-			page.on('request', (req) => /mate_puzzles\.json/.test(req.url())
-				? req.respond({ status: 200, contentType: 'application/json', body }) : req.continue());
+			page.on('request', (req) => {
+				if (/mate_puzzles\.json/.test(req.url())) return req.respond({ status: 200, contentType: 'application/json', body });
+				if (fakeUser && /position-rating\.js/.test(req.url())) {
+					return req.respond({ status: 200, contentType: 'application/javascript',
+						body: fs.readFileSync(path.join(DOCS, 'static/scripts/engine/position-rating.js'), 'utf8')
+							+ `\nfirebaseAuthSettled = async () => (${JSON.stringify(fakeUser)});` });
+				}
+				req.continue();
+			});
 			page.on('pageerror', e => errors.push(e.message));
 			if (before) await page.evaluateOnNewDocument(before);
 			await page.goto(`http://127.0.0.1:${PORT}/puzzles.html${q}`, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -127,6 +135,14 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 		check(boot[0].attempts[id5] === 0 && boot[0].attempts[id7] === 1 && Object.keys(boot[1]).join() === 'someone|' + id7,
 			`stored results left by killed tabs are all recorded on the next visit (${JSON.stringify([boot[0].attempts[id5], boot[0].attempts[id7], Object.keys(boot[1])])})`);
 		check(boot[0].attempts[id4] === undefined, 'opening a puzzle records nothing');
+		// A device-mode entry is recovered on the device rating even when an
+		// account is signed in by the next visit.
+		const id10 = data.puzzles[10].id;
+		page = await open('?p=11', `if (!sessionStorage.getItem('t')) { sessionStorage.setItem('t', 1); localStorage.setItem('sigil_puzzle_pending_results', ${JSON.stringify(JSON.stringify({ ['|' + id10]: { id: id10, uid: null, solved: false, at: 5 } }))}); }`,
+			{ uid: 'acct', isAnonymous: false });
+		const who = await page.evaluate(() => firebaseAuthSettled().then(u => u && u.uid));
+		const dev = await page.evaluate(() => [JSON.parse(localStorage.getItem('sigil_puzzle_rating')), JSON.parse(localStorage.getItem('sigil_puzzle_pending_results'))]);
+		check(who === 'acct' && dev[0].attempts[id10] === 0 && !dev[1]['|' + id10], 'a device-mode entry is recovered on the device rating while an account is signed in');
 		await page.close();
 		// A daily failed and left pending in a killed tab still counts for its day.
 		const today = new Date().toISOString().slice(0, 10);
