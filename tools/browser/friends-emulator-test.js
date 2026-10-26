@@ -21,11 +21,15 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8805';
 const NS = 'sigil-js-default-rtdb';
-const DB = 'http://127.0.0.1:9000';
+// Emulator ports: the defaults, or a private config's (FIREBASE_DATABASE_EMULATOR_HOST
+// and FIREBASE_AUTH_EMULATOR_HOST, which emulators:exec sets).
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const DB = 'http://' + DB_HOST;
 const OWNER = { Authorization: 'Bearer owner' };
 
 // Point the page's Firebase at the emulators as soon as the app exists.
-function useEmulators() {
+function useEmulators(dbPort, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -35,8 +39,8 @@ function useEmulators() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator('127.0.0.1', dbPort);
 				return app;
 			};
 		},
@@ -62,7 +66,7 @@ async function rest(method, p, body) {
 }
 
 async function signUp(email) {
-	const res = await (await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
+	const res = await (await fetch('http://' + AUTH_HOST + '/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
 		method: 'POST', headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ email, password: 'password123', returnSecureToken: true }),
 	})).json();
@@ -102,7 +106,7 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		const newPage = async () => {
 			const ctx = await browser.createBrowserContext();
 			const p = await ctx.newPage();
-			await p.evaluateOnNewDocument(useEmulators);
+			await p.evaluateOnNewDocument(useEmulators, Number(DB_HOST.split(':')[1]), AUTH_HOST);
 			await p.setBypassServiceWorker(true);
 			await p.setRequestInterception(true);
 			p.on('request', (req) => {
@@ -111,13 +115,14 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 				sdk(url).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }), () => req.continue());
 			});
 			p.on('pageerror', (e) => console.log('pageerror:', e.message));
+			p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warn') console.log('console.' + m.type() + ':', m.text()); });
 			p.on('dialog', (d) => d.accept());
 			return p;
 		};
 		const signIn = async (p, email) => {
-			await p.waitForFunction(() => typeof firebase !== 'undefined' && firebase.apps.length > 0, { timeout: 30000 });
+			await p.waitForFunction(() => typeof firebase !== 'undefined' && firebase.apps.length > 0, { timeout: 30000, polling: 250 });
 			await p.evaluate((e) => firebase.auth().signInWithEmailAndPassword(e, 'password123'), email);
-			await p.waitForFunction(() => window.SigilFriends && SigilFriends.uid, { timeout: 30000 });
+			await p.waitForFunction(() => window.SigilFriends && SigilFriends.uid, { timeout: 30000, polling: 250 });
 		};
 		const pageA = await newPage();
 		const pageB = await newPage();
@@ -131,7 +136,7 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 			document.querySelector('.profile__follow').textContent.trim() === 'Follow'
 			&& getComputedStyle(document.querySelector('.profile__challenge')).display !== 'none'));
 		await pageA.click('.profile__follow');
-		await pageA.waitForFunction(() => document.querySelector('.profile__follow').textContent.trim() === 'Unfollow', { timeout: 15000 });
+		await pageA.waitForFunction(() => document.querySelector('.profile__follow').textContent.trim() === 'Unfollow', { timeout: 15000, polling: 250 });
 		const f = await rest('GET', '');
 		check('follow writes both halves', f.follows && f.follows[alice] && f.follows[alice][bob] === true
 			&& f.followers && f.followers[bob] && f.followers[bob][alice] === true);
@@ -139,9 +144,9 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 
 		// A guest sees no social buttons.
 		await pageG.goto(`${BASE}/profile.html?uid=${bob}`, { waitUntil: 'load', timeout: 90000 });
-		await pageG.waitForFunction(() => typeof firebase !== 'undefined' && firebase.apps.length > 0, { timeout: 30000 });
+		await pageG.waitForFunction(() => typeof firebase !== 'undefined' && firebase.apps.length > 0, { timeout: 30000, polling: 250 });
 		await pageG.evaluate(() => firebase.auth().signInAnonymously());
-		await pageG.waitForSelector('.profile__followers', { timeout: 30000 });
+		await pageG.waitForSelector('.profile__followers', { timeout: 30000, polling: 250 });
 		await sleep(1500);
 		check('a guest gets no Follow / Challenge / Block', await pageG.evaluate(() =>
 			!document.querySelector('.profile__follow') && !document.querySelector('.profile__challenge') && !document.querySelector('.profile__block')));
@@ -161,17 +166,22 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		await pageA.goto(`${BASE}/profile.html?uid=${bob}`, { waitUntil: 'load', timeout: 90000 });
 		await pageA.waitForSelector('.profile__challenge', { visible: true, timeout: 30000 });
 		await Promise.all([pageA.waitForNavigation({ waitUntil: 'load', timeout: 90000 }), pageA.click('.profile__challenge')]);
-		await pageA.waitForFunction(() => {
+		const lobbyState = () => pageA.evaluate(() => {
 			const l = document.querySelector('[x-data^="multiplayerLobby"]');
-			return l && window.Alpine && Alpine.$data(l).challengeTarget;
-		}, { timeout: 30000 });
+			const d = l && window.Alpine && Alpine.$data(l);
+			return d ? { authReady: d.authReady, authUser: !!d.authUser, target: d.challengeTarget, error: d.lobbyError, phase: d.phase, code: d.roomCode } : { url: location.href };
+		});
+		if (!(await until(async () => (await lobbyState()).target, 60000))) throw new Error('no challenge set up: ' + JSON.stringify(await lobbyState()));
 		const setup = await pageA.evaluate(() => {
 			const btn = Array.from(document.querySelectorAll('.lobby button.lobby-button')).find((b) => /Send Challenge/.test(b.textContent));
 			return { box: document.querySelector('.challenge-setup').textContent.replace(/\s+/g, ' ').trim(), btn: btn && btn.textContent };
 		});
 		check('the lobby form is set up to challenge Bob', /Challenging Bob/.test(setup.box) && setup.btn === 'Send Challenge to Bob', setup);
 		await pageA.evaluate(() => Array.from(document.querySelectorAll('.lobby button.lobby-button')).find((b) => /Send Challenge/.test(b.textContent)).click());
-		await pageA.waitForFunction((l) => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]')).phase === 'waiting', { timeout: 30000 });
+		if (!(await until(async () => (await lobbyState()).phase === 'waiting', 90000))) {
+			throw new Error('no waiting room: ' + JSON.stringify(await lobbyState()) + ' db: '
+				+ JSON.stringify({ rooms: await rest('GET', 'rooms'), challenges: await rest('GET', 'challenges') }));
+		}
 		const code = await pageA.evaluate(() => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]')).roomCode);
 		const room0 = await rest('GET', 'rooms/' + code);
 		const ch = await rest('GET', 'challenges/' + bob + '/' + code);
@@ -207,7 +217,7 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		await pageB.goto(`${BASE}/profile.html?uid=${alice}`, { waitUntil: 'load', timeout: 90000 });
 		await pageB.waitForSelector('.profile__block', { visible: true, timeout: 30000 });
 		await pageB.click('.profile__block');
-		await pageB.waitForFunction(() => document.querySelector('.profile__block').textContent.trim() === 'Unblock', { timeout: 15000 });
+		await pageB.waitForFunction(() => document.querySelector('.profile__block').textContent.trim() === 'Unblock', { timeout: 15000, polling: 250 });
 		check('block recorded', (await rest('GET', 'blocks/' + bob + '/' + alice)) === true);
 
 		await pageA.goto(`${BASE}/profile.html?uid=${bob}`, { waitUntil: 'load', timeout: 90000 });
@@ -222,7 +232,7 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		await pageA.waitForFunction(() => {
 			const l = document.querySelector('[x-data^="multiplayerLobby"]');
 			return l && window.Alpine && Alpine.$data(l).challengeTarget;
-		}, { timeout: 30000 });
+		}, { timeout: 30000, polling: 250 });
 		const before = Object.keys((await rest('GET', 'rooms')) || {}).length;
 		await pageA.evaluate(() => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]')).createRoom());
 		const refused = await pageA.evaluate(() => {

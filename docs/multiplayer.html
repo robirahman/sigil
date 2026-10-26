@@ -1014,6 +1014,7 @@
 				_blocked: {},
 				challengeTarget: null,
 				_challengeRef: null,
+				_pendingChallenge: null,
 
 				// A room from a position (?sfn=, from Import Position or a
 				// review's "from here"): the start, its engine price and the
@@ -1045,6 +1046,11 @@
 						}
 						this.authReady = true;
 						this._startFriends();
+						if (this._pendingChallenge && user) {
+							const target = this._pendingChallenge;
+							this._pendingChallenge = null;
+							this.setChallenge(target);
+						}
 					});
 
 					this._loadActiveGameCount();
@@ -1057,8 +1063,10 @@
 					});
 
 					const urlChallenge = new URLSearchParams(window.location.search).get('challenge');
+					// Set up once the sign-in is known (it can take longer than
+					// _waitForAuth's safety timeout).
 					if (urlChallenge && !new URLSearchParams(window.location.search).get('id')) {
-						this._waitForAuth().then(() => this.setChallenge(urlChallenge));
+						this._pendingChallenge = urlChallenge;
 					}
 
 					const urlSfn = new URLSearchParams(window.location.search).get('sfn');
