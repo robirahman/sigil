@@ -2061,9 +2061,9 @@ document.addEventListener('alpine:init', () => {
 						// The engine judged an earlier move as an escape, yet the mover
 						// won within the puzzle's count: the JUDGE was wrong. Worth a report.
 						_this.puzzleDiagnostic = 'Engine misjudgement: it ruled that a move let it escape, but you still won within ' + puzzle.mate + ' turns. ' + (_this.puzzleJudge || '');
-						_this.puzzleStatus = 'solved';
-						_this.puzzleMessage = 'Solved (despite the engine\'s verdict) — please report this position.';
-						_puzzleReport('solved');
+						// Through the normal solve path: local progress and the result report.
+						_this.puzzleStatus = 'playing';
+						_puzzleSolve('Solved (despite the engine\'s verdict) — please report this position.');
 						return;
 					}
 					if (_this.puzzleStatus === 'failed') _puzzleReport('failed-final');

@@ -403,6 +403,13 @@
 			 * ranked games); ?daily=1 is today's puzzle, the same for everyone.
 			 * With no pick, the first unsolved puzzle of the pool is shown.
 			 */
+			const PENDING_FAIL_KEY = 'sigil_puzzle_pending_fail';
+			function clearPendingFail(id) {
+				try {
+					const p = JSON.parse(localStorage.getItem(PENDING_FAIL_KEY) || 'null');
+					if (p && p.id === id) localStorage.removeItem(PENDING_FAIL_KEY);
+				} catch (e) { /* storage blocked */ }
+			}
 			const PUZZLE_SETS = { m1: 'Mate in 1', m2: 'Mate in 2', m3: 'Mate in 3', win: 'Winning turn' };
 			function puzzleSet(p) { return p.kind === 'winning' ? 'win' : 'm' + p.mate; }
 			function utcDay(offsetDays) {
@@ -524,6 +531,20 @@
 					if (viewer && viewer.isAnonymous) viewer = null;
 				} catch (e) { viewer = null; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
+				// A failure left pending by an earlier visit (the player left before
+				// it could be corrected or settled) is recorded first.
+				try {
+					const pend = JSON.parse(localStorage.getItem(PENDING_FAIL_KEY) || 'null');
+					const pz = pend && all.find(p => p.id === pend.id);
+					// Recorded for the player who failed it; another account signed
+					// in since cannot be charged for it.
+					if (pz && (pend.uid || null) === (viewer ? viewer.uid : null)) {
+						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
+						const done = await Promise.race([recordPuzzleResult(viewer, pz, false, current || undefined).then(() => true),
+							new Promise(r => setTimeout(() => r(false), 5000))]);
+						if (done) clearPendingFail(pend.id);
+					}
+				} catch (e) { /* storage blocked or offline: try again next visit */ }
 				// Offline (or a database that never answers), the account read can
 				// hang; the board must not wait for it. 4 s, then the device rating.
 				const deviceRating = () => loadPuzzleRating(null);
@@ -628,6 +649,7 @@
 				const ratingUser = rated.signedIn ? viewer : null;
 				// A result is saved before the page leaves: links in the puzzle
 				// panel wait (up to 5 s) for a pending rating write.
+				window.addEventListener('pagehide', () => { if (pendingFail) settle('failed'); });
 				window.SIGIL_PUZZLE_GO = (url) => {
 					if (pendingFail) settle('failed');      // leaving: the failure stands
 					if (!recording) { location.href = url; return; }
@@ -651,6 +673,7 @@
 					rating_recorded = true;
 					pendingFail = false;
 					recording = recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow).then((r) => {
+						clearPendingFail(puzzle.id);   // recorded (or attempted before): nothing left pending
 						if (!r) { showRating(' · already attempted, rating unchanged'); return; }
 						rated.rating = r.after;
 						puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
@@ -664,7 +687,14 @@
 				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (p.id !== puzzle.id) return;
-					if (status === 'failed' && puzzle.kind !== 'winning') { pendingFail = true; return; }
+					if (status === 'failed' && puzzle.kind !== 'winning') {
+						// Held in storage too: leaving by any path (back, reload, the
+						// header, closing the tab) cannot erase it -- the next visit
+						// records it before anything else.
+						pendingFail = true;
+						try { localStorage.setItem(PENDING_FAIL_KEY, JSON.stringify({ id: puzzle.id, uid: ratingUser ? ratingUser.uid : null, at: Date.now() })); } catch (e) { /* storage blocked */ }
+						return;
+					}
 					if (status === 'failed-final' || status === 'retry') { if (pendingFail) settle('failed'); return; }
 					settle(status);
 				};
