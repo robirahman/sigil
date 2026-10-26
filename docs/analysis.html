@@ -484,7 +484,7 @@
 													x-bind:src="getSpellImg('sorcery' + i)"
 													x-on:click.stop="handleSpellClick(`sorcery${i}`)"
 													x-on:click.outside="closeSpellTooltip"
-													x-on:mouseout="handleSpellMouseOut()"
+													x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 													x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 												/>
 											</picture>
@@ -812,8 +812,8 @@
 		<script src="static/scripts/board-geometry.js"></script>
 		<!-- The analysis board (spread into gameBoard when created with { analysis: true }). -->
 		<script src="static/scripts/analysis-board.js"></script>
-		<script src="static/scripts/game-keys.js"></script>
-		<script src="static/scripts/game-board-local.js?v=34"></script>
+		<script src="static/scripts/game-keys.js?ui=2"></script>
+		<script src="static/scripts/game-board-local.js?v=34&ui=2"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

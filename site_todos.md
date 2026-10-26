@@ -11,7 +11,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Long term: deploy the server-side Elo in `functions/index.js` (needs the Blaze plan).
   The rating is computed by whichever player's browser reports the result (`engine/elo.js`), and only red's client saves the game record (`engine/firebase-sync.js:682`).
 - [x] **Restrict `rooms/$roomId`.** Done: only the seated uids write a room (guests sign in anonymously); settings are fixed at creation. It is world-readable and world-writable (`database.rules.json:84-88`).
-- [ ] **Fix the Deep Review labels.** The buttons say "Deep Review (8 ply)" (`docs/game.html:759`) and "Deep AI Review (10 ply)" (`docs/game.html:799`).
+- [x] **Fix the Deep Review labels.** Done: the buttons read the preset (`reviewModeLabel`, e.g. "Deep Review (Hard engine, 10 s/position)") and the stale "8-ply" comment is gone. The buttons say "Deep Review (8 ply)" (`docs/game.html:759`) and "Deep AI Review (10 ply)" (`docs/game.html:799`).
   The real preset is 60s per position with no fixed depth (`engine/game-review.js:31`), and the code comment at `engine/game-review.js:101` also says "8-ply".
   Show an estimated time instead, since a long game can take about an hour.
 - [x] **Handle online move failures.** Done: unsent moves are tracked and a banner shows while the connection is down or a write is refused (the SDK resends on reconnect). `sendTurn`, `sendForfeit` and `saveGameState` only `console.error` (`engine/firebase-sync.js:349-388, 453`).
@@ -83,7 +83,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   - [x] Add Escape to close tooltips and reset.
     Escape closes tooltips, dialogs and an armed End Turn / Forfeit; it does not reset the turn (never documented, and one stray key would undo a placed stone).
   - [x] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
-- [ ] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`).
+- [x] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`). Done: any same-tab link (logo, Sign in, player names) asks "Leave this game?" during a live local, AI or timed online game (`guardLeavingGame`, game-keys.js); not after game over, in review, for spectators or in correspondence games.
   The `beforeunload` warning is disabled on Safari.
 
 ## From a Lichess comparison (2026-10-21)
@@ -106,8 +106,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
 - [ ] **Add zen mode** that hides everything but the board and clocks.
 - [ ] **Add board flip** and a choice of which side the board is drawn from.
-- [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
-  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Vacation / pause is open: it changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
+- [x] **Add a correspondence "your move" list across games.** Done: active-games.html, least time left first, and a "Your move (N)" header badge.
+- [ ] **Add a correspondence vacation / pause option.** It changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [ ] **Let players draw arrows and circles** on the board during play and analysis.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
@@ -192,6 +192,6 @@ Items already listed above are not repeated; chess-only features (opening names,
 ## Cleanup
 
 - [x] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
-- [ ] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet.
-- [ ] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`).
+- [x] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet. Done: in styles.css, the header rules scoped by `body.game-page`; computed styles and screenshots unchanged.
+- [x] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`). Done on every game page (multiplayer.html passed none).
   It is harmless today because the parameter is unused.

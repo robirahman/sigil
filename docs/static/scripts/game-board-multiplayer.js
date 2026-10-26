@@ -759,6 +759,14 @@ document.addEventListener('alpine:init', () => {
 
 				// Keyboard shortcuts (game-keys.js, shared with game.html)
 				bindGameKeys(_this, { disabled: () => _this.isSpectator });
+				// Leaving a live game asks first (game-keys.js). Correspondence
+				// games are left between moves by design, so they don't ask.
+				// typeof: a stale cached game-keys.js must not break the game.
+				if (typeof guardLeavingGame === 'function') guardLeavingGame(
+					() => !_this.isSpectator && !_this.winner && !_this.gameAborted && !_this.reviewMode
+						&& !!_this.whoseTurn && _this.timerType !== 'correspondence',
+					() => 'The game goes on without you: ' + (_this.timerType === 'none' ? '' : 'your clock keeps running, and ')
+						+ 'after ' + Math.round(ABANDON_GRACE_MS / 1000) + ' s away your opponent can claim the win.');
 
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller

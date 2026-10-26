@@ -56,6 +56,11 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/global.css?v202305191',
 	'./static/css/layout.css',
 	'./static/css/styles.css',
+	// ?ui=N: game.html / multiplayer.html load their game scripts and styles.css
+	// under a URL an old worker never cached, so a fresh page can't run on
+	// stale copies (stale-while-revalidate checks each file on its own). Bump
+	// it with the pages' tags when they need a new script or style API.
+	'./static/css/styles.css?ui=2',
 	'./static/css/compendium.css',
 	'./static/css/help.css',
 	'./static/css/ladder.css',
@@ -67,15 +72,15 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/settings-panel.js',
-	'./static/scripts/game-keys.js',
+	'./static/scripts/game-keys.js?ui=2',
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/analysis-board.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/tutorial-lessons.js',
-	'./static/scripts/game-board-local.js?v=34',
+	'./static/scripts/game-board-local.js?v=34&ui=2',
 	'./static/scripts/engine/rust-ai.js?v=34',
 	'./static/scripts/game-board-multiplayer.js',
-	'./static/scripts/game-board-multiplayer.js?v=34',
+	'./static/scripts/game-board-multiplayer.js?v=34&ui=2',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
