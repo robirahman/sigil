@@ -1,0 +1,19 @@
+{
+ "displayName": "SigilBench private bucket: only Robi and the eval runner",
+ "rules": [
+  {"denyRule": {
+    "deniedPrincipals": ["principalSet://goog/public:all"],
+    "exceptionPrincipals": ["principal://goog/subject/robi@intelligence.org",
+                            "principal://iam.googleapis.com/projects/-/serviceAccounts/sigilbench-eval@focus-surfer-494820-g0.iam.gserviceaccount.com"],
+    "deniedPermissions": ["storage.googleapis.com/objects.get","storage.googleapis.com/objects.list",
+                          "storage.googleapis.com/objects.create","storage.googleapis.com/objects.delete",
+                          "storage.googleapis.com/objects.update"],
+    "denialCondition": {"title":"sigilbench-private tag","expression":"resource.matchTagId('tagKeys/281476378085175','tagValues/281484877930588')"}}},
+  {"denyRule": {
+    "deniedPrincipals": ["principalSet://goog/public:all"],
+    "exceptionPrincipals": ["principal://goog/subject/robi@intelligence.org"],
+    "deniedPermissions": ["storage.googleapis.com/buckets.setIamPolicy","storage.googleapis.com/buckets.update",
+                          "storage.googleapis.com/buckets.delete","storage.googleapis.com/buckets.deleteTagBinding"],
+    "denialCondition": {"title":"sigilbench-private tag","expression":"resource.matchTagId('tagKeys/281476378085175','tagValues/281484877930588')"}}}
+ ]
+}
