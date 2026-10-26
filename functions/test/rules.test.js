@@ -300,3 +300,112 @@ test('rooms: the lobby reads a public index; rooms/ itself is not listable', asy
 	await env.withSecurityRulesDisabled((ctx) => set(ref(ctx.database(), 'open_rooms/GONE'), true));
 	await assertSucceeds(remove(ref(db('carol'), 'open_rooms/GONE')));
 });
+
+const guestDb = (uid) => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).database();
+const named = (n) => Object.assign({}, profile, { displayName: n });
+
+test('follows: written only by the follower, mirrored in followers', async () => {
+	await seed({ users: { alice: named('Alice'), bob: named('Bob'), __ai_rust_hard__: named('Hard AI') } });
+	const follow = (who, target, v) => ({ ['follows/' + who + '/' + target]: v, ['followers/' + target + '/' + who]: v });
+	// Both halves, in one update.
+	await assertFails(set(ref(db('alice'), 'follows/alice/bob'), true));
+	await assertFails(set(ref(db('alice'), 'followers/bob/alice'), true));
+	await assertSucceeds(update(ref(db('alice')), follow('alice', 'bob', true)));
+	// Nobody follows (or unfollows) on someone else's behalf.
+	await assertFails(update(ref(db('mallory')), follow('bob', 'alice', true)));
+	await assertFails(update(ref(db('bob')), follow('alice', 'bob', null)));
+	await assertFails(remove(ref(db('bob'), 'followers/bob/alice')));
+	// Not yourself, not an account that does not exist, not an AI, not as a guest.
+	await assertFails(update(ref(db('alice')), follow('alice', 'alice', true)));
+	await assertFails(update(ref(db('alice')), follow('alice', 'nobody', true)));
+	await assertFails(update(ref(db('alice')), follow('alice', '__ai_rust_hard__', true)));
+	await assertFails(update(ref(guestDb('gina')), follow('gina', 'bob', true)));
+	// Unfollow removes both halves together.
+	await assertFails(remove(ref(db('alice'), 'follows/alice/bob')));
+	await assertSucceeds(update(ref(db('alice')), follow('alice', 'bob', null)));
+	// Follow lists are public.
+	await assertSucceeds(get(ref(db(null), 'followers/bob')));
+	await assertSucceeds(get(ref(db(null), 'follows/alice')));
+	// Someone who blocked you cannot be followed.
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { bob: { alice: true } } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+});
+
+test('blocks: owner-written; readable by the owner and the one blocked', async () => {
+	await assertSucceeds(set(ref(db('bob'), 'blocks/bob/alice'), true));
+	await assertFails(set(ref(db('alice'), 'blocks/bob/carol'), true));
+	await assertFails(remove(ref(db('alice'), 'blocks/bob/alice')));
+	await assertFails(set(ref(db('bob'), 'blocks/bob/bob'), true));
+	await assertFails(set(ref(db('bob'), 'blocks/bob/carol'), 'yes'));
+	await assertFails(set(ref(guestDb('gina'), 'blocks/gina/bob'), true));
+	await assertSucceeds(get(ref(db('bob'), 'blocks/bob')));
+	await assertSucceeds(get(ref(db('alice'), 'blocks/bob/alice')));
+	await assertFails(get(ref(db('alice'), 'blocks/bob')));
+	await assertFails(get(ref(db('carol'), 'blocks/bob/alice')));
+	await assertSucceeds(remove(ref(db('bob'), 'blocks/bob/alice')));
+});
+
+test('challenges: by a room\'s creator, for its invited player, unless blocked', async () => {
+	const room = Object.assign({}, waiting, { creatorColor: 'red', invite: 'bob' });
+	await seed({ users: { alice: named('Alice'), bob: named('Bob'), carol: named('Carol') } });
+	// The invite is fixed at creation and never public.
+	await assertFails(set(ref(db('alice'), 'rooms/C1'), Object.assign({}, room, { invite: 'alice' })));
+	await assertFails(set(ref(db('alice'), 'rooms/C1'), Object.assign({}, room, { public: true })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/C1'), room));
+	await assertFails(set(ref(db('alice'), 'rooms/C1/invite'), 'carol'));
+	const ch = { from: 'alice', at: serverTimestamp(), tc: { type: 'none' }, variant: 'standard' };
+	// Only the creator, only for a room that exists and invites that player.
+	await assertFails(set(ref(db('carol'), 'challenges/bob/C1'), Object.assign({}, ch, { from: 'carol' })));
+	await assertFails(set(ref(db('alice'), 'challenges/carol/C1'), ch));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/NOPE'), ch));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { from: 'carol' })));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { at: 5 })));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { variant: 'deathmatch' })));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { note: 'hi' })));
+	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C1'), ch));
+	// Not overwritten; read by the target and the room's players only.
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
+	await assertSucceeds(get(ref(db('bob'), 'challenges/bob')));
+	await assertSucceeds(get(ref(db('alice'), 'challenges/bob/C1')));
+	await assertFails(get(ref(db('carol'), 'challenges/bob')));
+	await assertFails(get(ref(db('carol'), 'challenges/bob/C1')));
+	// Only the invited player takes the open seat.
+	await assertFails(update(ref(db('carol'), 'rooms/C1'),
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+	// The target declines (or accepts) by removing it; a stranger cannot.
+	await assertFails(remove(ref(db('carol'), 'challenges/bob/C1')));
+	await assertSucceeds(remove(ref(db('bob'), 'challenges/bob/C1')));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/C1'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+	// Not for a room that is no longer waiting.
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
+	// A guest cannot challenge.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/C2'),
+		Object.assign({}, room, { red: { uid: 'gina', connected: true } })));
+	await assertFails(set(ref(guestDb('gina'), 'challenges/bob/C2'), Object.assign({}, ch, { from: 'gina' })));
+});
+
+test('blocking: no challenge to the blocker, no seat in their rooms', async () => {
+	const room = Object.assign({}, waiting, { creatorColor: 'red', invite: 'bob' });
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { bob: { alice: true } },
+		rooms: { C3: room, P1: Object.assign({}, waiting, { creatorColor: 'red', red: { uid: 'bob', connected: true }, public: true }) } });
+	const ch = { from: 'alice', at: serverTimestamp() };
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C3'), ch));
+	// Alice cannot take the seat of a room Bob created (quick pair, open games).
+	await assertFails(update(ref(db('alice'), 'rooms/P1'),
+		{ blue: { uid: 'alice', displayName: 'Alice', connected: true }, status: 'playing', ranked: false }));
+	await assertSucceeds(update(ref(db('carol'), 'rooms/P1'),
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+	// Unblocked, the challenge goes through.
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks/bob/alice')));
+	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C3'), ch));
+});
+
+test('presence: one entry per connection, by its owner, with the server time', async () => {
+	await assertSucceeds(set(ref(db('alice'), 'presence/alice/c1'), serverTimestamp()));
+	await assertFails(set(ref(db('alice'), 'presence/alice/c2'), 5));
+	await assertFails(set(ref(db('bob'), 'presence/alice/c3'), serverTimestamp()));
+	await assertFails(set(ref(guestDb('gina'), 'presence/gina/c1'), serverTimestamp()));
+	await assertSucceeds(get(ref(db(null), 'presence/alice')));
+	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
+});
