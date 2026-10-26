@@ -134,7 +134,11 @@
 		.storm-intro .action-button { margin: 10px 8px 0 0; }
 		.storm-intro a { color: var(--color-accent, #d4af37); }
 		.storm-bar { display: none; font-family: 'Arvo', serif; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 4px; }
-		body.storm-mode .storm-bar { display: flex; }
+		/* During a run the clock and its buttons stay in view while the board scrolls. */
+		body.storm-mode .storm-bar {
+			display: flex; position: sticky; top: 0; z-index: 50; margin: 0; padding: 6px 16px;
+			background: var(--color-bg-dark, #1b1b1b); border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+		}
 		.storm-bar__time { font-size: 1.6em; min-width: 3.2em; }
 		.storm-bar__time.is-low { color: #e0604a; }
 		.storm-bar__score { font-size: 1.3em; color: #6fd46f; }
@@ -184,6 +188,16 @@
 			<div id="puzzle-dashboard" class="puzzle-dash" style="display:none"></div>
 			<!-- ?tab=storm: the start and end screens; the run itself uses the board below -->
 			<div id="storm-intro" class="storm-intro" style="display:none"></div>
+			<!-- The run's clock: sticks to the top while the board scrolls -->
+			<div class="storm-bar" id="storm-bar">
+				<span class="storm-bar__time" id="storm-time">3:00</span>
+				<span class="storm-bar__score" id="storm-score" title="Puzzles solved">0</span>
+				<span class="storm-bar__combo" id="storm-combo"></span>
+				<span class="storm-bar__flash" id="storm-flash"></span>
+				<span id="storm-what"></span>
+				<button class="action-button" id="storm-skip" type="button">Skip</button>
+				<button class="action-button" id="storm-end" type="button">End run</button>
+			</div>
 
 			<!-- Filled in by boot() once the puzzle set is loaded; Alpine is
 			     started only after window.SIGIL_PUZZLE exists so the board
@@ -196,15 +210,6 @@
 								<h2 class="puzzle-panel__title"
 									x-bind:class="puzzle.mover === 'red' ? 'puzzle-panel__title--red' : 'puzzle-panel__title--blue'"
 									x-text="window.SIGIL_PUZZLE_TITLE"></h2>
-								<div class="storm-bar" id="storm-bar">
-									<span class="storm-bar__time" id="storm-time">3:00</span>
-									<span class="storm-bar__score" id="storm-score" title="Puzzles solved">0</span>
-									<span class="storm-bar__combo" id="storm-combo"></span>
-									<span class="storm-bar__flash" id="storm-flash"></span>
-									<span id="storm-what"></span>
-									<button class="action-button" id="storm-skip" type="button">Skip</button>
-									<button class="action-button" id="storm-end" type="button">End run</button>
-								</div>
 								<p class="puzzle-panel__sub puzzle-panel__source" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"

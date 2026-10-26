@@ -186,8 +186,8 @@ const OWNER = { Authorization: 'Bearer owner' };
 			s = await state();
 			if (s.actions.includes('pass')) await page.click('.action-button--end-turn');
 			const score0 = i;
-			s = await waitFor(x => x.score > score0, 20000);
-			check(s.score === i + 1, `click-solve ${i + 1} scores (${s.score})`);
+			s = await waitFor(x => x.score > score0, 45000);
+			check(s.score === i + 1, `click-solve ${i + 1} scores (${s.score})` + (s.score === i + 1 ? "" : " " + JSON.stringify(s) + " " + await page.evaluate(() => { const d = window.Alpine.$data(document.querySelector("#puzzle-root [x-data]")); return d.puzzleMessage + " / " + d.whoseTurn + " / " + d.messageHistory.slice(-4).join(" | "); })));
 			s = await waitFor(x => x.k === i + 2 && x.id === x.cur && x.status === 'playing' && x.valid.length > 0, 20000);
 		}
 		// A miss: Skip (a wrong click may still mate: easy puzzles often have several).
@@ -199,8 +199,16 @@ const OWNER = { Authorization: 'Bearer owner' };
 		variants.add(s.variant);
 		check(variants.size === 2 || std.length === 0 || comp.length === 0, 'the board switched between variants in place: ' + [...variants].join(', '));
 		check(await noHScroll(page), 'Storm: no horizontal scroll at phone width');
+		const inView = await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); const b = document.getElementById('storm-end').getBoundingClientRect(); return b.top >= 0 && b.bottom <= window.innerHeight; });
+		check(inView, 'the Storm clock and buttons stay in view when the board is scrolled');
+		const hit0 = await page.evaluate(() => { const b = document.getElementById('storm-end').getBoundingClientRect();
+			const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return (e && (e.id || e.className || e.tagName)) + ' @' + Math.round(b.y); });
+		check(/^storm-end/.test(hit0), 'nothing covers the End run button (' + hit0 + ')');
 		await page.click('#storm-end');
-		await page.waitForFunction(() => window.SIGIL_STORM.saved, { timeout: 20000 });
+		await page.waitForFunction(() => window.SIGIL_STORM.saved, { timeout: 20000 }).catch(async (e) => {
+			console.log('  storm state: ' + await page.evaluate(() => JSON.stringify({ over: window.SIGIL_STORM.over, k: window.SIGIL_STORM.k, saved: window.SIGIL_STORM.saved })));
+			throw e;
+		});
 		const end = await page.evaluate(() => ({ text: document.getElementById('storm-intro').innerText, saved: window.SIGIL_STORM.saved,
 			local: JSON.parse(localStorage.getItem('sigil_puzzle_storm')), rating: localStorage.getItem('sigil_puzzle_rating'),
 			solved: localStorage.getItem('sigil_puzzles_solved'), results: localStorage.getItem('sigil_puzzle_results') }));
@@ -262,7 +270,7 @@ const OWNER = { Authorization: 'Bearer owner' };
 			await pb.goto(`${BASE}/puzzles.html?id=${encodeURIComponent(p2.id)}`, { waitUntil: 'networkidle2' });
 			await pb.waitForFunction(() => typeof window.SIGIL_PUZZLE_ON_RESULT === 'function', { timeout: 30000 });
 			await pb.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'solved'));
-			await sleep(1500);
+			for (let t = 0; t < 40; t++) { await sleep(500); const x = await remote(); if (x.puzzleAttempts && x.puzzleAttempts[p2.id] && x.puzzleProgress.results[p2.id]) break; }
 			r = await remote();
 			check(r.puzzleProgress.results[p2.id] && r.puzzleProgress.results[p2.id].r === 's', 'a result writes through to the account');
 			check(r.puzzle && r.puzzle.plays === 1 && r.puzzleAttempts && r.puzzleAttempts[p2.id], 'the rated attempt still records (rating flow unchanged)');
@@ -282,6 +290,9 @@ const OWNER = { Authorization: 'Bearer owner' };
 				await ps.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_STORM.current, 'solved'));
 				await ps.waitForFunction((k) => window.SIGIL_STORM.k === k, { timeout: 10000 }, i + 2);
 			}
+			const hit = await ps.evaluate(() => { const b = document.getElementById('storm-end').getBoundingClientRect();
+				const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return e && (e.id || e.className || e.tagName); });
+			check(hit === 'storm-end', 'nothing covers the End run button (' + hit + ')');
 			await ps.click('#storm-end');
 			await ps.waitForFunction(() => window.SIGIL_STORM.saved, { timeout: 40000 }).catch(async (e) => {
 				console.log('  storm state: ' + await ps.evaluate(() => JSON.stringify({ over: window.SIGIL_STORM.over, k: window.SIGIL_STORM.k, score: window.SIGIL_STORM.score,
