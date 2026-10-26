@@ -524,7 +524,7 @@
 				Hide spell names and descriptions on the board circles (art only).
 			</small>
 
-			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || (positionSfn && (!positionOffer || positionOffer.loading))" x-text="challengeTarget ? 'Send Challenge to ' + challengeTarget.name : (positionSfn ? 'Create Game from Position' : 'Create Game')">Create Game</button>
+			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || !!(positionSfn && (!positionOffer || positionOffer.loading))" x-text="challengeTarget ? 'Send Challenge to ' + challengeTarget.name : (positionSfn ? 'Create Game from Position' : 'Create Game')">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" x-on:input.debounce.300ms="previewRoom()" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="isOffline || joinCode.length < 4">Join Game</button>
@@ -1227,8 +1227,17 @@
 								const timeControl = roomData.timeControl || { type: 'none' };
 								const variant = normalizeVariant(roomData.variant);
 								_firebaseSync.onOpponentJoin = () => {
+									this._stopChallengeWatch();
 									this._startOnlineGame(spellNames, creator, null, false, timeControl, variant);
 								};
+								// A challenge room: watch for a decline again (one made
+								// while this page was closed shows at once).
+								if (typeof roomData.invite === 'string' && roomData.invite) {
+									let name = 'Your opponent';
+									try { name = (await firebase.database().ref('users/' + roomData.invite + '/displayName').once('value')).val() || name; } catch (e) {}
+									this.waitingInfo = 'Challenge sent to ' + name;
+									this._watchChallenge({ uid: roomData.invite, name }, code);
+								}
 								return;
 							}
 							// A room from a position: show the joiner its price first.
@@ -1680,17 +1689,15 @@
 				},
 
 				/**
-				 * The challenge we sent: once its target removes it while our
-				 * room still waits, they declined (an accepting player joins
-				 * first, which starts the game).
+				 * The challenge we sent: missing while our room still waits means
+				 * they declined, now or while this page was closed (an accepting
+				 * player keeps it until their join, which starts the game).
 				 */
 				_watchChallenge(challenge, code) {
 					this._stopChallengeWatch();
 					const ref = firebase.database().ref('challenges/' + challenge.uid + '/' + code);
-					let seen = false;
 					ref.on('value', (s) => {
-						if (s.exists()) { seen = true; return; }
-						if (!seen || this.phase !== 'waiting' || this.roomCode !== code) return;
+						if (s.exists() || this.phase !== 'waiting' || this.roomCode !== code) return;
 						this.waitingInfo = challenge.name + ' declined the challenge.';
 						this._stopChallengeWatch();
 					}, () => {});

@@ -179,9 +179,10 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 			return { box: document.querySelector('.challenge-setup').textContent.replace(/\s+/g, ' ').trim(), btn: btn && btn.textContent };
 		});
 		check('the lobby form is set up to challenge Bob', /Challenging Bob/.test(setup.box) && setup.btn === 'Send Challenge to Bob', setup);
-		// Report what createRoom ends in (resolves or throws), for a failure message.
-		pageA.evaluate(() => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]')).createRoom()
-			.then(() => 'resolved', (e) => 'threw ' + (e && e.message))).then((r) => console.log('createRoom:', r), (e) => console.log('createRoom eval:', e.message));
+		// The real button (it was disabled for every room not from a position).
+		const sendBtn = await pageA.evaluateHandle(() => Array.from(document.querySelectorAll('.lobby button.lobby-button')).find((b) => /Send Challenge/.test(b.textContent)));
+		check('Send Challenge is enabled', await sendBtn.evaluate((b) => !b.disabled));
+		await sendBtn.click();
 		if (!(await until(async () => (await lobbyState()).phase === 'waiting', 90000))) {
 			throw new Error('no waiting room: ' + JSON.stringify(await lobbyState()) + ' db: '
 				+ JSON.stringify({ rooms: await rest('GET', 'rooms'), challenges: await rest('GET', 'challenges') }));
@@ -217,7 +218,36 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		check('the accepted challenge is cleared', await until(async () => (await rest('GET', 'challenges/' + bob + '/' + code)) === null));
 		check('no banner left for Bob', await pageB.evaluate(() => !document.querySelector('.challenge-banner')));
 
+		// ---- 4b. The challenger reloads the waiting room: a decline shows ----
+		const chRoom = (cre, name, inv) => ({ status: 'waiting', created: Date.now(), ranked: false, variant: 'standard', spellNames: ['a'], timeControl: { type: 'none' }, creatorColor: 'red', allowSpectators: true, invite: inv, red: { uid: cre, displayName: name, connected: true }, blue: { connected: false } });
+		await rest('PATCH', '', {
+			'rooms/DECLA': chRoom(alice, 'Alice', bob), 'rooms/DECLB': chRoom(alice, 'Alice', bob),
+			['user_active_games/' + alice + '/DECLA']: { roomCode: 'DECLA', myColor: 'red', created: Date.now() },
+			['user_active_games/' + alice + '/DECLB']: { roomCode: 'DECLB', myColor: 'red', created: Date.now() },
+			['challenges/' + bob + '/DECLB']: { from: alice, at: Date.now() },
+		});
+		const waitInfo = async () => pageA.evaluate(() => {
+			const d = Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]'));
+			return d.phase === 'waiting' ? d.waitingInfo : null;
+		});
+		// Declined while the page was closed.
+		await pageA.goto(`${BASE}/multiplayer.html?id=DECLA`, { waitUntil: 'load', timeout: 90000 });
+		const infoA = await until(async () => { const w = await waitInfo(); return w && /declined/.test(w) ? w : null; }, 30000);
+		check('a decline made while the page was closed shows on reload', !!infoA, infoA || await waitInfo());
+		// Declined after the reload.
+		await pageA.goto(`${BASE}/multiplayer.html?id=DECLB`, { waitUntil: 'load', timeout: 90000 });
+		const infoB0 = await until(async () => { const w = await waitInfo(); return w && /Challenge sent to Bob/.test(w) ? w : null; }, 30000);
+		await rest('DELETE', 'challenges/' + bob + '/DECLB');
+		const infoB = await until(async () => { const w = await waitInfo(); return w && /Bob declined/.test(w) ? w : null; }, 15000);
+		check('the reloaded waiting room still sees a decline', !!infoB0 && !!infoB, { infoB0, infoB });
+
 		// ---- 5. Blocking ----
+		// Bob's own open challenge to Alice is withdrawn with its room.
+		await rest('PATCH', '', {
+			'rooms/BOBCH': chRoom(bob, 'Bob', alice),
+			['user_active_games/' + bob + '/BOBCH']: { roomCode: 'BOBCH', myColor: 'red', created: Date.now() },
+			['challenges/' + alice + '/BOBCH']: { from: bob, at: Date.now() },
+		});
 		// A challenge from Alice still open when Bob blocks her goes too.
 		await rest('PATCH', '', {
 			'rooms/OPENCH': { status: 'waiting', created: Date.now(), ranked: false, variant: 'standard', spellNames: ['a'], timeControl: { type: 'none' },
@@ -230,6 +260,8 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		await pageB.waitForFunction(() => document.querySelector('.profile__block').textContent.trim() === 'Unblock', { timeout: 15000, polling: 250 });
 		check('block recorded', (await rest('GET', 'blocks/' + bob + '/' + alice)) === true);
 		check('blocking drops her open challenge', (await rest('GET', 'challenges/' + bob + '/OPENCH')) === null);
+		check('... and withdraws his own challenge to her, with its room', await until(async () =>
+			(await rest('GET', 'challenges/' + alice + '/BOBCH')) === null && (await rest('GET', 'rooms/BOBCH')) === null, 10000));
 
 		await pageA.goto(`${BASE}/profile.html?uid=${bob}`, { waitUntil: 'load', timeout: 90000 });
 		await pageA.waitForSelector('.profile__block', { visible: true, timeout: 30000 });

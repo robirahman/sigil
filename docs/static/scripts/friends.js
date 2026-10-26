@@ -88,7 +88,11 @@
 		return (await db().ref('blocks/' + uid + '/' + target).once('value')).val() === true;
 	}
 
-	/** Block: also stops following them and drops their open challenges. */
+	/**
+	 * Block: also stops following them, drops their open challenges to us,
+	 * and withdraws ours to them (each with its waiting room, which they
+	 * could no longer join).
+	 */
 	async function block(target) {
 		requireSignedIn();
 		delete blockCache[target];
@@ -105,7 +109,21 @@
 			if (pending[room] && pending[room].from === target) sweep['challenges/' + uid + '/' + room] = null;
 		});
 		Object.keys(challenges).forEach((room) => { if (challenges[room].from === target) delete challenges[room]; });
-		if (Object.keys(sweep).length) await db().ref().update(sweep);
+		// Ours to them live under challenges/{target}: found through our
+		// waiting rooms that invite them.
+		const active = (await db().ref('user_active_games/' + uid).once('value').catch(() => null));
+		const codes = active ? Object.keys(active.val() || {}) : [];
+		await Promise.all(codes.map(async (code) => {
+			const r = (await db().ref('rooms/' + code).once('value').catch(() => null));
+			const room = r && r.val();
+			const creator = room && room.creatorColor === 'blue' ? 'blue' : 'red';
+			if (!room || room.status !== 'waiting' || room.invite !== target || !room[creator] || room[creator].uid !== uid) return;
+			sweep['challenges/' + target + '/' + code] = null;
+			sweep['rooms/' + code] = null;
+			sweep['user_active_games/' + uid + '/' + code] = null;
+		}));
+		// Best-effort: the block itself is recorded.
+		if (Object.keys(sweep).length) await db().ref().update(sweep).catch((e) => console.warn('[Friends] sweep:', e));
 		renderBanner();
 		emit();
 	}
