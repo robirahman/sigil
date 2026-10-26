@@ -802,6 +802,8 @@
 								eloBefore: v.eloBefore ?? 1000,
 								eloAfter: v.eloAfter ?? 1000,
 								eloChange: v.eloChange ?? 0,
+								// Stored by rateGame since round 2 (AI games too).
+								opponentEloBefore: typeof v.opponentEloBefore === 'number' ? v.opponentEloBefore : null,
 							});
 						});
 						// Sort newest-first for the table
@@ -877,16 +879,17 @@
 				 * Each human opponent's rating before every rated game (all games,
 				 * not just PROFILE_META_CAP: one small read each), for Best win /
 				 * Worst loss. It is in their own user_games entry for the game
-				 * (public, like this player's). AI opponents have no user_games and
-				 * their rating moves, so AI games are left out rather than shown
-				 * at today's rating.
+				 * (public, like this player's). Entries that store
+				 * opponentEloBefore (rateGame, since round 2) need no read. Older
+				 * AI games are left out: an AI has no user_games and its rating
+				 * moves, so it would show at today's rating.
 				 */
 				async _loadOppElo(db) {
 					const cache = _profileOppEloCacheRead();
 					const known = {};
 					const todo = [];
 					for (const g of this.games) {
-						if (!g.rated || !g.opponentUid || g.opponentIsAI) continue;
+						if (!g.rated || typeof g.opponentEloBefore === 'number' || !g.opponentUid || g.opponentIsAI) continue;
 						if (typeof cache[g.id] === 'number') known[g.id] = cache[g.id];
 						else todo.push(g);
 					}

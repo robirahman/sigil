@@ -6,13 +6,16 @@
  *           Function writes it (functions/rating.js ratingUpdates):
  *           { timestamp, roomCode, gameId, opponent, opponentUid,
  *           opponentIsAI, color, result, fromPosition, rated, and either
- *           eloBefore/eloAfter/eloChange or unratedReason }.
+ *           eloBefore/eloAfter/eloChange (and opponentEloBefore, in entries
+ *           written since round 2) or unratedReason }.
  *   meta  - what the page reads from the game's public room record,
  *           rooms/{roomCode} (completed_games is not readable by clients):
  *           { spellNames, variant, timeControl, finalSfn, startSfn,
  *           setupSfn }.
- *   oppElo - a human opponent's rating before a rated game, from their own
- *           user_games entry for it (none for AI opponents).
+ *   oppElo - the opponent's rating before a rated game: the entry's own
+ *           opponentEloBefore when stored, else (older entries) a human
+ *           opponent's eloBefore from their own user_games entry (none for
+ *           AI opponents).
  *
  * Loaded as a classic script by profile.html, and require()-able in node.
  * Uses normalizeVariant / displaySpellName from engine/constants.js and
@@ -140,12 +143,14 @@ const ProfileStats = (() => {
 	/**
 	 * Best win: the win over the highest-rated opponent; worst loss: the loss
 	 * to the lowest-rated one. By the opponent's rating before the game
-	 * (oppEloOf), so games without one are skipped.
+	 * (the entry's opponentEloBefore, else oppEloOf), so games without one
+	 * are skipped.
 	 */
 	function bestWorst(games, oppEloOf) {
 		let bestWin = null, worstLoss = null;
 		for (const g of games) {
-			const v = oppEloOf ? oppEloOf(g) : null;
+			if (g.rated === false) continue;
+			const v = typeof g.opponentEloBefore === 'number' ? g.opponentEloBefore : (oppEloOf ? oppEloOf(g) : null);
 			const r = typeof v === 'number' ? v : null;
 			if (r === null) continue;
 			if (g.result === 'win' && (!bestWin || r > bestWin.oppElo)) bestWin = { game: g, oppElo: r };

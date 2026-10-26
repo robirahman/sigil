@@ -363,6 +363,10 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 				eloBefore: before[c],
 				eloAfter: after[c],
 				eloChange: after[c] - before[c],
+				// The opponent's rating at the time (profile.html best win /
+				// worst loss): an AI has no user_games entry of its own to
+				// read it from, and its rating moves.
+				opponentEloBefore: before[other(c)],
 			});
 		}
 	}

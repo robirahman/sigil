@@ -412,3 +412,36 @@ test('ratingUpdates moves Elo by the client formula and indexes both humans', as
 	assert.strictEqual(n['user_games/human_player_1/G2'].rated, false);
 	assert.strictEqual(n['user_games/human_player_1/G2'].eloChange, undefined);
 });
+
+test('ratingUpdates stores the opponent\'s rating before the game, and profile stats use it for AI games', async () => {
+	const e = freshEngine();
+	const v = await judgeGame(AI.N3WMQJ, ctx());
+	const users = { red: { elo: 1500, gamesPlayed: 10, wins: 6, losses: 4, displayName: 'P' },
+		blue: { elo: 1733, gamesPlayed: 99, wins: 50, losses: 49, displayName: 'AI (Very Hard) (Rust)', isAI: true } };
+	const u = ratingUpdates('G3', AI.N3WMQJ, v, users, { red: true, blue: true }, e);
+	const entry = u['user_games/human_player_1/G3'];
+	assert.strictEqual(entry.eloBefore, 1500);
+	assert.strictEqual(entry.opponentEloBefore, 1733);
+	assert.strictEqual(entry.opponentIsAI, true);
+	// An unrated game stores no ratings.
+	const n = ratingUpdates('G4', AI.N3WMQJ, { rated: false, reason: 'casual' }, users, { red: true, blue: true }, e);
+	assert.strictEqual(n['user_games/human_player_1/G4'].opponentEloBefore, undefined);
+
+	// profile-stats.js: the stored rating wins over the looked-up one, and lets
+	// an AI game (no lookup possible) count as the best win.
+	const ProfileStats = require('../../docs/static/scripts/profile-stats.js');
+	const g = (id, result, extra) => Object.assign({ id, gameId: id, timestamp: 1, opponent: id, color: 'red', result, rated: true, eloChange: 0 }, extra);
+	const games = [
+		Object.assign(g('ai', 'win', { opponentIsAI: true }), { opponentEloBefore: entry.opponentEloBefore }),
+		g('human', 'win', { opponentUid: 'h', opponentEloBefore: 1600 }),
+		g('oldHuman', 'loss', { opponentUid: 'o' }),
+		g('oldAi', 'win', { opponentIsAI: true }),
+		g('unrated', 'win', { rated: false, opponentEloBefore: 2500 }),
+	];
+	const looked = { human: 1, oldHuman: 1400 };
+	const s = ProfileStats.summarize(games, () => null, (x) => looked[x.id]);
+	assert.strictEqual(s.bests.bestWin.game.id, 'ai');
+	assert.strictEqual(s.bests.bestWin.oppElo, 1733);
+	assert.strictEqual(s.bests.worstLoss.game.id, 'oldHuman');
+	assert.strictEqual(s.bests.worstLoss.oppElo, 1400);
+});
