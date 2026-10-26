@@ -222,10 +222,14 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		// A turn written while the request stands is still the opponent's to remove only.
 		const tbRoom = await roomOf(code2);
 		const firstKey = Object.keys(tbRoom.turns)[0];
-		const selfRemove = await redP.evaluate(async (c, k) => {
-			try { await firebase.database().ref('rooms/' + c + '/turns/' + k).remove(); return 'ok'; } catch (e) { return e.code; }
-		}, code2, firstKey);
-		check('the requester cannot remove turns itself', selfRemove !== 'ok');
+		// As red, but over REST: a refused remove from red's page would still
+		// drop the turn locally first, and that local event reloads the page
+		// (takeback_done) under the evaluate.
+		const redToken = await redP.evaluate(() => firebase.auth().currentUser.getIdToken());
+		const selfRemove = await fetch(`http://${DB_HOST}/rooms/${code2}/turns/${firstKey}.json?ns=${NS}&auth=${redToken}`,
+			{ method: 'DELETE' }).then((r) => r.status);
+		check('the requester cannot remove turns itself', selfRemove === 401 || selfRemove === 403, { status: selfRemove });
+		check('the turns are still there', !!(await roomOf(code2)).turns[firstKey]);
 		await Promise.all([
 			redP.waitForNavigation({ timeout: 60000 }).catch(() => null),
 			blueP.waitForNavigation({ timeout: 60000 }).catch(() => null),
