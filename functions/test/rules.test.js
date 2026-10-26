@@ -183,3 +183,57 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await assertSucceeds(remove(ref(db('mallory'), 'rooms/EXP')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/FRESH')));
 });
+
+// ---- Puzzle progress and Puzzle Storm (docs/static/scripts/puzzle-progress.js)
+
+const anon = (uid) => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).database();
+
+test('puzzle progress: the owner writes single leaves of a fixed shape', async () => {
+	await seed({ users: { alice: profile } });
+	const base = 'users/alice/puzzleProgress';
+	await assertSucceeds(update(ref(db('alice')), {
+		[base + '/solved/-Opabc-t16']: Date.now(),
+		[base + '/results/-Opabc-t16']: { r: 's', at: Date.now() },
+		[base + '/results/-Opdef-t9']: { r: 'f', at: 1000 },
+		[base + '/daily/2026-10-26']: 'solved',
+		[base + '/dailyBest']: 4,
+	}));
+	// Someone else, an anonymous session, or an AI profile path: refused.
+	await assertFails(set(ref(db('bob'), base + '/solved/x'), 1));
+	await assertFails(set(ref(anon('alice'), base + '/solved/x'), 1));
+	await assertFails(set(ref(db('bob'), 'users/__ai_rust_easy__/puzzleProgress/solved/x'), 1));
+	// Bad shapes.
+	await assertFails(set(ref(db('alice'), base + '/solved/x'), 'yesterday'));
+	await assertFails(set(ref(db('alice'), base + '/solved/x'), Date.now() + 10 * 86400000));
+	await assertFails(set(ref(db('alice'), base + '/results/x'), { r: 'won', at: 1 }));
+	await assertFails(set(ref(db('alice'), base + '/results/x'), { r: 's', at: 1, extra: 1 }));
+	await assertFails(set(ref(db('alice'), base + '/daily/someday'), 'solved'));
+	await assertFails(set(ref(db('alice'), base + '/daily/2026-10-26'), 'great'));
+	await assertFails(set(ref(db('alice'), base + '/dailyBest'), -1));
+	await assertFails(set(ref(db('alice'), base + '/other'), 1));
+});
+
+test('puzzle storm: own uid only, a sane score, runs count up, best is the max', async () => {
+	await seed({ users: { alice: profile } });
+	const st = 'users/alice/puzzleStorm';
+	const run = (best, runs, last) => ({ best, runs, last, at: serverTimestamp() });
+	await assertSucceeds(set(ref(db('alice'), st), run(12, 1, 12)));
+	await assertSucceeds(set(ref(db('alice'), st), run(12, 2, 7)));      // a worse run keeps the best
+	await assertSucceeds(set(ref(db('alice'), st), run(20, 3, 20)));
+	await assertFails(set(ref(db('alice'), st), run(25, 4, 7)));         // best must be max(old best, last)
+	await assertFails(set(ref(db('alice'), st), run(15, 4, 15)));        // best never drops
+	await assertFails(set(ref(db('alice'), st), run(21, 3, 21)));        // runs must count up
+	await assertFails(set(ref(db('alice'), st), run(500, 4, 500)));      // out of range
+	await assertFails(set(ref(db('alice'), st), run(21.5, 4, 21.5)));    // not an integer
+	await assertFails(set(ref(db('alice'), st), { best: 21, runs: 4, last: 21, at: Date.now() + 3600000 }));
+	await assertFails(set(ref(db('bob'), st), run(30, 4, 30)));
+	await assertFails(set(ref(anon('alice'), st), run(30, 4, 30)));
+	await assertFails(set(ref(db('bob'), 'users/__ai_rust_easy__/puzzleStorm'), run(30, 1, 30)));
+	// The leaderboard row must carry the account's best, for its own uid.
+	await assertSucceeds(set(ref(db('alice'), 'storm_leaderboard/alice'), { displayName: 'Alice', score: 20 }));
+	await assertFails(set(ref(db('alice'), 'storm_leaderboard/alice'), { displayName: 'Alice', score: 99 }));
+	await assertFails(set(ref(db('bob'), 'storm_leaderboard/alice'), { displayName: 'Alice', score: 20 }));
+	await assertFails(set(ref(db('alice'), 'storm_leaderboard/alice'), { displayName: 'Alice', score: 20, extra: 1 }));
+	// A run and its row in one update.
+	await assertSucceeds(update(ref(db('alice')), { [st]: run(31, 4, 31), 'storm_leaderboard/alice': { displayName: 'Alice', score: 31 } }));
+});

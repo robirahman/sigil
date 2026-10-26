@@ -709,6 +709,9 @@
 				const st = { k: 0, used: {}, score: 0, combo: 0, bestCombo: 0, deadline: 0, over: false, resolved: false, log: [], current: null, timer: 0 };
 				window.SIGIL_STORM = st;     // tools/browser/puzzle-storm-test.js
 				window.SIGIL_PUZZLE_STORM = true;
+				// The puzzle panel's bindings (hidden in Storm) still read these.
+				window.SIGIL_PUZZLE_NAV = { prev: '', next: '', rated: '', random: '' };
+				window.SIGIL_PUZZLE_TITLE = window.SIGIL_PUZZLE_SOURCE = window.SIGIL_PUZZLE_TAGS = window.SIGIL_PUZZLE_PROGRESS = window.SIGIL_PUZZLE_FILTER_HTML = '';
 				const $ = (id) => document.getElementById(id);
 				let flashTimer = 0;
 				const flash = (t) => { $('storm-flash').textContent = t; clearTimeout(flashTimer); flashTimer = setTimeout(() => { $('storm-flash').textContent = ''; }, 1500); };
