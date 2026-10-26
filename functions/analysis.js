@@ -150,7 +150,7 @@ async function analyzeStep(db, gameId, opts) {
 	const batch = (opts && opts.batch) || ANALYSIS_BATCH;
 	// The result as rated: rateGame may overturn the record's (a finish the
 	// room does not support is the finisher's resignation).
-	const ratedWinner = opts && (opts.winner === 'red' || opts.winner === 'blue') ? opts.winner : null;
+	let ratedWinner = opts && (opts.winner === 'red' || opts.winner === 'blue') ? opts.winner : null;
 	const stats = (opts && opts.stats) || null;
 	// Tests and the emulators may search shorter (opts.timeMs).
 	const progressRef = db.ref('game_evals_progress/' + gameId);
@@ -175,6 +175,7 @@ async function analyzeStep(db, gameId, opts) {
 	const sfns = got.sfns;
 	const n = sfns.length - 1;
 	const prog = (await progressRef.once('value')).val() || {};
+	if (!ratedWinner && (prog.winner === 'red' || prog.winner === 'blue')) ratedWinner = prog.winner;
 	const rows = new Array(n);
 	for (const [k, r] of Object.entries(prog.rows || {})) if (Number(k) < n) rows[Number(k)] = r;
 	let next = typeof prog.next === 'number' && prog.plies === n ? prog.next : n - 1;
@@ -197,7 +198,9 @@ async function analyzeStep(db, gameId, opts) {
 	if (next >= 0) {
 		const save = {};
 		rows.forEach((r, i) => { if (r) save[i] = r; });
-		await progressRef.set({ roomCode: record.roomCode, plies: n, next, rows: save, at: Date.now() });
+		// The sweep (resumeStalledAnalyses) keeps its bookkeeping across tasks.
+		await progressRef.set({ roomCode: record.roomCode, plies: n, next, rows: save, at: Date.now(),
+			winner: ratedWinner || prog.winner || null, resumes: prog.resumes || 0 });
 		return { done: false, next };
 	}
 	// Firebase drops nulls inside stored rows: put the row fields back.
@@ -212,6 +215,43 @@ async function analyzeStep(db, gameId, opts) {
 		['game_evals_progress/' + gameId]: null,
 	});
 	return { done: true, reason: 'written', doc };
+}
+
+// A chain whose progress has not moved for this long lost its task (its
+// retries ran out): the sweep enqueues it again, at most STALL_RESUMES times.
+const STALL_MS = 30 * 60 * 1000;
+const STALL_RESUMES = 3;
+
+/** A progress stub for a chain about to start, so the sweep sees it even if its first task never runs. */
+function analysisStarted(db, gameId, winner, now) {
+	return db.ref('game_evals_progress/' + gameId).update({ at: now, winner: winner || null });
+}
+
+/**
+ * Re-enqueue up to `limit` stalled analyses (game_evals_progress entries
+ * with no progress for STALL_MS) through `enqueue(gameId, step, winner)`.
+ * A chain resumed STALL_RESUMES times is given up (its entry removed).
+ * Resolves to { resumed, dropped }.
+ */
+async function resumeStalledAnalyses(db, now, enqueue, limit) {
+	const snap = await db.ref('game_evals_progress').orderByChild('at').endAt(now - STALL_MS)
+		.limitToFirst(limit || 5).once('value');
+	const stalled = [];
+	snap.forEach((c) => { stalled.push([c.key, c.val() || {}]); });
+	const out = { resumed: 0, dropped: 0 };
+	for (const [gameId, v] of stalled) {
+		const ref = db.ref('game_evals_progress/' + gameId);
+		const resumes = v.resumes || 0;
+		if (resumes >= STALL_RESUMES) {
+			await ref.remove();
+			out.dropped++;
+			continue;
+		}
+		await ref.update({ resumes: resumes + 1, at: now });
+		await enqueue(gameId, 'resume' + (resumes + 1) + '-' + (typeof v.next === 'number' ? v.next : 'start'), v.winner || null);
+		out.resumed++;
+	}
+	return out;
 }
 
 /**
@@ -288,5 +328,5 @@ function wellFormed(p, sfn) {
 	}
 }
 
-module.exports = { analyzeStep, evalPositions, claimEvalQuota, positionEvalKey, wellFormed, engineWorker,
+module.exports = { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, STALL_MS, STALL_RESUMES, positionEvalKey, wellFormed, engineWorker,
 	ANALYSIS_BATCH, EVAL_CALL_MAX, EVAL_DAILY_PER_UID, EVAL_DAILY_TOTAL };

@@ -67,6 +67,21 @@ function fakeDb(initial) {
 				const v = read(get(ps));
 				return { val: () => v, exists: () => v !== null, key: ps[ps.length - 1] };
 			},
+			// orderByChild(c).endAt(x).limitToFirst(n), the one query the tests need.
+			orderByChild(c) {
+				const q = { end: Infinity, n: Infinity };
+				const api = {
+					endAt(x) { q.end = x; return api; },
+					limitToFirst(n) { q.n = n; return api; },
+					async once() {
+						const all = read(get(ps)) || {};
+						const kids = Object.entries(all).filter(([, v]) => v && typeof v[c] === 'number' && v[c] <= q.end)
+							.sort((a, b) => a[1][c] - b[1][c]).slice(0, q.n);
+						return { forEach: (f) => kids.forEach(([k, v]) => f({ key: k, val: () => v })) };
+					},
+				};
+				return api;
+			},
 			async set(v) { put(ps, v); },
 			async remove() { put(ps, null); },
 			async transaction(fn) {

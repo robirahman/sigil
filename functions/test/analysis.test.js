@@ -10,7 +10,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { analyzeStep, evalPositions, claimEvalQuota, engineWorker, positionEvalKey, ANALYSIS_BATCH, EVAL_DAILY_PER_UID, EVAL_DAILY_TOTAL } = require('../analysis');
+const { analyzeStep, evalPositions, claimEvalQuota, engineWorker, analysisStarted, resumeStalledAnalyses, STALL_MS, STALL_RESUMES, positionEvalKey, ANALYSIS_BATCH, EVAL_DAILY_PER_UID, EVAL_DAILY_TOTAL } = require('../analysis');
 const { freshEngine } = require('../engine-loader');
 const { fakeDb } = require('./fake-db');
 const ONLINE = require('./online-game.json');
@@ -173,4 +173,26 @@ test('evalPositions searches what it caches, and refuses what is not a position'
 	assert.strictEqual(entry.sfn, log[2].sfnBefore);
 	assert.ok(entry.depth >= 1 && Array.isArray(entry.actions));
 	assert.deepStrictEqual(await evalPositions(db, [log[2].sfnBefore], { timeMs: FAST }), { cached: 1, searched: 0, skipped: 0 });
+});
+
+test('a chain that lost its task is resumed from its progress, a few times at most', async () => {
+	const db = fakeDb({ completed_games: { G: Object.assign(clone(ONLINE), { roomCode: 'STL' }) } });
+	const t0 = Date.UTC(2026, 9, 26, 12);
+	await analysisStarted(db, 'G', ONLINE.winner, t0);
+	// One task ran, then the chain's next task ran out of retries.
+	assert.strictEqual((await analyzeStep(db, 'G', { timeMs: FAST })).done, false);
+	const queued = [];
+	const enqueue = async (gameId, step, winner) => { queued.push([gameId, step, winner]); };
+	assert.deepStrictEqual(await resumeStalledAnalyses(db, Date.now() + 60_000, enqueue), { resumed: 0, dropped: 0 }, 'not yet stalled');
+	let now = Date.now() + STALL_MS + 1;
+	for (let k = 1; k <= STALL_RESUMES; k++, now += STALL_MS + 1) {
+		assert.deepStrictEqual(await resumeStalledAnalyses(db, now, enqueue), { resumed: 1, dropped: 0 });
+	}
+	const next = ONLINE.turns.length - 1 - 10;
+	assert.deepStrictEqual(queued.map((q) => q[1]), [1, 2, 3].map((k) => 'resume' + k + '-' + next));
+	assert.ok(queued.every((q) => q[0] === 'G' && q[2] === ONLINE.winner));
+	// The progress kept its rows: a resumed task carries on where it stopped.
+	assert.strictEqual(db.dump().game_evals_progress.G.next, ONLINE.turns.length - 1 - 10);
+	assert.deepStrictEqual(await resumeStalledAnalyses(db, now, enqueue), { resumed: 0, dropped: 1 });
+	assert.strictEqual(db.dump().game_evals_progress, undefined);
 });

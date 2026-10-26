@@ -261,7 +261,8 @@
     },
     "game_evals_progress": {
       ".read": false,
-      ".write": false
+      ".write": false,
+      ".indexOn": ["at"]
     },
     "eval_quota": {
       ".read": false,

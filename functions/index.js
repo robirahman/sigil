@@ -40,7 +40,7 @@ const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = req
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { notifyTurn } = require('./notify');
-const { analyzeStep, evalPositions, claimEvalQuota, EVAL_CALL_MAX } = require('./analysis');
+const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const crypto = require('crypto');
 
 initializeApp();
@@ -194,6 +194,8 @@ exports.rateGame = onValueCreated({
 	if (verdict.rated) {
 		try {
 			await enqueueAnalysis(gameId, 'start', verdict.winner);
+			// Seen by the stall sweep even if the first task never succeeds.
+			await analysisStarted(db, gameId, verdict.winner, Date.now()).catch(() => {});
 		} catch (e) {
 			// Kept for expireClocks to enqueue again (retryPendingAnalyses).
 			logger.warn('rateGame: analysis not enqueued', { gameId, error: String((e && e.message) || e) });
@@ -229,12 +231,16 @@ async function retryPendingAnalyses(db) {
 	for (const [gameId, v] of pending) {
 		try {
 			await enqueueAnalysis(gameId, 'start', v.winner);
+			await analysisStarted(db, gameId, v.winner, Date.now());
 			await db.ref('analysis_pending/' + gameId).remove();
 		} catch (e) {
 			logger.warn('retryPendingAnalyses', { gameId, error: String((e && e.message) || e) });
 			return;
 		}
 	}
+	// Chains whose task ran out of retries (no progress for 30 minutes).
+	const res = await resumeStalledAnalyses(db, Date.now(), enqueueAnalysis, 5);
+	if (res.resumed || res.dropped) logger.info('retryPendingAnalyses: stalled analyses', res);
 }
 
 exports.analyzeGame = onTaskDispatched({
