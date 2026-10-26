@@ -184,9 +184,9 @@ class MultiplayerController {
 
 		if (this._timeControl.type === 'realtime') {
 			// The node holds the time without gifts (room-clock.js adds
-			// them), so it may go below zero by what we were given.
-			const given = typeof roomGiftMs === 'function' ? roomGiftMs(this._clockRoom(), this.myColor, now) : 0;
-			const myRemaining = Math.max(-given, ts[this.myColor] - elapsed + (this._timeControl.increment || 0));
+			// them, whenever they arrive), so it is not clamped: it may go
+			// below zero by what we were given.
+			const myRemaining = ts[this.myColor] - elapsed + (this._timeControl.increment || 0);
 			return {
 				red: this.myColor === 'red' ? myRemaining : ts.red,
 				blue: this.myColor === 'blue' ? myRemaining : ts.blue,
