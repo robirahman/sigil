@@ -384,14 +384,19 @@ test('turns: a room begun before `last` keeps the old rule until it ends', async
 });
 
 test('turns: a room that started before the rules change may open without `last`; one started since may not', async () => {
-	// The cutoff in database.rules.json (startedAt < 1792972800000, to be set
-	// to the deploy time at integration): a
-	// pre-deploy client in a game it joined before the deploy writes no `last`.
-	await seed({ rooms: { Z1: playingRoom({ startedAt: 1792972800000 - 60000 }), Z2: playingRoom({ startedAt: Date.now() }) } });
+	// config/turnSeqSince, written once at deploy (the server's time): a
+	// pre-deploy client in a game it joined before then writes no `last`.
+	const since = Date.now() - 60000;
+	await seed({ config: { turnSeqSince: since },
+		rooms: { Z1: playingRoom({ startedAt: since - 60000 }), Z2: playingRoom({ startedAt: since + 1000 }), Z3: playingRoom({ startedAt: since - 60000 }) } });
 	await assertSucceeds(set(ref(db('alice'), 'rooms/Z1/turns/a1'), T('red')));
 	await assertFails(set(ref(db('alice'), 'rooms/Z2/turns/a1'), T('red')));
 	await assertFails(set(ref(db('bob'), 'rooms/Z2/turns/b1'), T('blue')));
 	await assertSucceeds(move('alice', 'Z2', 'a1', 'red'));
+	// Clients cannot move the cutoff; without it every room sequences.
+	await assertFails(set(ref(db('alice'), 'config/turnSeqSince'), Date.now() + 86400000));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'config'), null));
+	await assertFails(set(ref(db('alice'), 'rooms/Z3/turns/a1'), T('red')));
 });
 
 test('takeback: the acceptor moves `last` back to the turn kept, in the same write', async () => {

@@ -210,11 +210,9 @@
 
 				get openCount() { return this.reports.filter((r) => !r.resolved).length; },
 				get shownReports() { return this.view === 'open' ? this.reports.filter((r) => !r.resolved) : this.reports; },
-				get reportCount() {
-					const n = {};
-					for (const r of this.reports) n[r.target] = (n[r.target] || 0) + 1;
-					return n;
-				},
+				// Every report on each target, counted by query: the loaded
+				// window (open + latest 500) may not hold them all.
+				reportCount: {},
 				get flagRows() {
 					return Object.keys(this.flags).map((uid) => Object.assign({ uid }, this.flags[uid]))
 						.filter((f) => f.abandons > 0 || typeof f.banUntil === 'number')
@@ -264,6 +262,14 @@
 					for (const r of reports) {
 						if (!(r.target in this.banDays)) this.banDays[r.target] = '7';
 					}
+					const targets = [...new Set(reports.map((r) => r.target).filter(Boolean))];
+					const counts = {};
+					await Promise.all(targets.map(async (t) => {
+						try {
+							counts[t] = (await db.ref('reports').orderByChild('target').equalTo(t).once('value')).numChildren();
+						} catch (e) { counts[t] = reports.filter((r) => r.target === t).length; }
+					}));
+					this.reportCount = counts;
 					const uids = new Set();
 					for (const r of reports) { uids.add(r.by); uids.add(r.target); }
 					for (const uid of Object.keys(this.flags)) uids.add(uid);

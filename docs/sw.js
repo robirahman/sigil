@@ -118,7 +118,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/elo.js?v=34',
 	'./static/scripts/engine/position-rating.js?v=34',
 	'./static/scripts/engine/firebase-sync.js',
-	'./static/scripts/engine/firebase-sync.js?v=34',
+	// -seq: the client that writes rooms/{id}/last (turn sequencing), which
+	// the rules require; a new URL so no cached copy of the old one runs.
+	'./static/scripts/engine/firebase-sync.js?v=34-seq',
 	'./static/scripts/engine/multiplayer-controller.js',
 	'./static/scripts/engine/multiplayer-controller.js?v=34',
 	'./static/scripts/engine/spectator-controller.js',
