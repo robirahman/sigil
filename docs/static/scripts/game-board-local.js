@@ -1951,6 +1951,7 @@ document.addEventListener('alpine:init', () => {
 					_puzzleReport('solved');
 				}
 				_this._puzzleSolve = _puzzleSolve;
+				_this._puzzleOnGameOver = (payload) => _puzzleOnGameOver(payload);   // tests
 
 				function _puzzleOnTurn(t) {
 					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
@@ -2057,7 +2058,7 @@ document.addEventListener('alpine:init', () => {
 				function _puzzleOnGameOver(payload) {
 					_puzzleExpectGameOver = false;
 					if (puzzle.kind !== 'winning' && _this.puzzleStatus === 'failed' && payload.winner === puzzle.mover
-						&& _this.puzzleMoves <= puzzle.mate) {
+						&& _this.puzzleMoves <= puzzle.mate && !_this._puzzleSeenSolution) {
 						// The engine judged an earlier move as an escape, yet the mover
 						// won within the puzzle's count: the JUDGE was wrong. Worth a report.
 						_this.puzzleDiagnostic = 'Engine misjudgement: it ruled that a move let it escape, but you still won within ' + puzzle.mate + ' turns. ' + (_this.puzzleJudge || '');
@@ -2106,7 +2107,12 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus === 'playing') {
 						_this.puzzleStatus = 'revealed';
 						_puzzleReport('revealed');
+					} else if (_this.puzzleStatus === 'failed' && !_this._puzzleSeenSolution) {
+						// A failure that could still be corrected is final once the
+						// solution has been seen: a later win no longer counts.
+						_puzzleReport('failed-final');
 					}
+					_this._puzzleSeenSolution = true;
 					const lines = [];
 					const sols = puzzle.solutions || [];
 					const shown = sols.slice(0, 3);

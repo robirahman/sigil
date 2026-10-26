@@ -132,6 +132,33 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 		const fin = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(fin && fin.attempts && fin.attempts[await page.evaluate(() => window.SIGIL_PUZZLE.id)] === 0, 'a final failure is recorded as a loss');
 		await page.close();
+		// The board: a failed mate corrects to a solve when the mover still wins
+		// in time -- unless the solution was seen first, which makes it final.
+		const board = async (reveal) => {
+			const pg = await open('?p=12');
+			const out = await pg.evaluate((reveal) => {
+				const seen = [];
+				const hook = window.SIGIL_PUZZLE_ON_RESULT;
+				window.SIGIL_PUZZLE_ON_RESULT = (p, s) => { seen.push(s); hook(p, s); };
+				const c = window.Alpine.$data(document.querySelector('#puzzle-root [x-data]'));
+				c.puzzleStatus = 'failed'; c.puzzleMoves = 1;
+				window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed');
+				if (reveal) c.puzzleShowSolution();
+				c._puzzleOnGameOver({ winner: window.SIGIL_PUZZLE.mover });
+				return { seen, status: c.puzzleStatus };
+			}, reveal);
+			await new Promise(r => setTimeout(r, 800));
+			const id = await pg.evaluate(() => window.SIGIL_PUZZLE.id);
+			const st = await pg.evaluate(() => [JSON.parse(localStorage.getItem('sigil_puzzle_rating')), JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}')]);
+			await pg.close();
+			return Object.assign(out, { attempt: st[0].attempts[id], solvedLocal: !!st[1][id] });
+		};
+		let b = await board(false);
+		check(b.status === 'solved' && b.attempt === 1 && b.solvedLocal, `a corrected failure is a solve, saved locally (${JSON.stringify(b)})`);
+		await (async () => { const pg = await open('?p=0'); await pg.evaluate(() => { localStorage.removeItem('sigil_puzzle_rating'); localStorage.removeItem('sigil_puzzles_solved'); }); await pg.close(); })();
+		b = await board(true);
+		check(b.status === 'failed' && b.attempt === 0 && !b.solvedLocal && b.seen[1] === 'failed-final' && !b.seen.includes('solved'),
+			`seeing the solution makes a failure final (${JSON.stringify(b)})`);
 		// Leaving with a failure pending (here: a plain navigation, as the header
 		// logo, Back or a typed URL would) records it as a loss -- at once, or
 		// on the next visit if the write could not finish first.
