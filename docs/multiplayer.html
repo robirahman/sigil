@@ -234,6 +234,13 @@
 		.lobby-game__btn:disabled { opacity: 0.5; cursor: default; }
 		.lobby-notice { color: var(--color-text-warm); font-family: 'Overlock', sans-serif; margin: 6px 0; }
 		.lobby-section-title { display: flex; justify-content: space-between; align-items: baseline; }
+		/* Friends (friends.js) and a challenge from a profile */
+		.friend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--color-text-dim, #777); vertical-align: middle; }
+		.friend-dot--online { background: var(--color-success, #4caf50); }
+		.lobby-game__who a { color: inherit; text-decoration: none; }
+		.lobby-game__who a:hover { text-decoration: underline; }
+		.challenge-setup { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--color-accent); border-radius: 6px; background: var(--color-surface); font-family: 'Overlock', sans-serif; color: var(--color-text-warm); text-align: left; }
+		.challenge-setup button { margin-left: 8px; }
 		.lobby-refresh { background: none; border: none; color: var(--color-border-hover); cursor: pointer; font-family: 'Overlock', sans-serif; text-decoration: underline; }
 		.share-link {
 			display: flex;
@@ -325,6 +332,19 @@
 				</template>
 			</div>
 
+			<!-- Friends (the players you follow), with who is online -->
+			<template x-if="!positionSfn && authUser && friends.length > 0"><div class="resume-section lobby-friends" style="margin-top: 12px;">
+				<div class="lobby-section-title"><h3>Friends</h3></div>
+				<div class="lobby-list lobby-list--friends">
+					<template x-for="f in friends" x-bind:key="f.uid">
+						<div class="lobby-game" x-bind:data-uid="f.uid">
+							<div class="lobby-game__who"><span class="friend-dot" x-bind:class="{ 'friend-dot--online': f.online }" x-bind:title="f.online ? 'Online' : 'Offline'"></span><a x-bind:href="'profile.html?uid=' + encodeURIComponent(f.uid)" x-text="f.displayName"></a><span class="lobby-game__meta" x-text="f.online ? ' \u00b7 online' : ''"></span></div>
+							<button class="lobby-game__btn" x-on:click="setChallenge(f.uid, f.displayName)" x-bind:disabled="isOffline">Challenge</button>
+						</div>
+					</template>
+				</div>
+			</div></template>
+
 			<!-- Open games: public rooms waiting for an opponent, and quick pair -->
 			<template x-if="!positionSfn"><div class="resume-section" style="margin-top: 12px;">
 				<div class="lobby-section-title"><h3>Open Games</h3></div>
@@ -383,6 +403,12 @@
 				</div>
 			</template>
 
+			<!-- A challenge (from a profile or the friends list): the form below sets it up -->
+			<div class="challenge-setup" x-show="challengeTarget" x-cloak>
+				Challenging <strong x-text="challengeTarget ? challengeTarget.name : ''"></strong>: choose the settings below, then send the challenge. Only they can join.
+				<button class="lobby-game__btn" x-on:click="clearChallenge()">Cancel</button>
+			</div>
+
 			<!-- Time control selection -->
 			<div class="time-control">
 				<div class="time-control__label">Time Control</div>
@@ -438,7 +464,7 @@
 				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin-top: 4px;" x-text="casualGame ? 'Casual: the result does not change either rating.' : 'Rated when both players are signed in and the variant is rated.'"></small>
 			</div>
 
-			<label class="allow-spec">
+			<label class="allow-spec" x-show="!challengeTarget">
 				<input type="checkbox" x-model="listPublic" />
 				<span>List in the open-games lobby</span>
 			</label>
@@ -498,7 +524,7 @@
 				Hide spell names and descriptions on the board circles (art only).
 			</small>
 
-			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || (positionSfn && (!positionOffer || positionOffer.loading))" x-text="positionSfn ? 'Create Game from Position' : 'Create Game'">Create Game</button>
+			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || (positionSfn && (!positionOffer || positionOffer.loading))" x-text="challengeTarget ? 'Send Challenge to ' + challengeTarget.name : (positionSfn ? 'Create Game from Position' : 'Create Game')">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" x-on:input.debounce.300ms="previewRoom()" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="isOffline || joinCode.length < 4">Join Game</button>
@@ -979,6 +1005,16 @@
 				_liveTimer: null,
 				_eloCache: {},
 
+				// Friends (friends.js): the players we follow, with presence;
+				// players blocked either way (their open games are hidden);
+				// the player a new room challenges ({ uid, name }), from
+				// ?challenge= (a profile's Challenge) or the friends list.
+				friends: [],
+				_unwatchFriends: null,
+				_blocked: {},
+				challengeTarget: null,
+				_challengeRef: null,
+
 				// A room from a position (?sfn=, from Import Position or a
 				// review's "from here"): the start, its engine price and the
 				// creator's side; and the joiner's confirmation of such a room.
@@ -1008,6 +1044,7 @@
 							this.authElo = null;
 						}
 						this.authReady = true;
+						this._startFriends();
 					});
 
 					this._loadActiveGameCount();
@@ -1018,6 +1055,11 @@
 						if (p === 'lobby') this._startLobbyLists();
 						else if (p !== 'waiting') this._stopLobbyLists();
 					});
+
+					const urlChallenge = new URLSearchParams(window.location.search).get('challenge');
+					if (urlChallenge && !new URLSearchParams(window.location.search).get('id')) {
+						this._waitForAuth().then(() => this.setChallenge(urlChallenge));
+					}
 
 					const urlSfn = new URLSearchParams(window.location.search).get('sfn');
 					if (urlSfn && !new URLSearchParams(window.location.search).get('id')) {
@@ -1405,7 +1447,12 @@
 						let variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
 						let fromPosition = null;
 						let creatorColor = this.creatorSide;
-						const isPublic = !!(opts && opts.public) || this.listPublic;
+						const challenge = !(opts && opts.quickSeek) && !(opts && opts.spellNames) ? this.challengeTarget : null;
+						if (challenge && !this.authUser) {
+							this.lobbyError = 'Sign in to an account to challenge a player.';
+							return;
+						}
+						const isPublic = !challenge && (!!(opts && opts.public) || this.listPublic);
 						if (this.positionSfn) {
 							// The start position names its spells and variant.
 							if (!this.positionOffer || this.positionOffer.loading) return;
@@ -1423,12 +1470,25 @@
 						}
 						if (opts && opts.creatorSide) creatorColor = opts.creatorSide;
 						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition,
-							{ creatorColor, public: isPublic, casual: this.casualGame });
+							{ creatorColor, public: isPublic, casual: this.casualGame, invite: challenge ? challenge.uid : null });
 						// Random is resolved by createRoom.
 						creatorColor = _firebaseSync.myColor;
+						if (challenge) {
+							try {
+								await _firebaseSync.sendChallenge();
+							} catch (e) {
+								// Refused (they blocked us, or the account is gone): no room either.
+								await _firebaseSync.withdrawRoom(this.roomCode).catch(() => {});
+								this.roomCode = '';
+								this.lobbyError = 'Could not challenge ' + challenge.name + '.';
+								return;
+							}
+							this._watchChallenge(challenge, this.roomCode);
+						}
 						this._quickSeek = (opts && opts.quickSeek) || null;
 						this.waitingInfo = 'You play ' + (creatorColor === 'red' ? 'Red' : 'Blue') + ' \u00b7 '
-							+ (this.casualGame ? 'Casual' : 'Rated') + (isPublic ? ' \u00b7 listed in the open-games lobby' : '');
+							+ (this.casualGame ? 'Casual' : 'Rated') + (isPublic ? ' \u00b7 listed in the open-games lobby' : '')
+							+ (challenge ? ' \u00b7 challenge sent to ' + challenge.name : '');
 						this.shareUrl = this._buildShareUrl(this.roomCode);
 						this.phase = 'waiting';
 						this._previewWaitingRoom(this.roomCode);
@@ -1484,14 +1544,19 @@
 							}
 						}
 						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo, { seatOnly: !!seatOnly });
+						// An accepted challenge (friends.js banner): done with it.
+						if (!result.isSpectator && this.authUser) {
+							firebase.database().ref('challenges/' + this.authUser.uid + '/' + this.joinCode.toUpperCase()).remove().catch(() => {});
+						}
 						if (result.isSpectator) {
 							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl, result.variant);
 						} else {
 							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl, result.variant);
 						}
 					} catch (e) {
-						if (e && e.code === 'seat-taken') {
+						if (e && (e.code === 'seat-taken' || e.code === 'seat-refused')) {
 							if (rethrow) throw e;
+							if (e.code === 'seat-refused') { this.phase = 'lobby'; this.lobbyError = e.message; return; }
 							this.phase = 'lobby';
 							this.lobbyError = 'Someone else joined first.';
 							return;
@@ -1555,6 +1620,96 @@
 						const snap = await firebase.database().ref('user_active_games/' + user.uid).once('value');
 						this.activeGameCount = snap.numChildren();
 					} catch (e) { /* offline: the link still works */ }
+				},
+
+				/* ----- Friends, challenges and blocks (friends.js) ----- */
+
+				/** friends.js is loaded by auth-status.js; wait for it. */
+				async _friendsApi() {
+					for (let i = 0; i < 50 && !window.SigilFriends; i++) await new Promise((r) => setTimeout(r, 100));
+					return window.SigilFriends || null;
+				},
+
+				async _startFriends() {
+					if (this._unwatchFriends) { this._unwatchFriends(); this._unwatchFriends = null; }
+					this.friends = [];
+					this._blocked = {};
+					if (!this.authUser) return;
+					const api = await this._friendsApi();
+					// friends.js follows the same auth state: wait for it to catch up.
+					for (let i = 0; api && i < 50 && api.uid !== (this.authUser && this.authUser.uid); i++) await new Promise((r) => setTimeout(r, 100));
+					if (!api || !this.authUser || api.uid !== this.authUser.uid) return;
+					this._unwatchFriends = api.watchFriends((list) => { this.friends = list; });
+					this._renderOpenGames();
+				},
+
+				/** Set up a challenge to this player (the form's settings apply). */
+				async setChallenge(uid, name) {
+					this.lobbyError = '';
+					if (!uid) return;
+					if (!this.authUser) {
+						this.lobbyError = 'Sign in to an account to challenge a player.';
+						return;
+					}
+					if (uid === this.authUser.uid) return;
+					if (!name) {
+						try { name = (await firebase.database().ref('users/' + uid + '/displayName').once('value')).val(); } catch (e) { name = null; }
+						if (!name) { this.lobbyError = 'That player was not found.'; return; }
+					}
+					this.challengeTarget = { uid, name };
+					this.listPublic = false;
+					this.$nextTick(() => {
+						const el = document.querySelector('.challenge-setup');
+						if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+					});
+				},
+
+				clearChallenge() {
+					this.challengeTarget = null;
+					try {
+						if (new URLSearchParams(window.location.search).get('challenge')) window.history.replaceState({}, '', 'multiplayer.html');
+					} catch (e) {}
+				},
+
+				/**
+				 * The challenge we sent: once its target removes it while our
+				 * room still waits, they declined (an accepting player joins
+				 * first, which starts the game).
+				 */
+				_watchChallenge(challenge, code) {
+					this._stopChallengeWatch();
+					const ref = firebase.database().ref('challenges/' + challenge.uid + '/' + code);
+					let seen = false;
+					ref.on('value', (s) => {
+						if (s.exists()) { seen = true; return; }
+						if (!seen || this.phase !== 'waiting' || this.roomCode !== code) return;
+						this.waitingInfo = challenge.name + ' declined the challenge.';
+						this._stopChallengeWatch();
+					}, () => {});
+					this._challengeRef = ref;
+				},
+
+				_stopChallengeWatch() {
+					if (this._challengeRef) this._challengeRef.off();
+					this._challengeRef = null;
+				},
+
+				/** Is the room's creator blocked by us, or are we blocked by them? (cached) */
+				_isBlocked(room) {
+					const c = (room[this._creatorOf(room)] || {}).uid;
+					if (!c || !this.authUser) return false;
+					if (!(c in this._blocked)) this._fetchBlock(c).then((known) => { if (known) this._renderOpenGames(); });
+					return this._blocked[c] === true;
+				},
+
+				/** Look up a block; false while friends.js is not ready (_startFriends re-renders). */
+				async _fetchBlock(uid) {
+					if (!uid || !this.authUser || uid in this._blocked) return false;
+					const api = window.SigilFriends;
+					if (!api || api.uid !== this.authUser.uid) return false;
+					this._blocked[uid] = null;
+					this._blocked[uid] = await api.blockedEither(uid);
+					return true;
 				},
 
 				/* ----- Open games, quick pair, live games ----- */
@@ -1630,7 +1785,7 @@
 
 				_renderOpenGames() {
 					const uid = this._myUid();
-					const rows = (this._waitingRooms || []).filter((r) => this._isOpen(r, uid)).map((r) => {
+					const rows = (this._waitingRooms || []).filter((r) => this._isOpen(r, uid) && !this._isBlocked(r)).map((r) => {
 						const creator = this._creatorOf(r);
 						const seat = r[creator] || {};
 						if (!seat.anon && seat.uid) this._fetchElo(seat.uid);
@@ -1721,6 +1876,7 @@
 				async cancelWaiting() {
 					const code = this.roomCode;
 					this._quickSeek = null;
+					this._stopChallengeWatch();
 					try {
 						const withdrawn = await _firebaseSync.withdrawRoom(code);
 						if (!withdrawn) return; // joined meanwhile: the game starts
@@ -1760,7 +1916,7 @@
 				/** Compatible open games from other players, oldest first. */
 				_seekCandidates(rooms, seek, uid) {
 					return rooms.filter((r) => this._isOpen(r, uid) && this._matchesSeek(r, seek)
-						&& (r[this._creatorOf(r)] || {}).uid !== uid)
+						&& (r[this._creatorOf(r)] || {}).uid !== uid && !this._isBlocked(r))
 						.sort((a, b) => (a.created || 0) - (b.created || 0) || (a.code < b.code ? -1 : 1));
 				},
 
@@ -1779,6 +1935,7 @@
 						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
 						const seek = this._seekSettings();
 						const rooms = await _firebaseSync.listRoomsByStatus('waiting');
+						await Promise.all(rooms.map((r) => this._fetchBlock((r[this._creatorOf(r)] || {}).uid)));
 						if (await this._joinFirstOf(this._seekCandidates(rooms, seek, userInfo && userInfo.uid))) return;
 						await this.createRoom({ public: true, creatorSide: 'random', quickSeek: seek });
 					} catch (e) {
@@ -1796,6 +1953,7 @@
 							await this.joinRoom(false, true, true);
 							if (this.phase !== 'lobby') return true;
 						} catch (e) {
+							if (e && e.code === 'seat-refused') continue;
 							if (!e || e.code !== 'seat-taken') throw e;
 							this.lobbyNotice = 'Someone else joined first; trying the next game…';
 						}

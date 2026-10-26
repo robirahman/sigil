@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { turnNotice, noticeMessage, notifyTurn } = require('../notify');
+const { turnNotice, noticeMessage, notifyTurn, challengeNotice, notifyChallenge } = require('../notify');
 const { roomTimeLeft, sideToMove } = require('../engine-loader').requireShared('room-clock.js');
 
 const t0 = 1_700_000_000_000;
@@ -120,4 +120,66 @@ test('the shared clock: correspondence deadlines and realtime banks', () => {
 	// Blue used 10 s (+2 s back) and is waiting; red used 15 s (+2) on its second move.
 	assert.strictEqual(roomTimeLeft(rt, 'blue', t0 + 30_000), 60_000 + 2000 - 10_000 - 5000);
 	assert.strictEqual(roomTimeLeft(rt, 'red', t0 + 30_000), 60_000 + 2000 - 15_000);
+});
+
+// ---- Challenges (sendPush, shared with notifyTurn) ----
+
+function fakeDb(data, removed) {
+	return {
+		ref(p) {
+			const parts = p ? p.split('/') : [];
+			const val = parts.reduce((o, k) => (o == null ? undefined : o[k]), data);
+			return {
+				once: async () => ({
+					val: () => (val === undefined ? null : val),
+					exists: () => val !== undefined && val !== null,
+					forEach: (fn) => Object.keys(val || {}).forEach((k) => fn({ key: k, child: (c) => ({ val: () => val[k][c] }) })),
+				}),
+				update: async (u) => { removed.push(...Object.keys(u)); },
+			};
+		},
+	};
+}
+
+const challengeRoom = (extra) => Object.assign({
+	status: 'waiting', creatorColor: 'red', invite: 'bob',
+	timeControl: { type: 'realtime', initialTime: 300_000, increment: 3000 },
+	red: { uid: 'alice', displayName: 'Alice' }, blue: { connected: false },
+}, extra);
+
+test('a challenge is pushed only while it is open, from the room\'s creator, unblocked', () => {
+	const ch = { from: 'alice', at: t0 };
+	assert.deepStrictEqual(challengeNotice('bob', challengeRoom(), ch, false, 'Alice'),
+		{ uid: 'bob', title: 'Sigil challenge', body: 'Alice challenges you to a game (5+3).' });
+	assert.strictEqual(challengeNotice('bob', challengeRoom({ status: 'playing' }), ch, false), null);
+	assert.strictEqual(challengeNotice('bob', challengeRoom({ invite: 'carol' }), ch, false), null);
+	assert.strictEqual(challengeNotice('bob', challengeRoom(), { from: 'mallory' }, false), null);
+	assert.strictEqual(challengeNotice('bob', challengeRoom(), ch, true), null);
+	assert.strictEqual(challengeNotice('bob', null, ch, false), null);
+	assert.strictEqual(challengeNotice('bob', challengeRoom(), null, false), null);
+});
+
+test('notifyChallenge sends to the target\'s tokens through sendPush', async () => {
+	const data = {
+		rooms: { C1: challengeRoom({ timeControl: { type: 'correspondence', moveTimeout: 3 * DAY } }) },
+		challenges: { bob: { C1: { from: 'alice', at: t0 } } },
+		users: { alice: { displayName: 'Alice A' } },
+		push_tokens: { bob: { h1: { token: 'tok-good', created: 1 }, h2: { token: 'tok-dead', created: 1 } } },
+	};
+	const removed = [];
+	const sent = [];
+	const send = async (tokens, msg) => {
+		sent.push({ tokens, msg });
+		return tokens.map((t) => (t === 'tok-dead' ? { error: { code: 'messaging/invalid-registration-token' } } : { success: true }));
+	};
+	const res = await notifyChallenge(fakeDb(data, removed), 'bob', 'C1', send);
+	assert.deepStrictEqual(res, { uid: 'bob', sent: 1, removed: 1 });
+	assert.strictEqual(sent[0].msg.data.body, 'Alice A challenges you to a game (3 days/move).');
+	assert.strictEqual(sent[0].msg.data.url, 'multiplayer.html?id=C1');
+	assert.strictEqual(sent[0].msg.data.tag, 'sigil-challenge-C1');
+	assert.deepStrictEqual(removed, ['push_tokens/bob/h2']);
+	// Blocked meanwhile: nothing is sent.
+	data.blocks = { bob: { alice: true } };
+	assert.strictEqual(await notifyChallenge(fakeDb(data, []), 'bob', 'C1', send), null);
+	assert.strictEqual(sent.length, 1);
 });

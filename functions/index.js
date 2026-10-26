@@ -15,6 +15,7 @@
  *                    (on the status change to 'aborted').
  *   notifyTurn     - a web push to the player whose move it now is, in
  *                    correspondence games (and realtime ones they left).
+ *   notifyChallenge - a web push to a player challenged from their profile.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -31,7 +32,7 @@ const { getDatabaseWithUrl } = require('firebase-admin/database');
 const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = require('./rating');
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
-const { notifyTurn } = require('./notify');
+const { notifyTurn, notifyChallenge } = require('./notify');
 const crypto = require('crypto');
 
 initializeApp();
@@ -190,10 +191,12 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		throw new HttpsError('failed-precondition', 'requires-recent-login');
 	}
 	const db = database();
-	const [games, active, profile] = await Promise.all([
+	const [games, active, profile, follows, followers] = await Promise.all([
 		db.ref('user_games/' + uid).once('value'),
 		db.ref('user_active_games/' + uid).once('value'),
 		db.ref('users/' + uid).once('value'),
+		db.ref('follows/' + uid).once('value'),
+		db.ref('followers/' + uid).once('value'),
 	]);
 	// First, so a game rated after this point writes nothing for the uid
 	// (rateGame checks deleted_users).
@@ -206,7 +209,15 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		// Push tokens: the deleted account can no longer remove them, and
 		// notifyTurn would keep pushing its games to the browser.
 		['push_tokens/' + uid]: null,
+		// Friends: both halves of every follow, blocks, challenges, presence.
+		['follows/' + uid]: null,
+		['followers/' + uid]: null,
+		['blocks/' + uid]: null,
+		['challenges/' + uid]: null,
+		['presence/' + uid]: null,
 	};
+	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
+	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
 	// Public room records lose the name and uid too (their seats).
 	const seatScrub = async (code, color) => {
 		if (!code || (color !== 'red' && color !== 'blue')) return;
@@ -315,9 +326,9 @@ exports.settleAbort = onValueWritten({
 });
 
 // The emulators have no FCM: there the push is only logged.
-async function sendPush(tokens, message) {
+async function fcmSend(tokens, message) {
 	if (process.env.FUNCTIONS_EMULATOR === 'true') {
-		logger.info('notifyTurn (emulator, not sent)', { tokens: tokens.length, data: message.data });
+		logger.info('push (emulator, not sent)', { tokens: tokens.length, data: message.data });
 		return tokens.map(() => ({ success: true }));
 	}
 	const { getMessaging } = require('firebase-admin/messaging');
@@ -332,7 +343,7 @@ const notifyTurnFn = onValueCreated({
 	retry: false,
 }, async (event) => {
 	const db = event.data.ref.root.database;
-	const res = await notifyTurn(db, event.params.code, event.params.turnId, Date.now(), sendPush);
+	const res = await notifyTurn(db, event.params.code, event.params.turnId, Date.now(), fcmSend);
 	if (res && res.sent + res.removed > 0) logger.info('notifyTurn', Object.assign({ code: event.params.code }, res));
 });
 // Not on the emulators unless asked (SIGIL_EMULATE_PUSH=1): there is no FCM
@@ -342,3 +353,16 @@ const notifyTurnFn = onValueCreated({
 if (process.env.FUNCTIONS_EMULATOR !== 'true' || process.env.SIGIL_EMULATE_PUSH === '1') {
 	exports.notifyTurn = notifyTurnFn;
 }
+
+// A challenge is rare (one per click), so unlike notifyTurn it also runs on
+// the emulators, where the push is only logged.
+exports.notifyChallenge = onValueCreated({
+	ref: '/challenges/{target}/{room}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: false,
+}, async (event) => {
+	const db = event.data.ref.root.database;
+	const res = await notifyChallenge(db, event.params.target, event.params.room, fcmSend);
+	if (res && res.sent + res.removed > 0) logger.info('notifyChallenge', Object.assign({ room: event.params.room }, res));
+});
