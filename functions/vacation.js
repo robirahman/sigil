@@ -4,10 +4,11 @@
  * that start during one).
  *
  * A player's bank is VACATION_DAYS_PER_YEAR days a calendar year (UTC),
- * kept at vacations/{uid}: { year, usedDays, from, until, days }.
+ * kept at vacations/{uid}: { used: {year: days}, from, until, days, prev }.
  * Only the server writes it (database.rules.json). Starting a vacation of N
- * days reserves N days; ending it early refunds the days not begun (a day
- * begun counts as used).
+ * days reserves N days, each from the bank of the year it begins in (a
+ * vacation over New Year draws on both); ending it early refunds the days
+ * not begun (a day begun counts as used).
  *
  * While a player is on vacation, each of their correspondence games carries
  * a pause, rooms/{code}/pauses/{uid_vacationFrom_color}: { color, from, to },
@@ -24,10 +25,23 @@ const VACATION_DAYS_PER_YEAR = 14;
 
 const yearOf = (ms) => new Date(ms).getUTCFullYear();
 
-/** Days left in the bank at `now` for the stored record `v` (may be null). */
-function daysLeft(v, now) {
-	if (!v || v.year !== yearOf(now)) return VACATION_DAYS_PER_YEAR;
-	return Math.max(0, VACATION_DAYS_PER_YEAR - (v.usedDays || 0));
+/** The calendar year (UTC) of each day of a vacation from `from`: day i begins at from + i days. */
+function dayYears(from, days) {
+	return Array.from({ length: days }, (_, i) => yearOf(from + i * DAY_MS));
+}
+
+/** Days used per year, { [year]: n }, for the stored record `v` (may be null). */
+function usedByYear(v) {
+	if (!v) return {};
+	if (v.used && typeof v.used === 'object') return Object.assign({}, v.used);
+	// The first form of the record: one year's count.
+	return typeof v.year === 'number' ? { [v.year]: v.usedDays || 0 } : {};
+}
+
+/** Days left in `year`'s bank (that of `now` by default) for the stored record `v`. */
+function daysLeft(v, now, year) {
+	const y = year === undefined ? yearOf(now) : year;
+	return Math.max(0, VACATION_DAYS_PER_YEAR - (usedByYear(v)[y] || 0));
 }
 
 /** Is the record `v` a vacation running at `now`? */
@@ -37,29 +51,36 @@ function onVacation(v, now) {
 
 /**
  * The record after starting a `days`-day vacation at `now`, or
- * { error } when the request is refused.
+ * { error } when the request is refused. Each day is charged to the bank
+ * of the year it begins in, so a vacation over New Year draws on both.
  */
 function startRecord(v, days, now) {
 	if (!Number.isInteger(days) || days < 1) return { error: 'invalid-days' };
 	if (onVacation(v, now)) return { error: 'already-on-vacation' };
-	const left = daysLeft(v, now);
-	if (days > left) return { error: 'not-enough-days' };
-	const year = yearOf(now);
-	const used = v && v.year === year ? (v.usedDays || 0) : 0;
+	const used = {};
+	// Past years' counts are no longer needed.
+	for (const [y, n] of Object.entries(usedByYear(v))) if (Number(y) >= yearOf(now)) used[y] = n;
+	for (const y of dayYears(now, days)) used[y] = (used[y] || 0) + 1;
+	if (Object.values(used).some((n) => n > VACATION_DAYS_PER_YEAR)) return { error: 'not-enough-days' };
 	// The last vacation's span stays, so the sweep can still end its pauses.
 	const prev = v && typeof v.from === 'number' ? { from: v.from, until: v.until } : null;
-	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days, prev };
+	return { used, from: now, until: now + days * DAY_MS, days, prev };
 }
 
 /**
  * The record after ending the running vacation at `now`: the reserved days
- * not begun go back to the bank (of the year the vacation started in).
+ * not begun go back to the banks of the years they fall in.
  */
 function endRecord(v, now) {
 	if (!onVacation(v, now)) return { error: 'not-on-vacation' };
-	const used = Math.min(v.days || 0, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
-	const refund = Math.max(0, (v.days || 0) - used);
-	return Object.assign({}, v, { usedDays: Math.max(0, (v.usedDays || 0) - refund), until: now, days: used });
+	const days = v.days || 0;
+	const kept = Math.min(days, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
+	const used = usedByYear(v);
+	for (const y of dayYears(v.from, days).slice(kept)) used[y] = Math.max(0, (used[y] || 0) - 1);
+	const next = Object.assign({}, v, { used, until: now, days: kept });
+	delete next.year;
+	delete next.usedDays;
+	return next;
 }
 
 /** The colours `uid` sits at in `room` (both, in a game against oneself). */

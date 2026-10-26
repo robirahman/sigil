@@ -503,6 +503,7 @@
 				vacationBusy: false,
 				vacationError: '',
 				_vacationTick: 0,
+				_vacationTimer: null,
 				get vacationActive() {
 					void this._vacationTick;
 					const v = this.vacation;
@@ -513,12 +514,14 @@
 					const d = new Date(this.vacation.until);
 					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 				},
-				// Same bank as functions/vacation.js daysLeft: 14 a calendar year (UTC).
+				// Same bank as functions/vacation.js daysLeft: 14 a calendar year
+				// (UTC), each day charged to the year it begins in.
 				get vacationDaysLeft() {
 					void this._vacationTick;
 					const v = this.vacation;
-					if (!v || v.year !== new Date().getUTCFullYear()) return 14;
-					return Math.max(0, 14 - (v.usedDays || 0));
+					const y = new Date().getUTCFullYear();
+					const used = !v ? 0 : v.used ? (v.used[y] || 0) : (v.year === y ? (v.usedDays || 0) : 0);
+					return Math.max(0, 14 - used);
 				},
 				deleteOpen: false,
 				deleteConfirm: '',
@@ -621,6 +624,13 @@
 					}
 					this.vacationDays = Math.min(Math.max(1, this.vacationDays), Math.max(1, this.vacationDaysLeft));
 					this._vacationTick++;
+					// When the vacation ends on its own, show the bank again (read
+					// afresh: it may have been ended or changed elsewhere).
+					clearTimeout(this._vacationTimer);
+					const v = this.vacation;
+					if (v && typeof v.until === 'number' && v.until > Date.now()) {
+						this._vacationTimer = setTimeout(() => this._loadVacation(), Math.min(v.until - Date.now() + 1000, 2147483647));
+					}
 				},
 
 				async _callVacation(days) {

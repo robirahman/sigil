@@ -52,7 +52,7 @@ test('a vacation pauses open correspondence games once, and ends their pauses', 
 
 	assert.ok(ended.N.pauses[pauseKey('alice', v.from, 'blue')].to < v.until);
 	assert.strictEqual(ended.B.pauses[pauseKey('alice', v.from, 'blue')].to, v.until);
-	assert.strictEqual((await db.ref('vacations/alice/usedDays').once('value')).val(), 1);
+	assert.strictEqual((await db.ref('vacations/alice/used/' + new Date().getUTCFullYear()).once('value')).val(), 1);
 });
 
 test('a pause a sweep adds after the vacation ended is ended by the next sweep', async () => {

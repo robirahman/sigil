@@ -193,9 +193,9 @@ test('rooms: pauses are the server\'s; a gift goes only to the opponent, in a li
 	await assertFails(set(ref(db('alice'), 'rooms/N1'), Object.assign({}, waiting, { gifts: { g1: { to: 'red', ms: 15000, at: 1 } } })));
 	await assertFails(set(ref(db('alice'), 'rooms/N1'), Object.assign({}, waiting, { giftAt: { red: { key: 'g1', at: 1 } } })));
 	// The vacation bank is the server's too.
-	await assertFails(set(ref(db('alice'), 'vacations/alice'), { year: 2026, usedDays: 0, from: 1, until: 2 }));
-	await assertFails(set(ref(db('alice'), 'vacations/alice/usedDays'), 0));
-	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'vacations/alice'), { year: 2026, usedDays: 3, from: 1, until: 2 }));
+	await assertFails(set(ref(db('alice'), 'vacations/alice'), { used: { 2026: 0 }, from: 1, until: 2 }));
+	await assertFails(set(ref(db('alice'), 'vacations/alice/used/2026'), 0));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'vacations/alice'), { used: { 2026: 3 }, from: 1, until: 2 }));
 	await assertSucceeds(get(ref(db('alice'), 'vacations/alice')));
 	await assertFails(get(ref(db('bob'), 'vacations/alice')));
 	await assertFails(remove(ref(db('alice'), 'vacations/alice')));

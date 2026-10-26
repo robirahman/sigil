@@ -200,7 +200,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		a = await until(async () => { const s = await acct(); return s.status || s.error ? s : null; }, 30000);
 		check('account page: on vacation until …', !!a && /^On vacation until .+\.$/.test(a.status || ''), a);
 		const vac = await rest('GET', 'vacations/' + me);
-		check('the bank holds 3 days used', vac && vac.usedDays === 3 && vac.until - vac.from === 3 * DAY, vac);
+		check('the bank holds 3 days used', vac && vac.used && vac.used[new Date().getUTCFullYear()] === 3 && vac.until - vac.from === 3 * DAY, vac);
 		const pausesIn = async (code) => Object.values((await rest('GET', 'rooms/' + code + '/pauses')) || {});
 		const p1 = await pausesIn(corr.code);
 		const p2 = await pausesIn('VACCO2');
@@ -235,7 +235,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		a = await until(async () => { const s = await acct(); return s.left ? s : null; }, 30000);
 		check('account page: one day used, 13 left', !!a && a.left === '13 days left this year.', a);
 		const v2 = await rest('GET', 'vacations/' + me);
-		check('the bank refunds the days not begun', v2 && v2.usedDays === 1 && v2.until <= Date.now(), v2);
+		check('the bank refunds the days not begun', v2 && v2.used && v2.used[new Date().getUTCFullYear()] === 1 && v2.until <= Date.now(), v2);
 		const q1 = await pausesIn(corr.code);
 		const q2 = await pausesIn('VACCO2');
 		// Each ends at the time of its own write (a transaction on the room).
@@ -245,6 +245,13 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		const back = deadline + (q1[0].to - q1[0].from);
 		const seen2 = await until(async () => { const v = await clockOf(pc, dColor); return Math.abs(v - back) < 5000 ? v : null; }, 15000);
 		check('the deadline keeps only the time actually paused', !!seen2, { seen: await clockOf(pc, dColor), back });
+		// A vacation running out by itself: the open account page shows the
+		// bank again without a reload.
+		await rest('PATCH', 'vacations/' + me, { from: Date.now() - 1000, until: Date.now() + 4000 });
+		await pd.evaluate(() => Alpine.$data(document.querySelector('[x-data]'))._loadVacation());
+		const during = await until(async () => { const s = await acct(); return s.status ? s : null; }, 3000);
+		const afterEnd = await until(async () => { const s = await acct(); return s.left ? s : null; }, 15000);
+		check('account page: the panel returns when the vacation runs out', !!during && !!afterEnd && /left this year/.test(afterEnd.left), { during, afterEnd });
 		const st2 = await rest('GET', 'rooms/' + corr.code + '/status');
 		check('the correspondence game goes on', st2 === 'playing', st2);
 	} catch (e) {

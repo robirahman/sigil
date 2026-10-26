@@ -7,34 +7,58 @@ const { DAY_MS, daysLeft, onVacation, startRecord, endRecord, missingPauses } = 
 const { roomTimeLeft } = require('../engine-loader').requireShared('room-clock.js');
 
 const T = Date.UTC(2026, 9, 26, 12);
+const u = (v, y) => (v.used || {})[y || 2026] || 0;
 
 test('a vacation draws on a 14-day yearly bank', () => {
 	assert.strictEqual(daysLeft(null, T), 14);
 	const v = startRecord(null, 10, T);
-	assert.deepStrictEqual([v.usedDays, v.until, v.days], [10, T + 10 * DAY_MS, 10]);
+	assert.deepStrictEqual([u(v), v.until, v.days], [10, T + 10 * DAY_MS, 10]);
 	assert.ok(onVacation(v, T + DAY_MS));
 	assert.strictEqual(startRecord(v, 1, T + DAY_MS).error, 'already-on-vacation');
 	const after = Object.assign({}, v, { until: T + 10 * DAY_MS });
 	assert.strictEqual(daysLeft(after, T + 11 * DAY_MS), 4);
 	assert.strictEqual(startRecord(after, 5, T + 11 * DAY_MS).error, 'not-enough-days');
-	assert.strictEqual(startRecord(after, 4, T + 11 * DAY_MS).usedDays, 14);
+	assert.strictEqual(u(startRecord(after, 4, T + 11 * DAY_MS)), 14);
 	for (const bad of [0, -1, 1.5, '3', null]) assert.strictEqual(startRecord(null, bad, T).error, 'invalid-days');
 	// A new year, a new bank.
 	const ny = Date.UTC(2027, 0, 2);
-	assert.strictEqual(daysLeft(Object.assign({}, after, { usedDays: 14 }), ny), 14);
-	assert.strictEqual(startRecord(Object.assign({}, after, { usedDays: 14 }), 14, ny).usedDays, 14);
+	assert.strictEqual(daysLeft(Object.assign({}, after, { used: { 2026: 14 } }), ny), 14);
+	assert.strictEqual(u(startRecord(Object.assign({}, after, { used: { 2026: 14 } }), 14, ny), 2027), 14);
+});
+
+test('a vacation over New Year charges each year for its own days', () => {
+	// Ten days from 27 December, noon: five days begin in 2026, five in 2027.
+	const t = Date.UTC(2026, 11, 27, 12);
+	const v = startRecord(null, 10, t);
+	assert.deepStrictEqual(v.used, { 2026: 5, 2027: 5 });
+	assert.strictEqual(daysLeft(v, t), 9);
+	assert.strictEqual(daysLeft(v, Date.UTC(2027, 0, 1)), 9);
+	// Ended on 29 December: three days used, all in 2026; 2027's back in full.
+	const e = endRecord(v, t + 2.5 * DAY_MS);
+	assert.deepStrictEqual(e.used, { 2026: 3, 2027: 0 });
+	// Fourteen days on 31 December do not buy a full 2027 bank on top.
+	const nye = startRecord(null, 14, Date.UTC(2026, 11, 31, 12));
+	assert.deepStrictEqual(nye.used, { 2026: 1, 2027: 13 });
+	assert.strictEqual(daysLeft(Object.assign({}, nye, { until: Date.UTC(2027, 0, 14) }), Date.UTC(2027, 0, 20)), 1);
+	assert.strictEqual(startRecord(Object.assign({}, nye, { until: Date.UTC(2027, 0, 14) }), 2, Date.UTC(2027, 0, 20)).error, 'not-enough-days');
+	// A 2027 bank already spent refuses the days that fall in it.
+	assert.strictEqual(startRecord({ used: { 2026: 0, 2027: 14 } }, 10, t).error, 'not-enough-days');
+	assert.deepStrictEqual(startRecord({ used: { 2026: 0, 2027: 14 } }, 5, t).used, { 2026: 5, 2027: 14 });
+	// Past years are dropped.
+	assert.deepStrictEqual(startRecord({ used: { 2025: 14, 2026: 1 } }, 1, T).used, { 2026: 2 });
 });
 
 test('ending a vacation early refunds the days not begun', () => {
+	// (The record's first form, one year's count, still reads.)
 	const v = startRecord({ year: 2026, usedDays: 2 }, 10, T);
-	assert.strictEqual(v.usedDays, 12);
+	assert.strictEqual(u(v), 12);
 	// Two and a half days in: three days used, seven back.
 	const e = endRecord(v, T + 2.5 * DAY_MS);
-	assert.deepStrictEqual([e.usedDays, e.until, e.days], [5, T + 2.5 * DAY_MS, 3]);
+	assert.deepStrictEqual([u(e), e.until, e.days], [5, T + 2.5 * DAY_MS, 3]);
 	assert.ok(!onVacation(e, T + 2.5 * DAY_MS));
 	assert.strictEqual(daysLeft(e, T + 3 * DAY_MS), 9);
 	// An hour in still costs the day; nothing to end once it is over.
-	assert.strictEqual(endRecord(v, T + 3_600_000).usedDays, 3);
+	assert.strictEqual(u(endRecord(v, T + 3_600_000)), 3);
 	assert.strictEqual(endRecord(e, T + 3 * DAY_MS).error, 'not-on-vacation');
 	assert.strictEqual(endRecord(null, T).error, 'not-on-vacation');
 });
