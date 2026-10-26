@@ -19,8 +19,6 @@
  */
 
 const ProfileStats = (() => {
-	const DAY = 86400000;
-
 	/** Time-control bucket of a room's timeControl. */
 	function tcBucket(tc) {
 		if (!tc || !tc.type || tc.type === 'none') return 'Untimed';
@@ -46,14 +44,29 @@ const ProfileStats = (() => {
 	}
 
 	/**
-	 * Turns played (both colours), from the final position's turn counter
-	 * less the start's; null when the room has no finalSfn.
+	 * Was the game played from a position? By the explicit markers only:
+	 * the rating's fromPosition (a priced start) and an online room's
+	 * startSfn. An AI archive's setupSfn is not one: it holds the first
+	 * turn's sfnBefore even for a standard start.
 	 */
-	function gameLength(meta) {
+	function isFromPosition(g, meta) {
+		return !!((g && g.fromPosition) || (meta && meta.startSfn));
+	}
+
+	/**
+	 * Turns played (both colours), from the final position's turn counter
+	 * less the start's; null when the room has no finalSfn. A room's startSfn
+	 * is the position before the first turn; an AI archive's setupSfn is the
+	 * first turn's own sfnBefore (counter already advanced), counted only for
+	 * a game from a position.
+	 */
+	function gameLength(meta, fromPosition) {
 		if (!meta) return null;
 		const end = sfnCounter(meta.finalSfn);
 		if (end === null) return null;
-		const start = sfnCounter(meta.startSfn || meta.setupSfn) || 0;
+		let start = 0;
+		if (meta.startSfn) start = sfnCounter(meta.startSfn) || 0;
+		else if (fromPosition && meta.setupSfn) start = Math.max(0, (sfnCounter(meta.setupSfn) || 1) - 1);
 		return Math.max(0, end - start);
 	}
 	const LENGTH_BUCKETS = [[1, 10], [11, 20], [21, 30], [31, 40], [41, Infinity]];
@@ -151,7 +164,7 @@ const ProfileStats = (() => {
 		return {
 			byKind: groupBy(games, (g) => (g.opponentIsAI ? 'vs AI' : 'vs players'), ['vs players', 'vs AI']),
 			byTc: groupBy(games, (g) => (meta(g) ? tcBucket(meta(g).timeControl) : null), TC_ORDER),
-			byVariant: groupBy(games, (g) => (meta(g) ? variantLabel(meta(g).variant, g.fromPosition || !!(meta(g).startSfn || meta(g).setupSfn)) : null), ['Standard']),
+			byVariant: groupBy(games, (g) => (meta(g) ? variantLabel(meta(g).variant, isFromPosition(g, meta(g))) : null), ['Standard']),
 			streaks: streaks(games),
 			bests: bestWorst(games, metaOf),
 		};
@@ -161,7 +174,7 @@ const ProfileStats = (() => {
 	function insights(games, metaOf) {
 		return {
 			byColor: groupBy(games, (g) => (g.color === 'blue' ? 'Blue' : 'Red'), ['Red', 'Blue']),
-			byLength: groupBy(games, (g) => lengthBucket(gameLength(metaOf(g))), LENGTH_ORDER),
+			byLength: groupBy(games, (g) => lengthBucket(gameLength(metaOf(g), isFromPosition(g, metaOf(g)))), LENGTH_ORDER),
 			bySpell: groupBy(games, (g) => gameSpells(metaOf(g))),
 		};
 	}
@@ -174,7 +187,13 @@ const ProfileStats = (() => {
 	function filterGames(games, f, metaOf) {
 		const q = (f.opponent || '').trim().toLowerCase();
 		const from = f.from ? new Date(f.from + 'T00:00:00').getTime() : null;
-		const to = f.to ? new Date(f.to + 'T00:00:00').getTime() + DAY : null;
+		// The end bound is the next calendar day's local midnight, not +24 h
+		// (a day with a DST change is 23 or 25 hours long).
+		let to = null;
+		if (f.to) {
+			const [y, m, d] = f.to.split('-').map(Number);
+			to = new Date(y, m - 1, d + 1).getTime();
+		}
 		return games.filter((g) => {
 			if (q && String(g.opponent || '').toLowerCase().indexOf(q) === -1) return false;
 			if (f.result === 'win' && g.result !== 'win') return false;
@@ -311,7 +330,7 @@ const ProfileStats = (() => {
 	}
 
 	return {
-		tcBucket, variantLabel, roomMeta, gameLength, lengthBucket, gameSpells, groupBy, streaks, bestWorst,
+		tcBucket, variantLabel, isFromPosition, roomMeta, gameLength, lengthBucket, gameSpells, groupBy, streaks, bestWorst,
 		summarize, insights, filterGames, winRateBars, roomTranscript, exportRecord, esc, pct,
 	};
 })();

@@ -103,6 +103,9 @@ function seed() {
 			};
 		} else {
 			r.local = true;
+			// A standard AI game's archive still carries setupSfn: the first
+			// turn's sfnBefore. It must not read as "from a position".
+			r.setupSfn = sfn(1, room.spells);
 			r.gameLog = [
 				{ color: 'red', turnNumber: 1, kind: 'input', actions: ['a11', 'pass'] },
 				{ color: 'blue', turnNumber: 2, kind: 'sim', actions: [{ type: 'move', node: 'b9' }] },
@@ -177,6 +180,19 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		await p.$eval('[data-filter="to"]', (e) => { e.value = '2026-10-05'; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); });
 		check('date 10-03..10-05 -> 3', (await count()) === 3, await p.$eval('.filter-count', (e) => e.textContent));
 		await val(p, 'L.clearFilters()');
+		// The end date is inclusive by calendar day, also across a DST change:
+		// 2026-11-01 is 25 hours long in New York.
+		const dst = await browser.newPage();
+		await dst.emulateTimezone('America/New_York');
+		await dst.goto(`${BASE}/static/scripts/profile-stats.js`);
+		await dst.addScriptTag({ url: `${BASE}/static/scripts/profile-stats.js` });
+		const late = await dst.evaluate(() => {
+			const ts = new Date(2026, 10, 1, 23, 30).getTime();
+			return ProfileStats.filterGames([{ timestamp: ts, opponent: 'x', result: 'win', rated: true }],
+				{ opponent: '', result: 'all', rated: 'all', spell: '', from: '2026-11-01', to: '2026-11-01' }, () => null).length;
+		});
+		check('DST day: 23:30 on 2026-11-01 (New York) is inside to=2026-11-01', late === 1, late);
+		await dst.close();
 		check('cleared -> 7', (await count()) === 7);
 
 		// Stats tab
