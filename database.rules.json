@@ -196,6 +196,33 @@
         "takeback": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
           ".validate": "(newData.child('by').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.child('by').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)"
+        },
+        "emotes": {
+          ".indexOn": [
+            "at"
+          ],
+          "$emoteId": {
+            ".write": "auth !== null && !data.exists() && newData.exists() && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid)) && (root.child('rooms/' + $roomId + '/status').val() === 'playing' || (root.child('rooms/' + $roomId + '/status').val() === 'finished' && root.child('rooms/' + $roomId + '/closedAt').val() > now - 60000 && (newData.child('e').val() === 'gg' || newData.child('e').val() === 'thanks'))) && newData.parent().parent().child('lastEmote/' + newData.child('color').val()).child('key').val() === $emoteId && newData.parent().parent().child('lastEmote/' + newData.child('color').val()).child('at').val() === now && (!root.child('rooms/' + $roomId + '/lastEmote/' + newData.child('color').val() + '/at').exists() || root.child('rooms/' + $roomId + '/lastEmote/' + newData.child('color').val() + '/at').val() < now - 3000)",
+            ".validate": "newData.hasChildren(['color', 'e', 'at'])",
+            "color": {
+              ".validate": "newData.val() === 'red' || newData.val() === 'blue'"
+            },
+            "e": {
+              ".validate": "newData.val() === 'hello' || newData.val() === 'glhf' || newData.val() === 'nice' || newData.val() === 'wow' || newData.val() === 'oops' || newData.val() === 'think' || newData.val() === 'sorry' || newData.val() === 'thanks' || newData.val() === 'gg' || newData.val() === 'rematch'"
+            },
+            "at": {
+              ".validate": "newData.val() === now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "lastEmote": {
+          "$color": {
+            ".write": "auth !== null && newData.exists() && ($color === 'red' || $color === 'blue') && root.child('rooms/' + $roomId + '/' + $color + '/uid').val() === auth.uid && !root.child('rooms/' + $roomId + '/emotes/' + newData.child('key').val()).exists() && newData.parent().parent().child('emotes/' + newData.child('key').val() + '/color').val() === $color",
+            ".validate": "newData.hasChildren(['at', 'key']) && newData.child('at').val() === now && newData.child('key').isString()"
+          }
         }
       },
       ".indexOn": [
