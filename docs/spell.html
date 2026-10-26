@@ -153,7 +153,10 @@
 			</nav>`;
 		if (!spell.official) return;
 
-		const getJson = url => fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+		// The strategy data files are Python json.dump output, which writes NaN
+		// for an empty sample: read it as null.
+		const getJson = url => fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+			.then(t => JSON.parse(t.replace(/\bNaN\b/g, 'null')));
 		const pct = x => Math.round(100 * x) + '%';
 		// 95% Wilson interval for k wins in n games.
 		const wilson = (p, n) => {

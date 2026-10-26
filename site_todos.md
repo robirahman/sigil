@@ -22,11 +22,11 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [x] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
   Rebuild it on `GameController` with scripted positions, as puzzles do.
 - [x] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
-- [ ] **Add a page per spell**, with rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
+- [x] **Add a page per spell** Done: `docs/spell.html?name=X` (card text, engine-checked rules notes, a Try-it position from the puzzle set, game statistics); spells.html tiles and in-game tooltips link there. With rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
   Spell text is currently only a hover `title` tooltip on `docs/spells.html`, which doesn't work on touch screens.
-- [ ] **Add rules pages for the variants** (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
+- [x] **Add rules pages for the variants** Done: `docs/variants.html` (one anchored section per variant plus Tectonic and Providence), linked from the Game options hints. (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
   The variants now sit in a collapsed "Game options" panel with one-line hints (`docs/index.html:502-560`).
-- [ ] **Add variant rules to the in-game help popover** (`docs/static/scripts/help.js`).
+- [x] **Add variant rules to the in-game help popover** Done: "This Game's Rules" in game.html and multiplayer.html, from the game's variant and spells. (`docs/static/scripts/help.js`).
 
 ## Online play & community
 

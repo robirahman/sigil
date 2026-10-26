@@ -17,7 +17,9 @@ body > .main { padding-top: 80px; }
 .rules-page h3 { font-size: 1.05em; margin: 14px 0 6px; }
 .rules-page a { color: var(--color-accent); }
 .rules-page p, .rules-page li { line-height: 1.5; }
-.rules-page ul, .rules-page ol { padding-left: 1.3em; margin: 6px 0; }
+.rules-page ul, .rules-page ol { padding-left: 1.3em; margin: 6px 0; list-style: disc; }
+.rules-page ol { list-style: decimal; }
+.rules-page ul.spell-index { list-style: none; padding-left: 0; }
 .rules-page li + li { margin-top: 4px; }
 .rules-crumbs { font-size: 0.9em; color: var(--color-text-muted); margin-bottom: 14px; }
 .rules-crumbs a { text-decoration: none; }
