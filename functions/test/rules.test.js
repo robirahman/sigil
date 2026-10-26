@@ -496,7 +496,7 @@ test('reports: create-only by a signed-in account, read by admins only', async (
 });
 
 test('bans: set by admins, read by their owner, keep the player out of rated rooms only', async () => {
-	await seed({ admins: { root1: true }, rooms: { B1: waiting, B2: waiting, B3: waiting } });
+	await seed({ admins: { root1: true }, rooms: { B1: waiting, B2: waiting, B3: waiting, B4: waiting } });
 	const ban = { banUntil: Date.now() + 86400000, reason: 'engine use', by: 'root1', at: serverTimestamp() };
 	await assertFails(set(ref(db('bob'), 'user_flags/bob'), ban));
 	await assertFails(set(ref(db('alice'), 'user_flags/bob'), ban));
@@ -526,6 +526,13 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() - 1000, abandons: 3 }));
 	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true }, unratedReason: 'suspended' })));
 	await assertSucceeds(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(true), { blue: { uid: 'dave', connected: true } })));
+	// A room already marked ranked while waiting: a suspended joiner who
+	// leaves `ranked` alone still cannot start it (status checks the bans).
+	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'rooms/B4'), { ranked: true }));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/erin'), { banUntil: Date.now() + 86400000 }));
+	const erin = { blue: { uid: 'erin', connected: true }, status: 'playing' };
+	await assertFails(update(ref(db('erin'), 'rooms/B4'), erin));
+	await assertSucceeds(update(ref(db('erin'), 'rooms/B4'), Object.assign({ ranked: false, unratedReason: 'suspended' }, erin)));
 	// Guests (anonymous accounts) still create and join casual rooms.
 	const anon = env.authenticatedContext('g1', { firebase: { sign_in_provider: 'anonymous' } }).database();
 	await assertSucceeds(set(ref(anon, 'rooms/G1'), Object.assign({}, waiting, { red: { uid: 'g1', connected: true, anon: true } })));
