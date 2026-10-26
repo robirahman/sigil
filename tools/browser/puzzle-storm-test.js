@@ -308,7 +308,7 @@ const OWNER = { Authorization: 'Bearer owner' };
 			await ps.goto(`${BASE}/leaderboard.html?tab=storm`, { waitUntil: 'networkidle2' });
 			await ps.waitForFunction(() => /Stormer/.test(document.querySelector('.leaderboard-table') ? document.querySelector('.leaderboard-table').innerText : ''), { timeout: 20000 }).catch(() => {});
 			const lbText = await ps.$eval('.leaderboard-table', el => el.innerText).catch(() => '');
-			check(/Stormer\s+2/.test(lbText) && /Best score/.test(lbText), 'the Storm board shows the score');
+			check(/Stormer\s+2\b/.test(lbText) && /Best score/i.test(lbText), 'the Storm board shows the score: ' + JSON.stringify(lbText.slice(0, 200)));
 			// A forged score for someone else is refused.
 			const forged = await ps.evaluate((u) => firebase.database().ref('users/someone-else/puzzleStorm').set({ best: 99, runs: 1, last: 99, at: 1 }).then(() => 'ok', e => 'denied'), uid);
 			check(forged === 'denied', 'a Storm score for another uid is refused');
