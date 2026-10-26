@@ -83,6 +83,26 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 		const again = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(again.rating === stored.rating && again.plays === 1, 'a second result on the same puzzle changes nothing');
 		await page.close();
+		// A failed mate puzzle waits: the game may still correct it to a solve.
+		page = await open('?p=1');
+		const kind = await page.evaluate(() => window.SIGIL_PUZZLE.kind);
+		const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating') || '{"rating":1500,"plays":0}'));
+		const before = await read();
+		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'));
+		await new Promise(r => setTimeout(r, 500));
+		const pend = await read();
+		check(kind === 'mate' && pend.plays === before.plays, `a mate failure is not recorded while it can still be corrected (plays ${before.plays} -> ${pend.plays})`);
+		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'solved'));
+		await new Promise(r => setTimeout(r, 500));
+		const corr = await read();
+		check(corr.plays === before.plays + 1 && corr.rating > before.rating, `a corrected failure records the solve (${before.rating} -> ${corr.rating})`);
+		await page.close();
+		page = await open('?p=2');
+		await page.evaluate(() => { window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'); window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed-final'); });
+		await new Promise(r => setTimeout(r, 500));
+		const fin = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
+		check(fin && fin.attempts && fin.attempts[await page.evaluate(() => window.SIGIL_PUZZLE.id)] === 0, 'a final failure is recorded as a loss');
+		await page.close();
 		page = await open('', `localStorage.setItem('sigil_puzzle_rating', JSON.stringify({ rating: 2100, plays: 30, attempts: {} }))`);
 		const r = await page.evaluate(() => window.SIGIL_PUZZLE.rating);
 		const near = data.puzzles.map(p => Math.abs(p.rating - 2100)).sort((a, b) => a - b)[19];

@@ -1919,8 +1919,10 @@ document.addEventListener('alpine:init', () => {
 				// ---------------------------------------------------------------
 				let _puzzleExpectGameOver = false;
 
-				// The page's hook for results (daily streak): solved, failed or
-				// revealed, once per attempt.
+				// The page's hook for results (rating, daily streak): 'solved',
+				// 'failed', 'revealed'; then 'failed-final' once a failed mate
+				// puzzle can no longer be corrected, or 'solved' when it is
+				// (the mover won within the count after the judge ruled an escape).
 				function _puzzleReport(status) {
 					if (typeof window !== 'undefined' && typeof window.SIGIL_PUZZLE_ON_RESULT === 'function') {
 						try { window.SIGIL_PUZZLE_ON_RESULT(puzzle, status); } catch (e) { /* page hook */ }
@@ -1952,6 +1954,12 @@ document.addEventListener('alpine:init', () => {
 
 				function _puzzleOnTurn(t) {
 					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
+					// A failed mate puzzle can still be corrected to solved while the
+					// mover is within the puzzle's turn count (see _puzzleOnGameOver);
+					// past it, the failure is final.
+					if (_this.puzzleStatus === 'failed' && puzzle.kind !== 'winning' && _this.puzzleMoves > puzzle.mate) {
+						_puzzleReport('failed-final');
+					}
 					if (_this.puzzleStatus !== 'playing') return;
 					if (t.color !== puzzle.mover) {
 						// The scripted defence just replayed: it must land on the
@@ -2055,14 +2063,17 @@ document.addEventListener('alpine:init', () => {
 						_this.puzzleDiagnostic = 'Engine misjudgement: it ruled that a move let it escape, but you still won within ' + puzzle.mate + ' turns. ' + (_this.puzzleJudge || '');
 						_this.puzzleStatus = 'solved';
 						_this.puzzleMessage = 'Solved (despite the engine\'s verdict) — please report this position.';
+						_puzzleReport('solved');
 						return;
 					}
+					if (_this.puzzleStatus === 'failed') _puzzleReport('failed-final');
 					if (_this.puzzleStatus !== 'playing') return;
 					if (payload.winner === puzzle.mover) _puzzleSolve();
 					else _puzzleFail('The opponent won. Retry, or show the solution.');
 				}
 
 				_this.puzzleRetry = function () {
+					_puzzleReport('retry');     // a failure pending correction stands
 					_this.puzzleStatus = 'playing';
 					_this.puzzleStep = 0;
 					_this.puzzleMessage = '';

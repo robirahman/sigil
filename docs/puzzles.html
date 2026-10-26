@@ -629,31 +629,44 @@
 				// A result is saved before the page leaves: links in the puzzle
 				// panel wait (up to 5 s) for a pending rating write.
 				window.SIGIL_PUZZLE_GO = (url) => {
+					if (pendingFail) settle('failed');      // leaving: the failure stands
 					if (!recording) { location.href = url; return; }
 					Promise.race([recording, new Promise((r) => setTimeout(r, 5000))])
 						.finally(() => { location.href = url; });
 				};
 				document.getElementById('puzzle-root').addEventListener('click', (ev) => {
 					const link = ev.target.closest && ev.target.closest('a[href]');
-					if (!link || !recording) return;
+					if (!link || !(recording || pendingFail)) return;
 					ev.preventDefault();
 					window.SIGIL_PUZZLE_GO(link.href);
 				}, true);
+				// The result that counts: a solve, a reveal, or a failure that can
+				// no longer be corrected. A failed mate puzzle can still turn into a
+				// solve (the mover wins within the count after the judge ruled an
+				// escape), so its failure is recorded once that is impossible
+				// ('failed-final') or when the player leaves the puzzle.
+				let pendingFail = false;
+				const settle = (final) => {
+					if (rating_recorded) return;
+					rating_recorded = true;
+					pendingFail = false;
+					recording = recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow).then((r) => {
+						if (!r) { showRating(' · already attempted, rating unchanged'); return; }
+						rated.rating = r.after;
+						puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
+						showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
+					}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); })
+						.finally(() => { recording = null; });
+					if (daily) {
+						const d = recordDaily(today, final === 'solved' ? 'solved' : (final === 'revealed' ? 'revealed' : 'failed'));
+						document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+					}
+				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (p.id !== puzzle.id) return;
-					if (!rating_recorded) {
-						rating_recorded = true;
-						recording = recordPuzzleResult(ratingUser, puzzle, status === 'solved', puzzleNow).then((r) => {
-							if (!r) { showRating(' · already attempted, rating unchanged'); return; }
-							rated.rating = r.after;
-							puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
-							showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
-						}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); })
-							.finally(() => { recording = null; });
-					}
-					if (!daily) return;
-					const d = recordDaily(today, status);
-					document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+					if (status === 'failed' && puzzle.kind !== 'winning') { pendingFail = true; return; }
+					if (status === 'failed-final' || status === 'retry') { if (pendingFail) settle('failed'); return; }
+					settle(status);
 				};
 				const d0 = readDaily();
 				if (daily || d0.streak) {
