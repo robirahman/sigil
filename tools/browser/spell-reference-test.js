@@ -143,6 +143,20 @@ async function newPage(browser, errors, opts = {}) {
 			check(ok, `Try-it position for ${name} loads in analysis.html with ${ex.mover} to move`, JSON.stringify(Object.assign({}, st, { errors: errors.slice(before) })));
 		}
 
+		// The analysis board's spells take keyboard focus too, and "I" reaches
+		// the tooltip link.
+		await page.focus('img.charm-spell.charm-spell--1');
+		await sleep(200);
+		await page.keyboard.press('i');
+		await sleep(300);
+		const ak = await page.evaluate(() => {
+			const d = Alpine.$data(document.querySelector('#analysis-root'));
+			return { active: d.activeSpell, focused: document.activeElement && document.activeElement.className,
+				href: document.activeElement && document.activeElement.getAttribute('href'),
+				want: 'spell.html?name=' + encodeURIComponent(baseSpellName(d.spellDict.charm1)) };
+		});
+		check(ak.active === 'charm1' && ak.focused === 'tooltip__more' && ak.href === ak.want, 'analysis.html: a focused spell\'s "I" reaches its tooltip link', JSON.stringify(ak));
+
 		// ---- 3. variants.html and the links into it
 		await page.goto(`${BASE}/variants.html#scramble`, { waitUntil: 'load' });
 		const ids = await page.$$eval('#variant-sections > section', els => els.map(e => e.id));
