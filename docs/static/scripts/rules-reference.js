@@ -12,10 +12,10 @@
 // How casting works, for every spell page.
 const SIGIL_CASTING_RULES = [
 	'A spell is filled when your stones occupy every node of its sigil.',
-	'You may cast a filled spell after your regular move (and after a dash, if you dash). You may cast one spell a turn; Seal of Summer allows two.',
+	'You may cast a filled spell after your regular move (and after a dash, if you dash). Normally you may cast one spell a turn; Seal of Summer allows a second, and a few playtest spells (such as Rapids) open one more cast themselves.',
 	'Casting removes all your stones from the sigil. For a 3- or 5-node spell you then keep one stone on it for each mana node you hold. A charm (1-node spell) keeps none.',
 	'Then the spell takes effect. A move a spell gives you is never your regular move, so Seal of Wind and the enemy\'s Seal of Stone do not change it.',
-	'After a 3- or 5-node spell resolves, your lock moves onto it and your spell count goes up by one. You cannot cast the spell your lock is on. Charms never take your lock and do not count.',
+	'After a 3- or 5-node spell resolves, your lock moves onto it and your spell count goes up by one (Deathmatch has no spell counts). You cannot cast the spell your lock is on. Charms never take your lock and do not count.',
 	'If an effect has no legal target, that part of it is skipped. The cast still happens.',
 ];
 
