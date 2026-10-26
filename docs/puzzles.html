@@ -403,13 +403,20 @@
 			 * ranked games); ?daily=1 is today's puzzle, the same for everyone.
 			 * With no pick, the first unsolved puzzle of the pool is shown.
 			 */
-			const PENDING_FAIL_KEY = 'sigil_puzzle_pending_fail';
-			function clearPendingFail(id) {
-				try {
-					const p = JSON.parse(localStorage.getItem(PENDING_FAIL_KEY) || 'null');
-					if (p && p.id === id) localStorage.removeItem(PENDING_FAIL_KEY);
-				} catch (e) { /* storage blocked */ }
+			// Results not yet confirmed written, keyed by account and puzzle: a
+			// failure held for correction, or a result whose rating write is in
+			// flight. Leaving by any path (back, reload, the header, closing the
+			// tab) cannot erase one -- the next visit records it first.
+			const PENDING_KEY = 'sigil_puzzle_pending_results';
+			const pendingKey = (uid, id) => (uid || '') + '|' + id;
+			function pendingAll() {
+				try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}') || {}; } catch (e) { return {}; }
 			}
+			function pendingEdit(fn) {
+				try { const m = pendingAll(); fn(m); localStorage.setItem(PENDING_KEY, JSON.stringify(m)); } catch (e) { /* storage blocked */ }
+			}
+			const pendingPut = (uid, id, solved) => pendingEdit(m => { m[pendingKey(uid, id)] = { id, uid: uid || null, solved: !!solved, at: Date.now() }; });
+			const pendingDrop = (uid, id) => pendingEdit(m => { delete m[pendingKey(uid, id)]; });
 			const PUZZLE_SETS = { m1: 'Mate in 1', m2: 'Mate in 2', m3: 'Mate in 3', win: 'Winning turn' };
 			function puzzleSet(p) { return p.kind === 'winning' ? 'win' : 'm' + p.mate; }
 			function utcDay(offsetDays) {
@@ -531,20 +538,23 @@
 					if (viewer && viewer.isAnonymous) viewer = null;
 				} catch (e) { viewer = null; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
-				// A failure left pending by an earlier visit (the player left before
-				// it could be corrected or settled) is recorded first.
-				try {
-					const pend = JSON.parse(localStorage.getItem(PENDING_FAIL_KEY) || 'null');
-					const pz = pend && all.find(p => p.id === pend.id);
-					// Recorded for the player who failed it; another account signed
-					// in since cannot be charged for it.
-					if (pz && (pend.uid || null) === (viewer ? viewer.uid : null)) {
+				// Results an earlier visit left unconfirmed are recorded first, each
+				// for the player who earned it (another account signed in since is
+				// not charged; its entries wait for that account).
+				const myUid = viewer ? viewer.uid : null;
+				const owed = Object.values(pendingAll()).filter(e => (e.uid || null) === myUid);
+				const deadline = Date.now() + 8000;
+				for (const e of owed) {
+					const pz = all.find(p => p.id === e.id);
+					if (!pz) { pendingDrop(e.uid, e.id); continue; }
+					if (Date.now() > deadline) break;   // the rest wait for the next visit
+					try {
 						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
-						const done = await Promise.race([recordPuzzleResult(viewer, pz, false, current || undefined).then(() => true),
+						const done = await Promise.race([recordPuzzleResult(viewer, pz, e.solved, current || undefined).then(() => true),
 							new Promise(r => setTimeout(() => r(false), 5000))]);
-						if (done) clearPendingFail(pend.id);
-					}
-				} catch (e) { /* storage blocked or offline: try again next visit */ }
+						if (done) pendingDrop(e.uid, e.id);
+					} catch (err) { /* offline or refused: try again next visit */ }
+				}
 				// Offline (or a database that never answers), the account read can
 				// hang; the board must not wait for it. 4 s, then the device rating.
 				const deviceRating = () => loadPuzzleRating(null);
@@ -640,7 +650,11 @@
 				};
 				let puzzleNow = { rating: Math.round(puzzle.rating || PUZZLE_RATING_START), plays: 0 };
 				showRating();
-				loadPuzzleCurrentRating(puzzle).then((r) => { puzzleNow = r; showRating(); }).catch(() => {});
+				// A result waits for this read (up to 4 s), so a quick guest result
+				// is computed against the live rating, not the calibration.
+				const puzzleLive = Promise.race([
+					loadPuzzleCurrentRating(puzzle).then((r) => { puzzleNow = r; showRating(); }),
+					new Promise((r) => setTimeout(r, 4000))]).catch(() => {});
 				let rating_recorded = false;
 				let recording = null;
 				// The identity the rating line was built from: when the account
@@ -672,8 +686,10 @@
 					if (rating_recorded) return;
 					rating_recorded = true;
 					pendingFail = false;
-					recording = recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow).then((r) => {
-						clearPendingFail(puzzle.id);   // recorded (or attempted before): nothing left pending
+					const uid = ratingUser ? ratingUser.uid : null;
+					pendingPut(uid, puzzle.id, final === 'solved');   // until the write lands
+					recording = puzzleLive.then(() => recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow)).then((r) => {
+						pendingDrop(uid, puzzle.id);   // recorded (or attempted before): nothing left pending
 						if (!r) { showRating(' · already attempted, rating unchanged'); return; }
 						rated.rating = r.after;
 						puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
@@ -688,11 +704,9 @@
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (p.id !== puzzle.id) return;
 					if (status === 'failed' && puzzle.kind !== 'winning') {
-						// Held in storage too: leaving by any path (back, reload, the
-						// header, closing the tab) cannot erase it -- the next visit
-						// records it before anything else.
+						// Held in storage too (see PENDING_KEY).
 						pendingFail = true;
-						try { localStorage.setItem(PENDING_FAIL_KEY, JSON.stringify({ id: puzzle.id, uid: ratingUser ? ratingUser.uid : null, at: Date.now() })); } catch (e) { /* storage blocked */ }
+						pendingPut(ratingUser ? ratingUser.uid : null, puzzle.id, false);
 						return;
 					}
 					if (status === 'failed-final' || status === 'retry') { if (pendingFail) settle('failed'); return; }

@@ -104,20 +104,29 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 		check(fin && fin.attempts && fin.attempts[await page.evaluate(() => window.SIGIL_PUZZLE.id)] === 0, 'a final failure is recorded as a loss');
 		await page.close();
 		// Leaving with a failure pending (here: a plain navigation, as the header
-		// logo, Back or a typed URL would) records it as a loss.
+		// logo, Back or a typed URL would) records it as a loss -- at once, or
+		// on the next visit if the write could not finish first.
 		page = await open('?p=3');
 		const id3 = await page.evaluate(() => window.SIGIL_PUZZLE.id);
 		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'));
 		await page.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+		await page.close();
+		page = await open('?p=4');
 		const left = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(left.attempts[id3] === 0, 'a failure pending when the page is left is recorded as a loss');
+		const id4 = await page.evaluate(() => window.SIGIL_PUZZLE.id);
 		await page.close();
-		// A tab killed before pagehide ran: the stored pending failure is
-		// recorded on the next visit, before anything else.
-		const id5 = data.puzzles[5].id;
-		page = await open('?p=6', `if (!sessionStorage.getItem('t')) { sessionStorage.setItem('t', 1); localStorage.setItem('sigil_puzzle_pending_fail', JSON.stringify({ id: '${id5}', uid: null, at: 1 })); }`);
-		const boot = await page.evaluate(() => [JSON.parse(localStorage.getItem('sigil_puzzle_rating')), localStorage.getItem('sigil_puzzle_pending_fail')]);
-		check(boot[0].attempts[id5] === 0 && boot[1] === null, 'a pending failure left by a killed tab is recorded on the next visit');
+		// Tabs killed before anything was written: every stored result is
+		// recorded on the next visit (two puzzles, two outcomes), and an entry
+		// for another account is left alone.
+		const id5 = data.puzzles[5].id, id7 = data.puzzles[7].id;
+		const seed = { ['|' + id5]: { id: id5, uid: null, solved: false, at: 1 }, ['|' + id7]: { id: id7, uid: null, solved: true, at: 2 },
+			['someone|' + id7]: { id: id7, uid: 'someone', solved: false, at: 3 } };
+		page = await open('?p=6', `if (!sessionStorage.getItem('t')) { sessionStorage.setItem('t', 1); localStorage.setItem('sigil_puzzle_pending_results', ${JSON.stringify(JSON.stringify(seed))}); }`);
+		const boot = await page.evaluate(() => [JSON.parse(localStorage.getItem('sigil_puzzle_rating')), JSON.parse(localStorage.getItem('sigil_puzzle_pending_results'))]);
+		check(boot[0].attempts[id5] === 0 && boot[0].attempts[id7] === 1 && Object.keys(boot[1]).join() === 'someone|' + id7,
+			`stored results left by killed tabs are all recorded on the next visit (${JSON.stringify([boot[0].attempts[id5], boot[0].attempts[id7], Object.keys(boot[1])])})`);
+		check(boot[0].attempts[id4] === undefined, 'opening a puzzle records nothing');
 		await page.close();
 		page = await open('', `localStorage.setItem('sigil_puzzle_rating', JSON.stringify({ rating: 2100, plays: 30, attempts: {} }))`);
 		const r = await page.evaluate(() => window.SIGIL_PUZZLE.rating);
