@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v86';
+const CACHE_VERSION = 'v88';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -62,42 +62,38 @@ const SAME_ORIGIN_PRECACHE = [
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',
 	'./static/css/layout.css',
-	'./static/css/styles.css',
-	// ?ui=N: game.html / multiplayer.html load their game scripts and styles.css
-	// under a URL an old worker never cached, so a fresh page can't run on
-	// stale copies (stale-while-revalidate checks each file on its own). Bump
-	// it with the pages' tags when they need a new script or style API.
-	'./static/css/styles.css?ui=2',
+	// ?v=N: every page loads a script or stylesheet changed in a release under
+	// a URL an old worker never cached, so a fresh page can't run on stale
+	// copies (stale-while-revalidate checks each file on its own). v=35: the
+	// round-2 site features (one query for every file they changed).
+	'./static/css/styles.css?v=35',
 	'./static/css/compendium.css',
-	'./static/css/rules.css',
-	'./static/css/help.css',
+	'./static/css/rules.css?v=35',
+	'./static/css/help.css?v=35',
 	'./static/css/ladder.css',
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
-	'./static/scripts/auth-status.js',
-	'./static/scripts/report-dialog.js',
+	'./static/scripts/auth-status.js?v=35',
+	'./static/scripts/report-dialog.js?v=35',
 	'./static/scripts/turn-notify.js',
-	'./static/scripts/friends.js',
-	'./static/scripts/engine/room-clock.js',
-	'./static/scripts/engine/room-clock.js?v=34',
+	'./static/scripts/friends.js?v=35',
+	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
-	'./static/scripts/board-marks.js',
-	'./static/scripts/settings-panel.js',
-	'./static/scripts/game-keys.js?ui=2',
+	'./static/scripts/board-marks.js?v=35',
+	'./static/scripts/settings-panel.js?v=35',
+	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/board-geometry.js',
-	'./static/scripts/analysis-board.js',
-	'./static/scripts/game-board-local.js',
+	'./static/scripts/analysis-board.js?v=35',
+	'./static/scripts/game-board-local.js?v=35',
 	'./static/scripts/tutorial-lessons.js',
-	'./static/scripts/game-board-local.js?v=34&ui=2',
 	'./static/scripts/engine/rust-ai.js?v=34',
-	'./static/scripts/game-board-multiplayer.js',
-	'./static/scripts/game-board-multiplayer.js?v=34&ui=2',
-	'./static/scripts/help.js',
-	'./static/scripts/rules-reference.js',
+	'./static/scripts/game-board-multiplayer.js?v=35',
+	'./static/scripts/help.js?v=35',
+	'./static/scripts/rules-reference.js?v=35',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
-	'./static/scripts/profile-stats.js',
+	'./static/scripts/profile-stats.js?v=35',
 	'./static/scripts/engine/constants.js',
 	'./static/scripts/engine/notation.js',
 	'./static/scripts/engine/board.js',
@@ -123,26 +119,23 @@ const SAME_ORIGIN_PRECACHE = [
 	// dev/enumeration-gaps.html),
 	// so an old worker's cached copies are never served to a fresh page: bump those
 	// script tags as well.
-	// A script changed between engine builds takes a point version (?v=34.1:
-	// game-review.js, firebase-sync.js, game-board-local.js), for the same reason.
+	// A script or stylesheet changed between engine builds takes the next
+	// site version (?v=35, see styles.css above), for the same reason.
 	'./static/scripts/engine/rust-worker.js?v=34',
 	'./static/wasm/sigil_engine.js?v=34',
 	'./static/wasm/sigil_engine_bg.wasm?v=34',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
-	'./static/scripts/engine/game-review.js?v=34.1',
+	'./static/scripts/engine/game-review.js?v=35',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/elo.js',
-	'./static/scripts/engine/elo.js?v=34',
+	'./static/scripts/engine/elo.js?v=35',
 	'./static/scripts/engine/position-rating.js?v=34',
-	'./static/scripts/engine/firebase-sync.js',
-	// -seq: the client that writes rooms/{id}/last (turn sequencing), which
-	// the rules require; a new URL so no cached copy of the old one runs.
-	'./static/scripts/engine/firebase-sync.js?v=34-seq',
-	'./static/scripts/engine/multiplayer-controller.js',
-	'./static/scripts/engine/multiplayer-controller.js?v=34',
-	'./static/scripts/engine/spectator-controller.js',
+	// The client that writes rooms/{id}/last (turn sequencing), which the
+	// rules require: a new URL, so no cached copy of the old one runs.
+	'./static/scripts/engine/firebase-sync.js?v=35',
+	'./static/scripts/engine/multiplayer-controller.js?v=35',
+	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',

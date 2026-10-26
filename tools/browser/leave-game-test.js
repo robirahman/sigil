@@ -8,7 +8,7 @@
 //   5. After game over, and in review, the logo leaves at once.
 //   6. The analysis board (same component) never asks.
 //   7. An old service worker's cached copies live under the unversioned
-//      URLs; game.html loads ?ui=2 ones, so it keeps the guard and styles.
+//      URLs; game.html loads ?v=35 ones, so it keeps the guard and styles.
 //
 //   (cd docs && python3 -m http.server 8765) &
 //   node tools/browser/leave-game-test.js http://localhost:8765
@@ -190,7 +190,7 @@ const path = (page) => new URL(page.url()).pathname;
 
 		// ---- 7. An old worker's cache: the unversioned URLs answer with the
 		// previous build (no guardLeavingGame, no moved game.html rules). The
-		// page loads ?ui=2 URLs, so it still gets the guard and the styles.
+		// page loads ?v=35 URLs, so it still gets the guard and the styles.
 		dialogs = [];
 		const local = async (rel) => (await fetch(BASE + '/' + rel)).text();
 		const oldKeys = (await local('static/scripts/game-keys.js')).replace('function guardLeavingGame(', 'function _notYetShipped(');
