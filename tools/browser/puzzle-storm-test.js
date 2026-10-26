@@ -329,6 +329,38 @@ const OWNER = { Authorization: 'Bearer owner' };
 				_ppWriteLeaves(firebase.database(), { [path]: { r: 'v', at: 4000 } })]), leaf);
 			const raced = await (await fetch(`${DB}/${leaf}.json?ns=${NS}`, { headers: OWNER })).json();
 			check(raced && raced.r === 's' && raced.at === 2000, 'racing first results keep the earliest ' + JSON.stringify(raced));
+			// Offline at the end of a run: the run waits on the device and is
+			// sent on the next visit, even after the page is gone.
+			const runsBefore = (await remote()).puzzleStorm.runs;
+			await ps.evaluate(() => firebase.database().goOffline());
+			const off = await ps.evaluate(() => recordStormRun(firebase.auth().currentUser, 11));
+			const pend = await ps.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_storm')).pending);
+			check(off.queued && pend.length === 1 && pend[0].score === 11, 'an offline run is kept on the device as pending ' + JSON.stringify(pend));
+			await ps.goto(`${BASE}/puzzles.html?tab=storm`, { waitUntil: 'networkidle2' });
+			await ps.waitForSelector('#storm-start', { visible: true, timeout: 30000 });
+			r = await remote();
+			const pend2 = await ps.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_storm')).pending);
+			const shown = await ps.$eval('#storm-best', el => el.textContent);
+			check(r.puzzleStorm.runs === runsBefore + 1 && r.puzzleStorm.best === 11 && pend2.length === 0 && shown === '11',
+				'the next visit sends it (' + JSON.stringify(r.puzzleStorm) + ', pending ' + pend2.length + ', shown ' + shown + ')');
+			const lbRanks = await (async () => { await ps.goto(`${BASE}/leaderboard.html?tab=storm`, { waitUntil: 'networkidle2' });
+				await ps.waitForFunction(() => /Stormer/.test((document.querySelector('.leaderboard-table') || {}).innerText || ''), { timeout: 20000 }).catch(() => {});
+				return ps.$eval('.leaderboard-table tbody', el => el.innerText).catch(() => ''); })();
+			check(/^\s*1\s+Stormer\s+11/.test(lbRanks), 'Storm rows are ranked: ' + JSON.stringify(lbRanks.slice(0, 60)));
+			// A device that last synced with another account: a result recorded
+			// while this account's progress was being read stays (and reaches it).
+			const ctxC = await browser.createBrowserContext();
+			const pc = await open(ctxC, '?tab=dashboard', { before: `if (!localStorage.getItem('seeded')) { localStorage.setItem('seeded', 1);
+				localStorage.setItem('sigil_puzzle_progress_owner', 'another-account');
+				localStorage.setItem('sigil_puzzle_results', JSON.stringify({ 'old-of-other': { r: 's', at: 1000 }, 'during-sync': { r: 'f', at: Date.now() + 60000 } })); }` });
+			await signIn(pc);
+			await pc.reload({ waitUntil: 'networkidle2' });
+			await pc.waitForSelector('#puzzle-dashboard', { visible: true, timeout: 30000 });
+			const lc = await local(pc);
+			for (let t = 0; t < 20; t++) { r = await remote(); if (r.puzzleProgress.results['during-sync']) break; await sleep(500); }
+			check(!lc.results['old-of-other'] && lc.results['during-sync'] && r.puzzleProgress.results['during-sync'] && !r.puzzleProgress.results['old-of-other'],
+				'switching accounts drops the other account\'s record but keeps a result made meanwhile');
+			await ctxC.close();
 			// A forged score for someone else is refused.
 			const forged = await ps.evaluate((u) => firebase.database().ref('users/someone-else/puzzleStorm').set({ best: 99, runs: 1, last: 99, at: 1 }).then(() => 'ok', e => 'denied'), uid);
 			check(forged === 'denied', 'a Storm score for another uid is refused');

@@ -346,6 +346,7 @@
 									elo: d.score, gamesPlayed: '', isAI: false, isDeveloper: false });
 							});
 							this.allPlayers = results.reverse();
+							this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
 						} catch (e) {
 							console.error('Failed to load the Storm leaderboard:', e);
 						}
