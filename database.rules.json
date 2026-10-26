@@ -178,6 +178,9 @@
           ".validate": "(newData.child('by').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.child('by').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)"
         },
         "emotes": {
+          ".indexOn": [
+            "at"
+          ],
           "$emoteId": {
             ".write": "auth !== null && !data.exists() && newData.exists() && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid)) && (root.child('rooms/' + $roomId + '/status').val() === 'playing' || (root.child('rooms/' + $roomId + '/status').val() === 'finished' && root.child('rooms/' + $roomId + '/closedAt').val() > now - 60000 && (newData.child('e').val() === 'gg' || newData.child('e').val() === 'thanks'))) && newData.parent().parent().child('lastEmote/' + newData.child('color').val()).child('key').val() === $emoteId && newData.parent().parent().child('lastEmote/' + newData.child('color').val()).child('at').val() === now && (!root.child('rooms/' + $roomId + '/lastEmote/' + newData.child('color').val() + '/at').exists() || root.child('rooms/' + $roomId + '/lastEmote/' + newData.child('color').val() + '/at').val() < now - 3000)",
             ".validate": "newData.hasChildren(['color', 'e', 'at'])",

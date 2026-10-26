@@ -171,6 +171,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		}, { timeout: 8000, polling: 200 })
 			.then(() => check('the bubble goes after 3 s', true), () => check('the bubble goes after 3 s', false));
 
+		// An emote under a key that sorts after every push key must not hide
+		// the ones that follow (the listener orders by `at`).
+		const zKey = await redP.evaluate(async (c) => {
+			const ref = firebase.database().ref('rooms/' + c);
+			const ts = firebase.database.ServerValue.TIMESTAMP;
+			try { await ref.update({ 'emotes/zzzz': { color: 'red', e: 'wow', at: ts }, 'lastEmote/red': { at: ts, key: 'zzzz' } }); return 'ok'; } catch (e) { return e.code || e.message; }
+		}, code);
+		check('an emote under a chosen key is accepted', zKey === 'ok', zKey);
 		// Blue mutes emotes in the settings panel.
 		await blueP.evaluate(() => SigilDialog.openSettings());
 		await blueP.click('#settings-panel [data-setting="muteEmotes"]');
@@ -189,7 +197,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		const vm = await view(blueP);
 		check('muted: Blue sees no bubble and hears nothing', !vm.red && !/Nice move/.test(vm.live || ''), vm);
 		const emotes = (await roomOf()).emotes || {};
-		check('the room holds both emotes', Object.values(emotes).map((e) => e.e).sort().join() === 'glhf,nice', emotes);
+		check('the room holds the three emotes', Object.values(emotes).map((e) => e.e).sort().join() === 'glhf,nice,wow', emotes);
 
 		// game.html (no online emotes) has no mute row.
 		await pageG.goto(`${BASE}/game.html`, { waitUntil: 'load', timeout: 90000 });

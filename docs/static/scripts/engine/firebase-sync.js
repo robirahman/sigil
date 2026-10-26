@@ -1113,10 +1113,12 @@ class FirebaseSync {
 	 * already in the room when the page opens are not replayed: the query's
 	 * first child_added events come before its first value event, and are
 	 * skipped (no clock comparison, so a skewed offset cannot hide them).
+	 * Ordered by the server-stamped `at` (indexed), not by key: a sender may
+	 * choose its emote's key, and one sorting last would hide the rest.
 	 */
 	listenForEmotes(callback) {
 		if (!this.roomRef) return;
-		const q = this.roomRef.child('emotes').limitToLast(1);
+		const q = this.roomRef.child('emotes').orderByChild('at').limitToLast(1);
 		let primed = false;
 		q.on('child_added', (snap) => {
 			const v = snap.val();

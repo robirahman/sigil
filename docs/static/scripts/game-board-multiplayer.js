@@ -297,9 +297,16 @@ document.addEventListener('alpine:init', () => {
 				const side = v.color === 'red' ? 'Red' : 'Blue';
 				const name = v.color === 'red' ? this.redName : this.blueName;
 				const who = v.color === this.myColor ? 'You' : (name ? name + ' (' + side + ')' : side);
-				this.emoteAnnounce = who + ': ' + em.text;
+				// Empty the live region first, so a repeat of the same line is
+				// still a change and is read out again.
+				const line = who + ': ' + em.text;
+				this.emoteAnnounce = '';
+				setTimeout(() => { if (!this.emotesMuted) this.emoteAnnounce = line; }, 100);
 				clearTimeout(this._emoteTimers[v.color]);
-				this._emoteTimers[v.color] = setTimeout(() => { this.emoteBubble[v.color] = ''; }, SIGIL_EMOTE_BUBBLE_MS);
+				this._emoteTimers[v.color] = setTimeout(() => {
+					this.emoteBubble[v.color] = '';
+					if (this.emoteAnnounce === line) this.emoteAnnounce = '';
+				}, SIGIL_EMOTE_BUBBLE_MS);
 			},
 			// The rules take "Well played" / "Thanks" until a minute after the
 			// room's closedAt (server time): offer them for what is left of
