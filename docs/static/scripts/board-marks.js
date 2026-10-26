@@ -151,7 +151,21 @@ function attachBoardMarks(wrapper, opts) {
 		pencil.setAttribute('aria-pressed', drawMode ? 'true' : 'false');
 		wrapper.classList.toggle('board-marks--drawing', drawMode);
 	};
-	pencil.addEventListener('click', (e) => { e.stopPropagation(); setDrawMode(!drawMode); });
+	// A touch toggles on pointerup: right after a drawn drag Chrome can drop
+	// the tap's click, which left draw mode stuck on. The click that may
+	// still follow is ignored; mouse and keyboard go by click.
+	let touchToggledAt = 0;
+	pencil.addEventListener('pointerup', (e) => {
+		if (e.pointerType === 'mouse') return;
+		touchToggledAt = Date.now();
+		setDrawMode(!drawMode);
+	});
+	pencil.addEventListener('click', (e) => {
+		e.stopPropagation();
+		if (Date.now() - touchToggledAt < 800) return;
+		setDrawMode(!drawMode);
+	});
+	clearBtn.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') api.clear(); });
 	clearBtn.addEventListener('click', (e) => { e.stopPropagation(); api.clear(); });
 
 	// In draw mode a tap on a node must not play it: swallow the click in

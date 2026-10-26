@@ -2853,6 +2853,8 @@ html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-
 	font-size: 18px;
 	line-height: 1;
 	cursor: pointer;
+	/* No double-tap wait: the pencil is pressed and then the board at once. */
+	touch-action: manipulation;
 }
 .board-marks-tools__btn[aria-pressed="true"] {
 	background: #3fb950;
@@ -2863,12 +2865,12 @@ html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-
 .board-marks-tools__clear { display: none; }
 .board-marks--has .board-marks-tools,
 .board-marks--has .board-marks-tools__clear { display: flex; align-items: center; justify-content: center; }
-@media (hover: none), (pointer: coarse) {
+@media (any-pointer: coarse) {
 	.board-marks-tools,
 	.board-marks-tools__draw { display: flex; align-items: center; justify-content: center; }
 }
 /* Draw mode: a drag draws instead of scrolling the page. */
-.board-marks--drawing { touch-action: none; }
+.board-marks--drawing > :not(.board-marks-tools) { touch-action: none; }
 .board-marks--drawing .stone-node { cursor: crosshair; }
 
 /* --- Zen mode (settings-panel.js; Z) ---
