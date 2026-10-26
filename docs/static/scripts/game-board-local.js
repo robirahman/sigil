@@ -5,8 +5,21 @@ document.addEventListener('alpine:init', () => {
 
 	Alpine.data(
 		'gameBoard',
-		({ importSfn: initialImportSfn = '', puzzle = null }) => ({
+		({ importSfn: initialImportSfn = '', puzzle = null, tutorial = null, analysis = false }) => ({
 			actionList: [],
+			// Tutorial page (tutorial.html): { lessons: [...] }, each lesson a
+			// start position and the expected input tokens. See _tutorialAccept.
+			tutorial: tutorial,
+			tutorialIndex: (tutorial && tutorial.start) || 0,
+			tutorialStep: 0,
+			tutorialStatus: tutorial ? 'playing' : '', // playing | done
+			tutorialHint: '',                        // shown after a wrong move
+			tutorialTargets: {},                     // nodes the current step wants (gold rings)
+			tutorialTargetAction: '',                // spell / 'dash' / 'pass' the current step wants
+			tutorialDone: {},                        // lesson id -> timestamp (localStorage)
+			get tutorialLesson() {
+				return this.tutorial ? this.tutorial.lessons[this.tutorialIndex] : null;
+			},
 			// Puzzles page (puzzles.html): the position, the set of winning
 			// first turns (by resulting position) and, for mate-in-2, the
 			// scripted defence per winning first turn. See _puzzleOnTurn.
@@ -746,9 +759,18 @@ document.addEventListener('alpine:init', () => {
 				this.actionList = [];
 			},
 
+			// Armed by a first End Turn when "Confirm before ending a turn"
+			// is on (confirmEndTurn, game-keys.js).
+			endTurnArmed: false,
+			_endTurnTimer: null,
 			handleEndTurn() {
+				if (!confirmEndTurn(this)) return;
 				this.sendEvent('pass');
 				this.actionList = [];
+			},
+
+			nodeLabel(node) {
+				return nodeAriaLabel(this, node);
 			},
 
 			handleSubmit() {
@@ -831,6 +853,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			handleReset() {
+				this.endTurnArmed = false;
 				this.sendEvent('reset');
 				this.actionList = [];
 				this.lastPlay = '';
@@ -865,6 +888,9 @@ document.addEventListener('alpine:init', () => {
 				const _this = this;
 
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
+
+				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
+				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
 
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => {
@@ -913,21 +939,25 @@ document.addEventListener('alpine:init', () => {
 				// record, no offline queue), no local save, the human plays
 				// the puzzle's mover and a scripted opponent plays the stored
 				// defence. `aiMode` stays null on purpose: every persistence
-				// path below is keyed on it.
-				let aiMode = puzzle ? null : new URLSearchParams(window.location.search).get('ai');
+				// path below is keyed on it. The tutorial (tutorial.html) is
+				// scripted the same way: see the Tutorial section below. The analysis
+				// board (analysis.html) is the same no-AI, no-save local game,
+				// restarted at whichever tree node is selected (analysis-board.js).
+				const scripted = puzzle || tutorial;
+				let aiMode = (scripted || analysis) ? null : new URLSearchParams(window.location.search).get('ai');
 				// Game clock, any mode: ?clock=M+S (minutes + seconds per move).
 				// A saved clocked game restores its remaining times below.
-				let clockOpt = (puzzle || typeof GameClock === 'undefined') ? null
+				let clockOpt = (scripted || analysis || typeof GameClock === 'undefined') ? null
 					: GameClock.parse(new URLSearchParams(window.location.search).get('clock'));
 				let _savedClockState = null;
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
-				const gameVariantParam = puzzle ? (puzzle.variant || 'standard')
+				const gameVariantParam = scripted ? (scripted.variant || 'standard')
 					: new URLSearchParams(window.location.search).get('variant');
 				let gameVariant = normalizeVariant(gameVariantParam);
 				// The position this page was opened on (?sfn=). Captured now:
 				// importSfn is bound to the Import Position box.
-				const _startSfnAtLoad = puzzle ? '' : (_this.importSfn || '');
+				const _startSfnAtLoad = (scripted || analysis) ? '' : (_this.importSfn || '');
 				// An imported SFN names its own layout (a pentagon stone field).
 				// An imported position names its own variant and spells; the AI
 				// hand-off below reads them (a pasted SFN's URL names neither).
@@ -944,16 +974,16 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* bad SFN: the engine reports it */ }
 				}
 				let _engineRef = null;
-				if (puzzle) warnBeforeUnload = false;
+				if (scripted || analysis) warnBeforeUnload = false;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
 				// so a reload returns to the same game. If a save exists for
 				// the id, hydrate aiMode / variant / humanColor / SFN from it
 				// — these win over the URL so resume works even if the user
 				// lands on /game.html?id=X without other params.
-				if (!puzzle && typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
-				let _gameId = puzzle ? null : new URLSearchParams(window.location.search).get('id');
-				if (!puzzle && !_gameId && typeof LocalSaveStore !== 'undefined') {
+				if (!scripted && !analysis && typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
+				let _gameId = (scripted || analysis) ? null : new URLSearchParams(window.location.search).get('id');
+				if (!scripted && !analysis && !_gameId && typeof LocalSaveStore !== 'undefined') {
 					_gameId = LocalSaveStore.mintId();
 					try {
 						const u = new URL(window.location.href);
@@ -971,6 +1001,11 @@ document.addEventListener('alpine:init', () => {
 				// it is rated, its priced start (position-rating.js).
 				let _fromPosition = !!_startSfnAtLoad;
 				let _startPos = null;
+				// A turn was taken back (handleTakeBack): the game is unrated.
+				let _tookBack = false;
+				// The position the game began from (empty for a standard start),
+				// kept in the save: a resumed game's URL carries only its id.
+				let _startSfnForUndo = _startSfnAtLoad;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -1008,6 +1043,8 @@ document.addEventListener('alpine:init', () => {
 								_savedSetupSfn = _save.setupSfn;
 							}
 							if (_save.fromPosition) _fromPosition = true;
+							if (_save.tookBack) _tookBack = true;
+							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
 							}
@@ -1018,11 +1055,11 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				_this.aiMode = aiMode || null;
-				_this.isAiGame = !puzzle && !!aiMode;
+				_this.isAiGame = !scripted && !!aiMode;
 				_this.gameVariant = gameVariant;
 				_this.clockOpt = clockOpt;
 
-				if (!puzzle) {
+				if (!scripted && !analysis) {
 					try {
 						const u = new URL(window.location.href);
 						if (_gameId) u.searchParams.set('id', _gameId);
@@ -1039,7 +1076,7 @@ document.addEventListener('alpine:init', () => {
 				// Auth manager for rated AI games, the finished-game upload (vs AI
 				// and local 1v1) and community annotations from AI review.
 				let _aiAuthManager = null;
-				if (!puzzle && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
+				if (!scripted && !analysis && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
 					_aiAuthManager = new AuthManager();
 					_aiAuthManager.onAuthChanged(async (user) => {
 						if (aiMode && user && !user.isAnonymous) {
@@ -1071,7 +1108,7 @@ document.addEventListener('alpine:init', () => {
 
 				// Sync any games that were completed offline on a previous visit.
 				// Triggers on page load, on the `online` event, and when auth resolves.
-				if (!puzzle && typeof OfflineGameQueue !== 'undefined') {
+				if (!scripted && !analysis && typeof OfflineGameQueue !== 'undefined') {
 					OfflineGameQueue.installAutoflush({
 						onFlush: (result) => {
 							// Filter out any game currently being finished on this board,
@@ -1103,7 +1140,7 @@ document.addEventListener('alpine:init', () => {
 						sessionStorage.removeItem('sigil_rematch_human_color');
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				let _humanColor = puzzle ? puzzle.mover
+				let _humanColor = puzzle ? puzzle.mover : tutorial ? 'blue'
 					: (_forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red'));
 				let _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
@@ -1135,8 +1172,17 @@ document.addEventListener('alpine:init', () => {
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
 					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
-					if (variantHasScramble(gameVariant) && !puzzle) {
+					if (variantHasScramble(gameVariant) && !scripted) {
 						_this.messageHistory.push('Scramble: there is no stone-lead win. The first player to cast ' + BOARD.spellTarget + ' spells wins.');
+					}
+					if (tutorial) {
+						// The lesson is one turn of the mover's; the other side never
+						// moves (its turn is dropped once the lesson is over).
+						_humanColor = _tutorialLesson().mover || 'blue';
+						_aiColor = _humanColor === 'red' ? 'blue' : 'red';
+						_this.myColor = _humanColor;
+						options.aiColor = _aiColor;
+						options.ai = { pickTurn: () => new Promise(() => {}) };
 					}
 					if (puzzle) {
 						options.aiColor = _aiColor;
@@ -1382,7 +1428,7 @@ document.addEventListener('alpine:init', () => {
 						// A retried puzzle abandons its previous controller
 						// mid-loop (its scripted opponent never answers), so
 						// events from a superseded engine are dropped.
-						if (puzzle && _engineRef !== engine) return;
+						if (scripted && _engineRef !== engine) return;
 						handleIncomingEvent(eventObj);
 					}, options);
 					_engineRef = engine;
@@ -1393,11 +1439,13 @@ document.addEventListener('alpine:init', () => {
 					_this._engine = engine;
 
 					_this.sendEvent = function sendEvent(message) {
+						if (tutorial && !_tutorialAccept(message)) return;
 						engine.handlePlayerAction(message);
 						_this.awaiting = null;
 					};
 
 					const sfnToLoad = puzzle ? puzzleImportSfn(puzzle.sfn)
+						: tutorial ? puzzleImportSfn(tutorialLessonSfn(_tutorialLesson()))
 						: (_saveLoadedSfn || _this.importSfn || null);
 					try {
 						await engine.startGame(sfnToLoad);
@@ -1446,10 +1494,66 @@ document.addEventListener('alpine:init', () => {
 						setupSfn: _setupSfn,
 						fromPosition: _fromPosition,
 						startPos: _startPos,
+						tookBack: _tookBack,
+						startSfn: _startSfnForUndo,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
 				}
+
+				/**
+				 * Take back the player's last turn (and the AI's reply to it):
+				 * rewrite the save to the position before it and reload, which
+				 * resumes from there through the normal resume path. A rated
+				 * game vs the AI becomes unrated.
+				 */
+				_this.canTakeBack = function () {
+					const log = _engineRef && _engineRef._gameLog;
+					if (puzzle || !_gameId || _this.winner || !log || !log.length) return false;
+					if (typeof LocalSaveStore === 'undefined' || typeof reconstructGameLog !== 'function') return false;
+					// Vs the AI: only on the player's own turn (the AI is not thinking).
+					if (aiMode && _this.whoseTurn !== _humanColor) return false;
+					return !aiMode || log.some(t => t.color === _humanColor);
+				};
+				_this.handleTakeBack = async function () {
+					if (!_this.canTakeBack()) return;
+					const log = _engineRef._gameLog;
+					let h = log.length - 1;
+					if (aiMode) while (h >= 0 && log[h].color !== _humanColor) h--;
+					if (h < 0) return;
+					const board = _engineRef.board;
+					let sfn;
+					try {
+						if (h === 0) {
+							// Back to the start: the loaded position, or a fresh
+							// board with the same spells.
+							if (_startSfnForUndo) {
+								sfn = _startSfnForUndo;
+							} else if (_fromPosition) {
+								// A save from before startSfn was kept: the start is unknown.
+								_this.messageHistory.push('Cannot take back the first turn of this game.');
+								return;
+							} else {
+								const fresh = new SigilBoard(board.spellNames, board.variant || gameVariant);
+								fresh.setupInitial();
+								sfn = boardToSfn(fresh);
+							}
+						} else {
+							const rebuilt = await reconstructGameLog(board.spellNames, normalizeVariant(board.variant || gameVariant),
+								_setupSfn, slimGameLog(log.slice(0, h)));
+							sfn = rebuilt[rebuilt.length - 1].sfnAfter;
+						}
+					} catch (e) {
+						_this.messageHistory.push('Could not take back: ' + e.message);
+						return;
+					}
+					_tookBack = !!aiMode;
+					_humanHasMoved = true;
+					_persistedGameLog = slimGameLog(log.slice(0, h));
+					_persistCurrentGame(sfn);
+					warnBeforeUnload = false;
+					window.location.reload();
+				};
 
 				/**
 				 * The side picker of a game vs AI from a position: evaluate the
@@ -1517,31 +1621,129 @@ document.addEventListener('alpine:init', () => {
 					_this.myColor = _humanColor;
 				}
 
-				if (_offerSides) _pickSideFromPosition().then(initEngine);
+				/**
+				 * Analysis board: (re)start a local 1v1 controller on `sfn`, a
+				 * loadable SFN (the form Export Position and after-turn records
+				 * use; the controller advances it to the side to move). The
+				 * previous controller is abandoned mid-prompt, as a puzzle retry
+				 * does; its events are dropped by the identity check in emit.
+				 * opts.history: the SFNs of the positions before this one on the
+				 * analysed line, so threefold repetition counts them as a game
+				 * that reached this node would. opts.turn: {color, turn} plays
+				 * that turn (a SimTurn, e.g. the engine's best) for the side to
+				 * move through the AI path, with its animations. opts.silenced:
+				 * { red, blue } Silence flags, which SFN does not carry;
+				 * opts.historySilenced: the same per opts.history entry.
+				 */
+				function _analysisStart(sfn, opts) {
+					opts = opts || {};
+					_this.winner = '';
+					_this.messageHistory = [];
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.lastPlay = '';
+					_this.nodesToRefill = {};
+					_this.playerToRefill = '';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.showReset = false;
+					_this.currentSfn = '';
+					_this.whoseTurn = '';
+					_this.previousBoardState = {};
+					drawPushArrows(_this.$refs.pushArrows, []);
+					// Past the first turn: no game-start sound on every navigation.
+					_turnCount = 1;
+					_turnMsgMark = -1;
+					_turnMsgText = null;
+					let variant = 'standard';
+					try { variant = normalizeVariant(sfnToDict(sfn).variant); } catch (e) { /* the engine reports it */ }
+					gameVariant = variant;
+					_this.gameVariant = variant;
+					_this.isDeathmatch = variantHasDeathmatch(variant);
+					_this.applyBoardLayout(variantBoardLayout(variant));
+					const options = { variant };
+					if (opts.turn) {
+						const planned = opts.turn;
+						options.aiColor = planned.color;
+						options.ai = { lastMeta: null, pickTurn: async () => planned.turn };
+					}
+					const engine = new GameController(function emitEvent(eventObj) {
+						if (_engineRef !== engine) return;
+						handleIncomingEvent(eventObj);
+						if (eventObj.type === 'turn_complete' && _this._analysisOnTurn) {
+							_this._analysisOnTurn(eventObj.turn, engine.board, !!opts.turn);
+						} else if (eventObj.type === 'game_over' && _this._analysisOnGameOver) {
+							_this._analysisOnGameOver(eventObj);
+						}
+					}, options);
+					_engineRef = engine;
+					_this._engine = engine;
+					_this.sendEvent = function sendEvent(message) {
+						engine.handlePlayerAction(message);
+						_this.awaiting = null;
+					};
+					// startGame builds its board before its first await, so the
+					// repetition counts can be seeded before the loop snapshots.
+					const started = engine.startGame(sfn);
+					// SFN does not record Silence: opts.silenced carries it
+					// from the turn that led here (analysisSilencedAfter).
+					if (engine.board && opts.silenced) {
+						engine.board.silenced = { red: !!opts.silenced.red, blue: !!opts.silenced.blue };
+					}
+					if (engine.board && Array.isArray(opts.history)) {
+						const counts = {};
+						opts.history.forEach((prev, k) => {
+							try {
+								const b = new SigilBoard(sfnToDict(prev).spell_names, variant);
+								b.loadFromSfn(prev);
+								// Silence is part of the snapshot key (opts.historySilenced).
+								const sil = Array.isArray(opts.historySilenced) && opts.historySilenced[k];
+								if (sil) b.silenced = { red: !!sil.red, blue: !!sil.blue };
+								b.allLoopingSnapshotCounts = counts;
+								b.takeSnapshot();
+							} catch (e) { /* an unreadable ancestor just isn't counted */ }
+						});
+						engine.board.allLoopingSnapshotCounts = counts;
+					}
+					return started;
+				}
+
+				// Analysis board: show a position without a live controller
+				// (editor mode, and decided positions where nothing can be played).
+				function _analysisStop() {
+					_engineRef = null;
+					_this._engine = null;
+					_this.sendEvent = function () {};
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.showReset = false;
+					_this.whoseTurn = '';
+					_this.previousBoardState = {};
+					drawPushArrows(_this.$refs.pushArrows, []);
+				}
+
+				if (analysis) {
+					// Deferred: the handlers' turn bookkeeping (declared below)
+					// must be initialized before the first controller starts.
+					setTimeout(() => _this._analysisInit({ start: _analysisStart, stop: _analysisStop }), 0);
+				} else if (_offerSides) _pickSideFromPosition().then(initEngine);
 				else initEngine();
 
-				// Keyboard shortcuts
-				document.addEventListener('keydown', (e) => {
-					const tag = document.activeElement?.tagName;
-					if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-					if (e.key === 'Enter' && _this.actionList.includes('pass')) {
-						e.preventDefault();
-						_this.handleEndTurn();
-					}
-					if (e.key === 'Enter' && _this.actionList.includes('submit')) {
-						e.preventDefault();
-						_this.handleSubmit();
-					}
-					if (e.key === 'd' && _this.actionList.includes('dash')) {
-						e.preventDefault();
-						_this.handleDash();
-					}
-				});
+				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
+				bindGameKeys(_this);
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
 
 					if (type === 'ping') return;
+					// A finished lesson keeps its final board: the idle opponent's
+					// turn (and anything after it) is not shown.
+					if (tutorial && _this.tutorialStatus === 'done') return;
+					// Every lesson starts from a set-up position; the game log need
+					// not announce it.
+					if (tutorial && type === 'message' && /^Imported position/.test(rest.message || '')) return;
 
 
 					if (type === 'message') {
@@ -1584,6 +1786,7 @@ document.addEventListener('alpine:init', () => {
 						drawPushArrows(_this.$refs.pushArrows, []);
 						const t = rest.turn;
 						if (puzzle && t) _puzzleOnTurn(t);
+						if (tutorial && t) _tutorialOnTurn(t);
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
@@ -1656,6 +1859,7 @@ document.addEventListener('alpine:init', () => {
 						}
 						handleGameOverEvent(rest);
 						if (puzzle) _puzzleOnGameOver(rest);
+						if (tutorial) _tutorialOnGameOver(rest);
 						return;
 					}
 
@@ -1933,6 +2137,172 @@ document.addEventListener('alpine:init', () => {
 					_this.puzzleSolutionNodes = ring;
 				};
 
+				// ---------------------------------------------------------------
+				// Tutorial (tutorial.html). A lesson is a start position and the
+				// input tokens it expects, in order. Every click reaches the
+				// controller as a token (a node, 'dash', 'pass', a spell name)
+				// through sendEvent, so _tutorialAccept vets it first: a wrong
+				// one shows the lesson's hint and restarts the lesson. The live
+				// GameController still applies every accepted token, so the
+				// board always follows the real rules.
+				//
+				// A step's `do` is a token; { oneOf: [...] } any one of them;
+				// { all: [...] } each of them once, in any order; or { any: true }
+				// any node the controller is offering (legal moves or stones to
+				// keep). `mark` lists extra nodes to ring for an { any } step.
+				// ---------------------------------------------------------------
+				function _tutorialLesson() {
+					return tutorial.lessons[_this.tutorialIndex];
+				}
+
+				function _tutorialStep() {
+					return _tutorialLesson().steps[_this.tutorialStep] || null;
+				}
+
+				// Nodes the controller is offering right now, or null when the
+				// prompt names none (dash sacrifices, push choices).
+				function _tutorialOffered() {
+					const offered = Object.assign({}, _this.validMoves || {}, _this.nodesToRefill || {});
+					return Object.keys(offered).length ? offered : null;
+				}
+
+				function _tutorialShowStep() {
+					const step = _tutorialStep();
+					const targets = {};
+					let action = '';
+					if (step && _this.tutorialStatus === 'playing') {
+						const d = step.do;
+						const tokens = typeof d === 'string' ? [d]
+							: d.all ? (_this._tutRemaining || d.all)
+							: d.oneOf ? d.oneOf : (step.mark || []);
+						for (const tok of tokens) {
+							if (NODE_ORDER.includes(tok)) targets[tok] = true;
+							else action = tok;
+						}
+					}
+					_this.tutorialTargets = targets;
+					_this.tutorialTargetAction = action;
+				}
+
+				function _tutorialAccept(message) {
+					if (message === 'reset') {
+						_tutorialRestart('');
+						return false;
+					}
+					if (_this.tutorialStatus !== 'playing') return false;
+					const step = _tutorialStep();
+					if (!step) return true;
+					const d = step.do;
+					const isNode = NODE_ORDER.includes(message);
+					const offered = isNode ? _tutorialOffered() : null;
+					// A node the controller is not offering would be refused (and
+					// re-prompted) by it, which would put the script out of step.
+					const legal = !offered || !!offered[message];
+					let ok = false;
+					if (typeof d === 'string') ok = message === d;
+					else if (d.oneOf) ok = d.oneOf.includes(message) && legal;
+					else if (d.all) ok = (_this._tutRemaining || d.all).includes(message) && legal;
+					else if (d.any) ok = isNode && legal;
+					if (!ok) {
+						_tutorialWrong();
+						return false;
+					}
+					if (d.all) {
+						const rest = (_this._tutRemaining || d.all).filter(t => t !== message);
+						_this._tutRemaining = rest.length ? rest : null;
+						if (rest.length) {
+							_tutorialShowStep();
+							return true;
+						}
+					}
+					_this.tutorialStep += 1;
+					_tutorialShowStep();
+					return true;
+				}
+
+				function _tutorialWrong() {
+					_tutorialRestart(_tutorialLesson().hint || 'Not quite. Try again.');
+				}
+				_this._tutorialWrong = _tutorialWrong;
+
+				function _tutorialSucceed() {
+					_this.tutorialStatus = 'done';
+					_this.tutorialHint = '';
+					_this.tutorialTargets = {};
+					_this.tutorialTargetAction = '';
+					_this.actionList = [];
+					_this.validMoves = {};
+					_this.awaiting = null;
+					const id = _tutorialLesson().id;
+					_this.tutorialDone = Object.assign({}, _this.tutorialDone, { [id]: Date.now() });
+					try {
+						localStorage.setItem('sigil_tutorial_done', JSON.stringify(_this.tutorialDone));
+					} catch (e) { /* storage blocked */ }
+				}
+
+				function _tutorialOnTurn(t) {
+					const lesson = _tutorialLesson();
+					if (t.color !== (lesson.mover || 'blue') || _this.tutorialStatus !== 'playing') return;
+					if (_tutorialStep()) {
+						// The turn ended before the script did.
+						_tutorialWrong();
+						return;
+					}
+					// A winning lesson finishes on the game_over that follows.
+					if (!lesson.win) _tutorialSucceed();
+				}
+
+				function _tutorialOnGameOver(payload) {
+					if (_this.tutorialStatus !== 'playing') return;
+					if (!_tutorialStep() && payload.winner === (_tutorialLesson().mover || 'blue')) _tutorialSucceed();
+					else _tutorialWrong();
+				}
+
+				function _tutorialRestart(hint) {
+					_this.tutorialStatus = 'playing';
+					_this.tutorialStep = 0;
+					_this.tutorialHint = hint;
+					_this._tutRemaining = null;
+					_this.winner = '';
+					_this.messageHistory = [];
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.lastPlay = '';
+					_this.nodesToRefill = {};
+					_this.playerToRefill = '';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.showReset = false;
+					_this.currentSfn = '';
+					_this.whoseTurn = '';
+					_turnCount = 0;
+					_tutorialShowStep();
+					initEngine();
+				}
+
+				if (tutorial) {
+					try {
+						_this.tutorialDone = JSON.parse(localStorage.getItem('sigil_tutorial_done') || '{}') || {};
+					} catch (e) {
+						_this.tutorialDone = {};
+					}
+					_tutorialShowStep();
+					_this.tutorialRestart = function () {
+						_tutorialRestart('');
+					};
+					_this.tutorialGo = function (i) {
+						if (i < 0 || i >= tutorial.lessons.length) return;
+						_this.tutorialIndex = i;
+						try {
+							const u = new URL(window.location.href);
+							u.searchParams.set('lesson', String(i + 1));
+							history.replaceState(null, '', u.toString());
+						} catch (e) { /* ignore */ }
+						_tutorialRestart('');
+						window.scrollTo({ top: 0, behavior: 'smooth' });
+					};
+				}
+
 				function handleAiThinkReportEvent(payload) {
 					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
 					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
@@ -2065,10 +2435,12 @@ document.addEventListener('alpine:init', () => {
 						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;
 					});
 
+					// The analysis board restarts on every navigation: no jump.
+					if (analysis) return;
 					setTimeout(() => {
 						if (_this.$refs.gameBoardContainer) {
 							_this.$refs.gameBoardContainer.scrollIntoView({
-								behavior: 'smooth',
+								behavior: sigilScrollBehavior(),
 								block: 'center',
 								inline: 'center',
 							});
@@ -2165,7 +2537,7 @@ document.addEventListener('alpine:init', () => {
 						setTimeout(() => {
 							const el = document.getElementById(`stone-node--${payload.node}`);
 							if (el) {
-								el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+								el.scrollIntoView({ behavior: sigilScrollBehavior(), block: 'center', inline: 'center' });
 							}
 						}, 50);
 					} else {
@@ -2295,8 +2667,8 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					// Save the finished game (and rate it, for AI games). Puzzles
-					// are never recorded.
-					if (!puzzle) {
+					// and analysis-board lines are never recorded.
+					if (!scripted && !analysis) {
 						_recordFinishedGame(payload.winner, aiMode);
 					}
 				}
@@ -2362,7 +2734,7 @@ document.addEventListener('alpine:init', () => {
 						const _priced = !!(_startPos && _recordSetup && _startPos.sfn === _recordSetup);
 						const _unratedWhy = unratedReason(_spellNames, recordVariant,
 							_fromPosition ? _recordSetup : null, _priced ? _startPos : null);
-						const _unrated = isGuest || !difficulty || !!_unratedWhy;
+						const _unrated = isGuest || !difficulty || !!_unratedWhy || _tookBack;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2440,15 +2812,10 @@ document.addEventListener('alpine:init', () => {
 						}
 
 						// Local 1v1 and guest games are never rated; no notice needed.
-						if (difficulty && !isGuest && _unratedWhy) {
-							_this.messageHistory.push({
-								'deathmatch': 'Unrated: Deathmatch games do not affect rating.',
-								'scramble': 'Unrated: Scramble games do not affect rating.',
-								'duplicates': 'Unrated: Allow Duplicates games do not affect rating.',
-								'pentagon': 'Unrated: Cataclysm board games do not affect rating.',
-								'unrated-pack': 'Unrated: Panda and Experimental spell games do not affect rating.',
-								'unpriced-start': 'Unrated: this game started from a position the engine did not price.',
-							}[_unratedWhy]);
+						if (difficulty && !isGuest && _tookBack && !_unratedWhy) {
+							_this.messageHistory.push('Unrated: a turn was taken back.');
+						} else if (difficulty && !isGuest && _unratedWhy) {
+							_this.messageHistory.push(describeUnratedReason(_unratedWhy));
 						}
 
 						_this._activeFinishingQueuedId = queuedId;
@@ -2539,6 +2906,10 @@ document.addEventListener('alpine:init', () => {
 				}
 
 			},
+
+			// Analysis board state and methods (analysis-board.js), spread
+			// last so its handleNodeClick (the editor) overrides the game's.
+			...((analysis && typeof analysisMixin === 'function') ? analysisMixin() : {}),
 		})
 	);
 });
@@ -2609,6 +2980,29 @@ function puzzleSfnKey(sfn) {
 	const key = [String(p[0]).split('/')[0], p[3], p[4], p[5]].join(' ');
 	const pm = p.slice(6).find(t => t.startsWith('pm:'));
 	return pm ? key + ' ' + pm : key;
+}
+
+/**
+ * A tutorial lesson's start position as SFN (tutorial.html). A lesson names
+ * its stones as space-separated node lists, `red` and `blue`, plus the nine
+ * spells, the side to move and turn number (`turn`, Blue's turns even), and
+ * optionally the spell counters `spellCounts` [red, blue] and `locks`
+ * [red, blue]. A lesson may give `sfn` directly instead.
+ */
+function tutorialLessonSfn(lesson) {
+	if (lesson.sfn) return lesson.sfn;
+	const order = boardLayoutDef('core').nodeOrder;
+	const red = String(lesson.red || '').split(/\s+/).filter(Boolean);
+	const blue = String(lesson.blue || '').split(/\s+/).filter(Boolean);
+	const stones = order.map(n => (red.includes(n) ? 'r' : blue.includes(n) ? 'b' : '.')).join('');
+	const tc = lesson.turn || 2;
+	const counts = lesson.spellCounts || [0, 0];
+	const locks = lesson.locks || ['-', '-'];
+	// Blue's phantom score stone counts toward the lead.
+	const lead = (blue.length + 1) - red.length;
+	const score = lead === 0 ? 'tied' : (lead > 0 ? 'b' : 'r') + Math.min(3, Math.abs(lead));
+	return stones + '/' + lesson.spells.join(',') + ' ' + (tc % 2 === 0 ? 'b' : 'r') + ' ' + tc
+		+ ' ' + counts[0] + ':' + counts[1] + ' ' + locks[0] + ':' + locks[1] + ' -:- ' + score;
 }
 
 /**

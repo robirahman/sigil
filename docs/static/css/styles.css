@@ -2542,3 +2542,278 @@ html[data-theme="parchment"] .review-bar__btn--exit {
 html[data-theme="parchment"] .side-picker { color: inherit; }
 .position-offer { margin: 8px auto 16px; max-width: 420px; color: #e0d0b0; }
 .position-offer small { display: block; opacity: 0.85; margin-top: 4px; }
+
+/* --- In-game settings panel and shortcut list (settings-panel.js) --- */
+
+.settings-toggle {
+	position: fixed;
+	top: 12px;
+	right: 56px;
+	z-index: 100;
+	background: rgba(0, 0, 0, 0.5);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	color: var(--color-text-warm);
+	width: 36px;
+	height: 36px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+}
+.settings-toggle:hover {
+	background: rgba(0, 0, 0, 0.7);
+	border-color: var(--color-text-dim);
+}
+/* Phones: under the mute button, clear of the header's sign-in link. */
+@media (max-width: 480px) {
+	.settings-toggle {
+		right: 12px;
+		top: 56px;
+	}
+}
+html[data-theme="parchment"] .settings-toggle {
+	background: rgba(160, 140, 110, 0.6);
+	color: var(--color-text);
+}
+
+.settings-panel {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.55);
+}
+.settings-panel[hidden] {
+	display: none;
+}
+.settings-panel__inner {
+	background: var(--color-surface, #1e1a2e);
+	border: 1px solid var(--color-border, #555);
+	border-radius: 12px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+	color: var(--color-text, #ddd);
+	font-family: 'Overlock', sans-serif;
+	max-height: calc(100vh - 32px);
+	max-width: 380px;
+	overflow-y: auto;
+	padding: 18px 20px;
+	width: 100%;
+}
+.settings-panel__title {
+	color: var(--color-text-warm, #e0d0b0);
+	font-family: 'Arvo', serif;
+	font-size: 1.2rem;
+	margin: 0 0 12px;
+}
+.settings-panel__row {
+	margin: 0 0 12px;
+}
+.settings-panel__row label {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.settings-panel__row label > span {
+	flex: 1 1 auto;
+}
+.settings-panel__row input[type="checkbox"] + span {
+	flex: 1 1 0;
+}
+.settings-panel__row select {
+	background: var(--color-surface-raised, #2a2440);
+	border: 1px solid var(--color-border, #555);
+	border-radius: 4px;
+	color: var(--color-text, #ddd);
+	font: inherit;
+	padding: 2px 6px;
+}
+.settings-panel__row input[type="range"] {
+	flex: 1 1 120px;
+	min-width: 0;
+}
+.settings-panel__value {
+	min-width: 3em;
+	text-align: right;
+}
+.settings-panel__hint {
+	color: var(--color-text-muted, #999);
+	display: block;
+	font-size: 0.85em;
+	margin-top: 2px;
+}
+.settings-panel__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: flex-end;
+	margin-top: 4px;
+}
+.settings-panel__btn {
+	background: var(--color-btn-menu, #2a4466);
+	border: 1px solid var(--color-border, #555);
+	border-radius: 6px;
+	color: #fff;
+	cursor: pointer;
+	font: inherit;
+	padding: 6px 12px;
+}
+.settings-panel__btn:hover {
+	background: var(--color-btn-menu-hover, #1d3355);
+}
+.shortcuts-overlay__list {
+	display: grid;
+	gap: 6px 12px;
+	grid-template-columns: auto 1fr;
+	margin: 0 0 12px;
+}
+.shortcuts-overlay__list dt {
+	text-align: right;
+	white-space: nowrap;
+}
+.shortcuts-overlay__list dd {
+	margin: 0;
+}
+.shortcuts-overlay__list kbd {
+	background: var(--color-surface-raised, #2a2440);
+	border: 1px solid var(--color-border, #555);
+	border-radius: 4px;
+	font-family: monospace;
+	padding: 1px 6px;
+}
+
+/* Keyboard focus on the board: nodes, spells and review-graph dots. */
+.stone-node:focus-visible,
+.spell:focus-visible {
+	outline: 3px solid var(--color-last-play-outline, #ffe14d);
+	outline-offset: 2px;
+}
+.ai-review-graph__dot:focus-visible {
+	outline: none;
+	stroke: #fff;
+	stroke-width: 2.5;
+}
+
+/* --- Animation level: html[data-motion] (settings-panel.js) ---
+   Reduced: no shake, zoom, twinkle, die roll or looping pulse. Each animation
+   still runs, just instantly, so the `animationend` listeners that remove
+   crushed stones and spell overlays still fire. Cues that a pulse carried
+   (legal moves, castable spells) stay, held still. Off: every animation and
+   transition, including the push slide and the spell overlays. Pages
+   without the settings script follow prefers-reduced-motion. */
+html:is([data-motion="reduced"], [data-motion="off"]) :is(.stone-node, .spell--available, .win-modal.is-visible, .game-clock__side--low, .spell-fx--shake),
+html:is([data-motion="reduced"], [data-motion="off"]) .stone-node::before,
+html:is([data-motion="reduced"], [data-motion="off"]) .stone-node::after,
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+	animation-delay: 0s !important;
+	animation-duration: 0.01ms !important;
+	animation-iteration-count: 1 !important;
+}
+html:is([data-motion="reduced"], [data-motion="off"]) .die,
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+	transition-delay: 0s !important;
+	transition-duration: 0.01ms !important;
+}
+html:is([data-motion="reduced"], [data-motion="off"]) :is(.stone-node--valid-move-red, .stone-node--valid-move-blue)::after {
+	opacity: 1;
+}
+html:is([data-motion="reduced"], [data-motion="off"]) .spell--available {
+	box-shadow: 0 0 6px 2px #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+	html:not([data-motion]) :is(.stone-node, .spell--available, .win-modal.is-visible, .game-clock__side--low, .spell-fx--shake),
+	html:not([data-motion]) .stone-node::before,
+	html:not([data-motion]) .stone-node::after {
+		animation-delay: 0s !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+	}
+	html:not([data-motion]) .die {
+		transition-duration: 0.01ms !important;
+	}
+	html:not([data-motion]) :is(.stone-node--valid-move-red, .stone-node--valid-move-blue)::after {
+		opacity: 1;
+	}
+	html:not([data-motion]) .spell--available {
+		box-shadow: 0 0 6px 2px #fff;
+	}
+}
+
+/* --- Colourblind markers: html[data-colourblind] (settings-panel.js) ---
+   Red is a diamond, blue a ring, wherever the two sides meet: stones (every
+   theme's pre-rendered art and the drawn boards share these classes), legal
+   move glows, spell locks, clocks and the bank. White with a dark edge reads
+   on every stone colour. A pushed stone keeps its yellow ring instead. */
+html[data-colourblind] :is(.stone-node--red, .stone-node--blue):not(.stone-node--push-source)::before {
+	content: "";
+	left: 50%;
+	pointer-events: none;
+	position: absolute;
+	top: 50%;
+	z-index: 1;
+}
+html[data-colourblind] .stone-node--red:not(.stone-node--push-source)::before {
+	background: #fff;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
+	height: 30%;
+	transform: translate(-50%, -50%) rotate(45deg);
+	width: 30%;
+}
+html[data-colourblind] .stone-node--blue:not(.stone-node--push-source)::before {
+	background: radial-gradient(circle closest-side, transparent 48%, rgba(0, 0, 0, 0.8) 52%, #fff 58%, #fff 82%, rgba(0, 0, 0, 0.8) 88%, transparent 94%);
+	border-radius: 50%;
+	height: 46%;
+	transform: translate(-50%, -50%);
+	width: 46%;
+}
+/* Legal-move glows on empty nodes: the same shapes, in the glow colour. */
+html[data-colourblind] :is(.stone-node--valid-move-red, .stone-node--valid-move-blue):not(.stone-node--red):not(.stone-node--blue)::before {
+	content: "";
+	left: 50%;
+	opacity: 0.85;
+	pointer-events: none;
+	position: absolute;
+	top: 50%;
+	z-index: 1;
+}
+html[data-colourblind] .stone-node--valid-move-red:not(.stone-node--red):not(.stone-node--blue)::before {
+	border: 2px solid var(--color-red-glow);
+	height: 26%;
+	transform: translate(-50%, -50%) rotate(45deg);
+	width: 26%;
+}
+html[data-colourblind] .stone-node--valid-move-blue:not(.stone-node--red):not(.stone-node--blue)::before {
+	border: 2px solid var(--color-blue-glow);
+	border-radius: 50%;
+	height: 36%;
+	transform: translate(-50%, -50%);
+	width: 36%;
+}
+/* Spell locks: red double, blue dashed. */
+html[data-colourblind] .spell--red-lock {
+	outline: 4px double #fff;
+	outline-offset: 6px;
+}
+html[data-colourblind] .spell--blue-lock {
+	outline: 3px dashed #fff;
+	outline-offset: 6px;
+}
+html[data-colourblind] .spell--red-lock.spell--blue-lock {
+	outline: 3px dotted #fff;
+}
+/* Clocks, timers, the bank and player names. */
+html[data-colourblind] :is(.game-clock__side--red, .cb-mark--red, .providence-bank__count--red, .ladder-details__card > .red .name)::before {
+	content: "\25C6\00A0";
+}
+html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-bank__count--blue, .ladder-details__card > .blue .name)::before {
+	content: "\25CB\00A0";
+}

@@ -117,6 +117,34 @@
 		}
 		.pagination__btn:hover { border-color: var(--color-text-dim); }
 		.pagination__btn:disabled { opacity: 0.4; cursor: default; }
+		.leaderboard-tools {
+			display: flex;
+			gap: 8px;
+			margin-bottom: 12px;
+		}
+		.leaderboard-search {
+			flex: 1;
+			min-width: 0;
+			padding: 6px 10px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.95em;
+		}
+		.leaderboard-table .provisional {
+			margin-left: 2px;
+			color: var(--color-text-dim);
+			cursor: help;
+		}
+		.leaderboard-table tr.is-me td { background: var(--color-surface-raised, rgba(136, 170, 255, 0.15)); }
+		.my-entry {
+			margin-top: 14px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.my-entry__note { color: var(--color-text-dim); font-size: 0.9em; }
 		.pagination__info {
 			padding: 6px 0;
 			color: var(--color-text-dim);
@@ -151,7 +179,13 @@
 			<p class="empty-msg" x-show="isOffline" x-cloak>Leaderboard rankings are unavailable while offline. <a href="./" style="color: inherit;">Back to menu</a> to play local games.</p>
 			<p class="empty-msg" x-show="!loading && !isOffline && allPlayers.length === 0" x-cloak x-text="tab === 'puzzles' ? 'No rated puzzle attempts yet.' : 'No ranked games played yet.'"></p>
 
-			<table class="leaderboard-table" x-show="!loading && allPlayers.length > 0" x-cloak>
+			<div class="leaderboard-tools" x-show="!loading && allPlayers.length > 0" x-cloak>
+				<input class="leaderboard-search" type="search" x-model="query" x-on:input="page = 0" placeholder="Search players" aria-label="Search players by name" />
+				<button class="pagination__btn" x-show="myUid" x-on:click="findMe()">Find me</button>
+			</div>
+			<p class="empty-msg" x-show="!loading && allPlayers.length > 0 && filteredPlayers.length === 0" x-cloak x-text="'No player in the top ' + limit + ' matches \u201c' + query + '\u201d.'"></p>
+
+			<table class="leaderboard-table" x-show="!loading && filteredPlayers.length > 0" x-cloak>
 				<thead>
 					<tr>
 						<th>#</th>
@@ -162,13 +196,13 @@
 				</thead>
 				<tbody>
 					<template x-for="(player, index) in pagePlayers" x-bind:key="player.uid">
-						<tr>
-							<td x-text="pageStart + index + 1"></td>
+						<tr x-bind:id="'lb-row-' + player.uid" x-bind:class="{ 'is-me': player.uid === highlightUid }">
+							<td x-text="player.rank"></td>
 							<td class="name" x-bind:class="{ 'name--ai': player.isAI, 'name--dev': player.isDeveloper }">
 								<a x-bind:href="'profile.html?uid=' + player.uid" x-bind:class="{ 'name--ai': player.isAI, 'name--dev': player.isDeveloper }" style="color: inherit; text-decoration: none;" x-text="player.displayName"></a>
 								<template x-if="player.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
 							</td>
-							<td class="elo" x-text="player.elo"></td>
+							<td class="elo"><span x-text="player.elo"></span><template x-if="player.gamesPlayed < provisionalGames"><span class="provisional" x-bind:title="'Provisional: fewer than ' + provisionalGames + ' rated games'" x-bind:aria-label="'provisional, fewer than ' + provisionalGames + ' rated games'">?</span></template></td>
 							<td x-text="player.gamesPlayed"></td>
 						</tr>
 					</template>
@@ -179,6 +213,17 @@
 				<button class="pagination__btn" x-on:click="prevPage" x-bind:disabled="page === 0">&larr; Prev</button>
 				<span class="pagination__info" x-text="(page + 1) + ' / ' + totalPages"></span>
 				<button class="pagination__btn" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1">Next &rarr;</button>
+			</div>
+
+			<div class="my-entry" x-show="myEntry" x-cloak>
+				<template x-if="myEntry">
+					<div>
+						<strong x-text="myEntry.displayName"></strong>:
+						<span x-text="myEntry.elo"></span><span class="provisional" x-show="myEntry.gamesPlayed < provisionalGames" x-bind:title="'Provisional: fewer than ' + provisionalGames + ' rated games'">?</span>
+						(<span x-text="myEntry.gamesPlayed"></span> games)
+						<div class="my-entry__note" x-text="'Not in the top ' + limit + '.'"></div>
+					</div>
+				</template>
 			</div>
 
 			<a class="back-link" href="./">&larr; Back to menu</a>
@@ -212,9 +257,25 @@
 				isOffline: !navigator.onLine,
 				page: 0,
 				perPage: 100,
+				// Only the top `limit` ratings are loaded.
+				limit: 200,
+				// Fewer rated games than this marks a rating provisional.
+				provisionalGames: 10,
+				query: '',
+				// The signed-in player (not a guest), their highlighted row, and
+				// their own entry when they are outside the loaded rows.
+				myUid: null,
+				highlightUid: null,
+				myEntry: null,
+
+				get filteredPlayers() {
+					const q = this.query.trim().toLowerCase();
+					if (!q) return this.allPlayers;
+					return this.allPlayers.filter((p) => p.displayName.toLowerCase().includes(q));
+				},
 
 				get totalPages() {
-					return Math.max(1, Math.ceil(this.allPlayers.length / this.perPage));
+					return Math.max(1, Math.ceil(this.filteredPlayers.length / this.perPage));
 				},
 
 				get pageStart() {
@@ -222,7 +283,34 @@
 				},
 
 				get pagePlayers() {
-					return this.allPlayers.slice(this.pageStart, this.pageStart + this.perPage);
+					return this.filteredPlayers.slice(this.pageStart, this.pageStart + this.perPage);
+				},
+
+				/** Scroll to the signed-in player's row, or show their entry if outside the top. */
+				async findMe() {
+					if (!this.myUid) return;
+					this.query = '';
+					const i = this.allPlayers.findIndex((p) => p.uid === this.myUid);
+					if (i >= 0) {
+						this.myEntry = null;
+						this.page = Math.floor(i / this.perPage);
+						this.highlightUid = this.myUid;
+						this.$nextTick(() => {
+							const row = document.getElementById('lb-row-' + this.myUid);
+							if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						});
+						return;
+					}
+					try {
+						const d = (await firebase.database().ref('users/' + this.myUid).once('value')).val() || {};
+						this.myEntry = {
+							displayName: d.displayName || 'You',
+							elo: d.elo ?? 1000,
+							gamesPlayed: d.gamesPlayed || 0,
+						};
+					} catch (e) {
+						console.error('Failed to load your rating:', e);
+					}
 				},
 
 				prevPage() { if (this.page > 0) this.page--; },
@@ -262,26 +350,38 @@
 
 					// Fetch leaderboard
 					try {
-						const snap = await db.ref('leaderboard')
-							.orderByChild('elo')
-							.once('value');
-
-						const results = [];
-						snap.forEach((child) => {
-							const data = child.val();
-							const gamesPlayed = data.gamesPlayed || 0;
-							if (gamesPlayed === 0) return;
-							results.push({
-								uid: child.key,
-								displayName: data.displayName || 'Unknown',
-								elo: data.elo ?? 1000,
-								gamesPlayed: gamesPlayed,
-								isAI: data.isAI || false,
-								isDeveloper: data.isDeveloper || false,
+						// The limit must apply to displayed (played) entries:
+						// zero-game records (e.g. seeded AIs) can sit inside the
+						// top Elo window, so over-fetch until `limit` eligible
+						// entries are found or the leaderboard is exhausted.
+						let fetchN = this.limit;
+						let results = [];
+						for (;;) {
+							const snap = await db.ref('leaderboard')
+								.orderByChild('elo')
+								.limitToLast(fetchN)
+								.once('value');
+							results = [];
+							snap.forEach((child) => {
+								const data = child.val();
+								const gamesPlayed = data.gamesPlayed || 0;
+								if (gamesPlayed === 0) return;
+								results.push({
+									uid: child.key,
+									displayName: data.displayName || 'Unknown',
+									elo: data.elo ?? 1000,
+									gamesPlayed: gamesPlayed,
+									isAI: data.isAI || false,
+									isDeveloper: data.isDeveloper || false,
+								});
 							});
-						});
+							if (results.length >= this.limit || snap.numChildren() < fetchN) break;
+							fetchN += (this.limit - results.length) + 50;
+						}
+						results = results.slice(-this.limit);
 
 						this.allPlayers = results.reverse();
+						this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
 					} catch (e) {
 						console.error('Failed to load leaderboard:', e);
 					}
@@ -294,6 +394,8 @@
 					await new Promise(resolve => {
 						const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
 					});
+					const u = firebase.auth().currentUser;
+					this.myUid = u && !u.isAnonymous ? u.uid : null;
 					// Only sign in anonymously if truly no user (don't overwrite real sessions)
 					if (!firebase.auth().currentUser) {
 						await firebase.auth().signInAnonymously();

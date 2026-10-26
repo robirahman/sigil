@@ -34,26 +34,85 @@ class AuthManager {
 
 	/**
 	 * Sign up with email, password, and display name.
-	 * Creates the Firebase Auth account and RTDB profile.
+	 * Creates the Firebase Auth account and RTDB profile. A guest (anonymous)
+	 * session is upgraded in place with linkWithCredential, so the uid and
+	 * everything recorded under it (games, active rooms) carry over.
 	 */
 	async signUpWithEmail(email, password, displayName) {
-		const cred = await this.auth.createUserWithEmailAndPassword(email, password);
-		await cred.user.updateProfile({ displayName });
-		await this.ensureUserProfile(firebase.database(), displayName);
+		const guest = this.auth.currentUser;
+		// Read before linking: the linked user is no longer anonymous.
+		const upgrading = !!(guest && guest.isAnonymous);
+		let cred;
+		if (upgrading) {
+			const emailCred = firebase.auth.EmailAuthProvider.credential(email, password);
+			cred = await guest.linkWithCredential(emailCred);
+		} else {
+			cred = await this.auth.createUserWithEmailAndPassword(email, password);
+		}
+		this.currentUser = cred.user;
+		// The link has succeeded: publish it now, so a failure below still
+		// leaves the page showing the (no longer anonymous) account.
+		if (upgrading) this._adoptLinkedUser(cred.user);
+		await AuthManager._afterLink(cred.user, upgrading, async () => {
+			await cred.user.updateProfile({ displayName });
+			await this.ensureUserProfile(firebase.database(), displayName);
+		});
+		if (upgrading) AuthManager._notifyUpgrade();
 		return cred.user;
 	}
 
 	/** Sign in with email and password. */
 	async signInWithEmail(email, password) {
 		const cred = await this.auth.signInWithEmailAndPassword(email, password);
+		this.currentUser = cred.user;
 		await this.ensureUserProfile(firebase.database());
 		return cred.user;
 	}
 
-	/** Sign in with Google popup. */
-	async signInWithGoogle() {
+	/**
+	 * Sign in with Google popup. A guest session is linked to the Google
+	 * account instead (keeping its uid) unless opts.link is false.
+	 * On auth/credential-already-in-use the Google account already has its own
+	 * Sigil account: the caller can offer signInWithGoogleCredential(e.credential).
+	 */
+	async signInWithGoogle(opts) {
+		const link = !opts || opts.link !== false;
 		const provider = new firebase.auth.GoogleAuthProvider();
-		const cred = await this.auth.signInWithPopup(provider);
+		const guest = this.auth.currentUser;
+		// Read before linking: the linked user is no longer anonymous.
+		const upgrading = !!(link && guest && guest.isAnonymous);
+		let cred;
+		if (upgrading) {
+			cred = await guest.linkWithPopup(provider);
+			this.currentUser = cred.user;
+			this._adoptLinkedUser(cred.user);
+		} else {
+			cred = await this.auth.signInWithPopup(provider);
+			this.currentUser = cred.user;
+		}
+		await AuthManager._afterLink(cred.user, upgrading, async () => {
+			if (upgrading) {
+				// Linking keeps the guest's (empty) Auth profile; copy the Google name.
+				const g = (cred.user.providerData || []).find(p => p && p.providerId === 'google.com');
+				if (!cred.user.displayName && g && g.displayName) {
+					await cred.user.updateProfile({ displayName: g.displayName });
+				}
+			}
+			await this.ensureUserProfile(firebase.database());
+		});
+		if (upgrading) AuthManager._notifyUpgrade();
+		return cred.user;
+	}
+
+	/**
+	 * Sign in with a Google credential already obtained by a failed link
+	 * (error.credential on auth/credential-already-in-use), so the user is not
+	 * shown a second popup. Falls back to the popup when there is none.
+	 */
+	async signInWithGoogleCredential(credential) {
+		if (!credential) return this.signInWithGoogle({ link: false });
+		const cred = await this.auth.signInWithCredential(credential);
+		this.currentUser = cred.user;
 		await this.ensureUserProfile(firebase.database());
 		return cred.user;
 	}
@@ -80,6 +139,121 @@ class AuthManager {
 			}
 		}
 		return this.getUserInfo();
+	}
+
+	/**
+	 * Send a password reset email. Firebase's email-enumeration protection
+	 * makes this succeed for unknown addresses too, so callers should word the
+	 * success message as "if an account exists".
+	 */
+	async sendPasswordReset(email) {
+		await this.auth.sendPasswordResetEmail((email || '').trim());
+	}
+
+	/**
+	 * Which re-authentication the signed-in user can do: 'password', 'google',
+	 * or null. Password wins when both are linked (no popup needed).
+	 */
+	get reauthMethod() {
+		const user = this.auth.currentUser;
+		if (!user) return null;
+		const ids = (user.providerData || []).map(p => p && p.providerId);
+		if (ids.includes('password')) return 'password';
+		if (ids.includes('google.com')) return 'google';
+		return null;
+	}
+
+	/**
+	 * True when the last sign-in is recent enough for sensitive operations.
+	 * Firebase demands a sign-in within about five minutes for user.delete();
+	 * checking first lets deleteAccount re-authenticate before removing data.
+	 */
+	async isRecentLogin(maxAgeMs) {
+		const user = this.auth.currentUser;
+		if (!user) return false;
+		try {
+			const tok = await user.getIdTokenResult();
+			const t = Date.parse(tok.authTime);
+			return Number.isFinite(t) && Date.now() - t < (maxAgeMs || 4 * 60 * 1000);
+		} catch (e) {
+			return false;
+		}
+	}
+
+	/** Re-authenticate with the password (email accounts) or a Google popup. */
+	async reauthenticate(password) {
+		const user = this.auth.currentUser;
+		if (!user) throw new Error('Not signed in');
+		if (this.reauthMethod === 'password') {
+			const cred = firebase.auth.EmailAuthProvider.credential(user.email, password || '');
+			await user.reauthenticateWithCredential(cred);
+		} else {
+			await user.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+		}
+	}
+
+	/**
+	 * Delete the signed-in account through the deleteUserData callable
+	 * (functions/index.js). The server removes the player's own records,
+	 * anonymises their name in completed_games and opponents' user_games,
+	 * and deletes the Auth user; the client only signs out afterwards.
+	 * It refuses a sign-in older than five minutes with failed-precondition /
+	 * 'requires-recent-login' (see isRecentRequiredError): re-authenticate and
+	 * call again.
+	 */
+	async deleteAccount() {
+		if (!this.auth.currentUser) throw new Error('Not signed in');
+		await firebase.functions().httpsCallable('deleteUserData')();
+		this.userProfile = null;
+		// The Auth user is gone server-side; drop the cached session.
+		try { await this.auth.signOut(); } catch (e) { /* already invalid */ }
+	}
+
+	/**
+	 * A guest was just linked. Linking does not fire onAuthStateChanged, so
+	 * run this manager's auth callbacks and refresh the header as if it had.
+	 */
+	_adoptLinkedUser(user) {
+		this.currentUser = user;
+		for (const cb of this._onAuthChangedCallbacks) {
+			try {
+				const r = cb(user);
+				if (r && typeof r.catch === 'function') r.catch(e => console.warn('auth callback failed:', e));
+			} catch (e) { console.warn('auth callback failed:', e); }
+		}
+		AuthManager._notifyUpgrade();
+	}
+
+	/**
+	 * Run the profile setup that follows a sign-up or link. When a guest
+	 * link has already succeeded, a failure here must not read as a failed
+	 * upgrade: the error carries `upgradedUser` so callers keep the account.
+	 */
+	static async _afterLink(user, upgraded, setup) {
+		try {
+			await setup();
+		} catch (e) {
+			if (upgraded && e && typeof e === 'object') e.upgradedUser = user;
+			throw e;
+		}
+	}
+
+	/**
+	 * Tell other auth observers on the page (auth-status.js's header) that a
+	 * guest was upgraded: linking does not fire onAuthStateChanged.
+	 */
+	static _notifyUpgrade() {
+		if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+			window.dispatchEvent(new CustomEvent('sigil-auth-refresh'));
+		}
+	}
+
+	/** True for the "sign in again first" refusals from Auth or deleteUserData. */
+	static isRecentLoginError(e) {
+		if (!e) return false;
+		if (e.code === 'auth/requires-recent-login') return true;
+		const code = String(e.code || '').replace(/^functions\//, '');
+		return code === 'failed-precondition' && /requires-recent-login/.test(e.message || '');
 	}
 
 	/** Sign out. */
@@ -252,12 +426,15 @@ class AuthManager {
 		const snap = await ref.once('value');
 		const existing = snap.val() || {};
 
-		// Priority: explicit signup arg → existing RTDB record → Auth profile → 'Player'.
-		// 'Player' is reachable only when no name has ever been recorded anywhere.
+		// Priority: explicit signup arg → existing RTDB record → Auth profile →
+		// a linked provider's name (a Google link whose updateProfile failed)
+		// → 'Player'. 'Player' is reachable only when no name exists anywhere.
+		const authName = this.currentUser.displayName ||
+			(this.currentUser.providerData || []).map(p => p && p.displayName).find(Boolean) || null;
 		const resolvedName =
 			displayName ||
 			existing.displayName ||
-			this.currentUser.displayName ||
+			authName ||
 			'Player';
 
 		if (!snap.exists()) {
@@ -278,11 +455,11 @@ class AuthManager {
 			if (displayName && displayName !== existing.displayName) {
 				await ref.child('displayName').set(displayName);
 				this.userProfile.displayName = displayName;
-			} else if (!existing.displayName && this.currentUser.displayName) {
+			} else if (!existing.displayName && authName) {
 				// Skeletal record (created by elo.js multi-path update without a name).
 				// Backfill from Auth profile only — never write the 'Player' literal.
-				await ref.child('displayName').set(this.currentUser.displayName);
-				this.userProfile.displayName = this.currentUser.displayName;
+				await ref.child('displayName').set(authName);
+				this.userProfile.displayName = authName;
 			}
 		}
 

@@ -6,6 +6,7 @@
 | `recordRoom` | `rooms/{code}/status` → finished | Writes the game's `completed_games` record and `rooms/{code}/gameId`. |
 | `expireClocks` | every minute | Ends playing rooms whose clock ran out with no tab open (from the turns' server timestamps). |
 | `settleAbort` | new `rooms/{code}/abortedBy` | An abort after both players moved becomes a forfeit by the aborter. |
+| `notifyTurn` | new `rooms/{code}/turns/{id}` | Web push to the player now to move (`notify.js`): correspondence games, and realtime ones whose player to move has no tab open. Tokens from `push_tokens/{uid}` (owner-only); tokens FCM reports dead are removed. Only logged on the emulator. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
 
 ## How a result is checked
@@ -24,6 +25,10 @@
 - **Duplicates:** each game is rated once. `rating_claims/` is keyed by room, or by a hash of an AI game's transcript.
 - **Unrated games** are written to `user_games` with `rated: false` and the reason.
 
+## Whose move, and the clocks
+
+`docs/static/scripts/engine/room-clock.js` (`roomTurns`, `sideToMove`, `roomTimeLeft`) is the one rule for whose move it is and how long they have, from the turns' server timestamps. The functions `require()` it (`engine-loader.js requireShared`; copied with the engine at deploy) and the site's active-games list and "Your move" badge load it as a script.
+
 ## Tests
 
 ```sh
@@ -35,7 +40,9 @@ npm run test:e2e     # rules + functions + auth emulators, through the client SD
 
 `test/online-game.json` is a complete game of input transcripts. It is produced by `node test/gen-online-fixture.js`.
 
-`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators (see its header).
+`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators (see its header); `show-data-emulator-test.js` checks the Rated / Casual badges, the spectator count and the rating line after a game, and `leaderboard-emulator-test.js` the leaderboard.
+
+`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators, and `tools/browser/lobby-emulator-test.js` the open games, quick pair and Watch Live lists (see their headers).
 
 ## Deploy
 
@@ -48,4 +55,5 @@ npm run test:e2e     # rules + functions + auth emulators, through the client SD
    ```
 
    The rules take rating writes away from the clients, so the function has to be live first. `firebase.json`'s predeploy step copies the engine files into `functions/engine/`.
-4. Pages cached by older clients still try to write ratings themselves. Those writes are now refused, and the function rates those games anyway.
+4. For "Notify me when it's my move": Console → Project settings → Cloud Messaging → Web Push certificates → Generate key pair, and put the public key in `FCM_VAPID_KEY` (`docs/static/scripts/turn-notify.js`). Until then the toggle is hidden; in-tab notifications work without it.
+5. Pages cached by older clients still try to write ratings themselves. Those writes are now refused, and the function rates those games anyway.

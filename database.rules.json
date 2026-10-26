@@ -95,11 +95,23 @@
         },
         "ranked": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
+          ".validate": "newData.isBoolean() && (newData.val() === false || newData.parent().child('casual').val() !== true)"
+        },
+        "public": {
           ".validate": "newData.isBoolean()"
         },
+        "casual": {
+          ".validate": "newData.isBoolean()"
+        },
+        "creatorColor": {
+          ".validate": "(newData.val() === 'red' || newData.val() === 'blue') && auth !== null && newData.parent().child(newData.val() + '/uid').val() === auth.uid"
+        },
         "turns": {
+          ".indexOn": [
+            "timestamp"
+          ],
           "$turnId": {
-            ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))",
+            ".write": "(auth !== null && !data.exists() && (!newData.child('after').exists() || root.child('rooms/' + $roomId + '/turns/' + newData.child('after').val()).exists()) && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))) || (auth !== null && data.exists() && !newData.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && root.child('rooms/' + $roomId + '/takeback/keys/' + $turnId).exists() && ((root.child('rooms/' + $roomId + '/takeback/by').val() === 'red' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid) || (root.child('rooms/' + $roomId + '/takeback/by').val() === 'blue' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid)))",
             ".validate": "newData.hasChildren(['color', 'actions', 'timestamp']) && newData.child('timestamp').val() === now"
           }
         },
@@ -160,11 +172,29 @@
         "startedAt": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
           ".validate": "newData.val() === now"
+        },
+        "takeback": {
+          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
+          ".validate": "(newData.child('by').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.child('by').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)"
         }
       },
       ".indexOn": [
         "status"
       ]
+    },
+    "open_rooms": {
+      ".read": true,
+      "$code": {
+        ".write": "auth !== null && ((newData.exists() && (newData.parent().parent().child('rooms/' + $code + '/status').val() === 'waiting' && newData.parent().parent().child('rooms/' + $code + '/public').val() === true && ((newData.parent().parent().child('rooms/' + $code + '/creatorColor').val() === 'blue' && newData.parent().parent().child('rooms/' + $code + '/blue/uid').val() === auth.uid) || (newData.parent().parent().child('rooms/' + $code + '/creatorColor').val() !== 'blue' && newData.parent().parent().child('rooms/' + $code + '/red/uid').val() === auth.uid)))) || (!newData.exists() && (newData.parent().parent().child('rooms/' + $code + '/status').val() !== 'waiting' || newData.parent().parent().child('rooms/' + $code + '/public').val() !== true || ((newData.parent().parent().child('rooms/' + $code + '/creatorColor').val() === 'blue' && newData.parent().parent().child('rooms/' + $code + '/blue/uid').val() === auth.uid) || (newData.parent().parent().child('rooms/' + $code + '/creatorColor').val() !== 'blue' && newData.parent().parent().child('rooms/' + $code + '/red/uid').val() === auth.uid)))))",
+        ".validate": "newData.val() === true"
+      }
+    },
+    "live_rooms": {
+      ".read": true,
+      "$code": {
+        ".write": "auth !== null && ((newData.exists() && (newData.parent().parent().child('rooms/' + $code + '/status').val() === 'playing' && newData.parent().parent().child('rooms/' + $code + '/allowSpectators').val() !== false && newData.parent().parent().child('rooms/' + $code + '/local').val() !== true && (newData.parent().parent().child('rooms/' + $code + '/red/uid').val() === auth.uid || newData.parent().parent().child('rooms/' + $code + '/blue/uid').val() === auth.uid))) || (!newData.exists() && (newData.parent().parent().child('rooms/' + $code + '/status').val() !== 'playing' || newData.parent().parent().child('rooms/' + $code + '/allowSpectators').val() === false || (newData.parent().parent().child('rooms/' + $code + '/red/uid').val() === auth.uid || newData.parent().parent().child('rooms/' + $code + '/blue/uid').val() === auth.uid))))",
+        ".validate": "newData.val() === true"
+      }
     },
     "completed_games": {
       ".read": false,
@@ -236,6 +266,18 @@
         ".read": true,
         "$roomCode": {
           ".write": "auth !== null && (auth.uid === $uid || (!newData.exists() && (root.child('rooms/' + $roomCode + '/red/uid').val() === auth.uid || root.child('rooms/' + $roomCode + '/blue/uid').val() === auth.uid)))"
+        }
+      }
+    },
+    "push_tokens": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "$tokenHash": {
+          ".write": "auth !== null && auth.uid === $uid",
+          ".validate": "$tokenHash.matches(/^[0-9a-f]{32}$/) && newData.hasChildren(['token', 'created']) && newData.child('token').isString() && newData.child('token').val().length <= 4096 && newData.child('created').val() === now",
+          "$other": {
+            ".validate": "$other === 'token' || $other === 'created'"
+          }
         }
       }
     },

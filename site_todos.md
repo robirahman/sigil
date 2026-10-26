@@ -19,9 +19,9 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Onboarding & learning
 
-- [ ] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
+- [x] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
   Rebuild it on `GameController` with scripted positions, as puzzles do.
-- [ ] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
+- [x] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
 - [ ] **Add a page per spell**, with rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
   Spell text is currently only a hover `title` tooltip on `docs/spells.html`, which doesn't work on touch screens.
 - [ ] **Add rules pages for the variants** (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
@@ -30,31 +30,31 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Online play & community
 
-- [ ] **Add an open-game lobby / quick-pair.** Online play is room-code only.
+- [x] **Add an open-game lobby / quick-pair.** Done: "List in the open-games lobby" on the create form, an Open Games list (creator, rating, clock, variant, rated/casual, your colour; your own seek with Cancel) and Quick pair, which joins the oldest matching seek or lists one. Online play is room-code only.
   Add a "seek a game at this time control" list.
-- [ ] **Add a "watch live games" list** for rooms that allow spectators. Spectating currently needs a shared link.
-- [ ] **Add turn notifications for correspondence games** (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
+- [x] **Add a "watch live games" list** (done: Watch Live in the lobby, the 20 most recently active games with a player present) for rooms that allow spectators. Spectating currently needs a shared link.
+- [x] **Add turn notifications for correspondence games** Done: an open site tab notifies when it becomes your move (correspondence, or any game while the tab is hidden), and "Notify me when it's my move" on active-games.html registers a web push (FCM) that the `notifyTurn` function sends; needs the FCM web push key in `turn-notify.js`. (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
 - [x] **Handle disconnects properly.** Done: the server stamps `disconnectedAt` on a dropped seat; the opponent sees a countdown, "reconnected", and after 60 s can claim the game (checked by the rating function); the `expireClocks` function ends flagged games with no tab open. Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
-- [ ] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move: done (later aborts count as forfeits). Draws and takebacks: open.
+- [x] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move and takebacks by agreement: done. Draw offers: not applicable (Sigil has no draws; threefold repetition is a Blue win).
 - [ ] **Add in-game chat or preset emotes.**
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
-- [ ] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
+- [x] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
 - [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.
 
 ## Showing data the site already stores
 
-- [ ] **Show the rating change after a game** (e.g. +12 / −8). `eloChange` and the before/after Elo are stored but never shown.
-- [ ] **Show whether a game is rated**, before and during it (`docs/multiplayer.html:261` only says "Sign in for ranked play").
-- [ ] **Show the spectator count to players.** It is written to `rooms/X/spectators` but never displayed.
+- [x] **Show the rating change after a game** (e.g. +12 / −8). Done: each signed-in player's game-over modal and log show the server's `user_games` entry ("Rating: +12 (1456 → 1468)" or "Unrated: <why>"). `eloChange` and the before/after Elo are stored but never shown.
+- [x] **Show whether a game is rated**, before and during it. Done: a Rated / Casual badge for the typed room code, the waiting room and the position-join screen, and in the game header (`docs/multiplayer.html:261` only says "Sign in for ranked play").
+- [x] **Show the spectator count to players.** Done: an eye and count in the game header. It is written to `rooms/X/spectators` but never displayed.
 - [x] **Keep unrated, variant and casual games in profile history.** Done: `rateGame` indexes every signed-in game, marked `rated: false` when unrated. `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
 - [ ] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`.
-- [ ] **Improve the leaderboard** (`docs/leaderboard.html`):
-  - [ ] Add a provisional-rating marker or a minimum number of games.
-  - [ ] Add player search and "find me".
-  - [ ] Load only the top N (`limitToLast`) instead of every entry.
-- [ ] **Merge the lobby's "Active Games" list into `docs/active-games.html`.** The lobby list reads localStorage (`docs/multiplayer.html:1093-1120`) and shows "Waiting..." for every untimed game.
+- [x] **Improve the leaderboard** (`docs/leaderboard.html`):
+  - [x] Add a provisional-rating marker or a minimum number of games. Done: "?" under 10 games.
+  - [x] Add player search and "find me".
+  - [x] Load only the top N (`limitToLast`) instead of every entry. Done: top 200.
+- [x] **Merge the lobby's "Active Games" list into `docs/active-games.html`.** Done: the lobby links there with a count. The lobby list reads localStorage (`docs/multiplayer.html:1093-1120`) and shows "Waiting..." for every untimed game.
 
 ## Puzzles
 
@@ -66,22 +66,23 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Game screen
 
-- [ ] **Add undo / takeback in local and AI games.** "Reset Turn" only rolls back within the current turn (`docs/game.html:461-467`).
-- [ ] **Add an in-game settings panel** for theme, volume (not just mute), art-only spell circles and animation level.
+- [x] **Add undo / takeback in local and AI games.** Done: Take back undoes your last turn (and the AI's reply); a rated AI game becomes unrated. "Reset Turn" only rolls back within the current turn (`docs/game.html:461-467`).
+- [x] **Add an in-game settings panel** for theme, volume (not just mute), art-only spell circles and animation level.
   These settings are spread across `docs/index.html` and `docs/account.html` today.
-- [ ] **Accessibility:**
-  - [ ] Add `aria-live` to the game log.
-  - [ ] Have board node labels announce what is on the node, whether it is a legal move, and whether it was the last play (currently `aria-label=node`, `docs/game.html:695`).
-  - [ ] Add `aria-label` or `title` to icon-only buttons: mute (`docs/game.html:239`) and the review arrows (`docs/game.html:775-786`).
-  - [ ] Give the win modal `role="dialog"` and focus management.
-  - [ ] Make spell tooltips open on keyboard focus.
-  - [ ] Make the AI-review graph dots reachable by keyboard.
-- [ ] **Add a colourblind mode.** Red and blue are told apart by colour alone in stones, glows and clocks. Add shape or pattern markers.
-- [ ] **Respect `prefers-reduced-motion`.** Screen shake (`docs/static/scripts/spell-effects.js`), pulsing and twinkle animations always run.
-- [ ] **Keyboard shortcuts:**
-  - [ ] Add a `?` overlay that lists them.
-  - [ ] Add Escape to close tooltips and reset.
-  - [ ] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
+- [x] **Accessibility:**
+  - [x] Add `aria-live` to the game log.
+  - [x] Have board node labels announce what is on the node, whether it is a legal move, and whether it was the last play (currently `aria-label=node`, `docs/game.html:695`).
+  - [x] Add `aria-label` or `title` to icon-only buttons: mute (`docs/game.html:239`) and the review arrows (`docs/game.html:775-786`).
+  - [x] Give the win modal `role="dialog"` and focus management.
+  - [x] Make spell tooltips open on keyboard focus.
+  - [x] Make the AI-review graph dots reachable by keyboard.
+- [x] **Add a colourblind mode.** Red and blue are told apart by colour alone in stones, glows and clocks. Add shape or pattern markers.
+- [x] **Respect `prefers-reduced-motion`.** Screen shake (`docs/static/scripts/spell-effects.js`), pulsing and twinkle animations always run.
+- [x] **Keyboard shortcuts:**
+  - [x] Add a `?` overlay that lists them.
+  - [x] Add Escape to close tooltips and reset.
+    Escape closes tooltips, dialogs and an armed End Turn / Forfeit; it does not reset the turn (never documented, and one stray key would undo a placed stone).
+  - [x] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
 - [ ] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`).
   The `beforeunload` warning is disabled on Safari.
 
@@ -93,8 +94,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### Pairing & ratings
 
 - [ ] **Add matchmaking pools** that pair players automatically within a rating range, alongside the open-game lobby.
-- [ ] **Let a friend-challenge link choose colour** (random, red or blue).
-- [ ] **Let players choose rated or casual per game.**
+- [x] **Let a friend-challenge link choose colour** (random, red or blue). Done: every room records `creatorColor`.
+- [x] **Let players choose rated or casual per game.** Done: a casual room (`casual: true`) is held at `ranked: false` by the rules.
 - [ ] **Split ratings by time control and variant** (bullet, blitz, rapid, correspondence; Cataclysm etc.) instead of one Elo.
 - [ ] **Move to Glicko-2** with a provisional `?` marker, and show rating ranges on open games.
 
@@ -106,14 +107,16 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add zen mode** that hides everything but the board and clocks.
 - [ ] **Add board flip** and a choice of which side the board is drawn from.
 - [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Vacation / pause is open: it changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [ ] **Let players draw arrows and circles** on the board during play and analysis.
-- [ ] **Add volume, animation speed and move confirmation** to the in-game settings panel.
+- [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
+  Animation speed is the full / reduced / off level; move confirmation asks before End Turn.
 
 ### Analysis & study
 
-- [ ] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
-- [ ] **Add a board editor** to set up a position and play it against the AI or a friend.
+- [x] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
+- [x] **Add a board editor** to set up a position and play it against the AI or a friend.
 - [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
 - [ ] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
 - [ ] **Add an evaluation cache** so already-analysed positions load instantly.
@@ -134,7 +137,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add a node-naming trainer** for the board coordinates.
 - [ ] **Add classes** where teachers manage students and track their progress.
 - [ ] **Add a coach directory and a video library.**
-- [ ] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
+- [x] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
 
 ### Competitions
 
@@ -165,7 +168,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add game search** by player, result, spell layout and date.
 - [ ] **Add bulk export** of all a player's games.
 - [ ] **Add trophies, badges and verified titles.**
-- [ ] **Add account closing, two-factor authentication and an active-sessions list.**
+- [x] **Add account closing** (Danger zone on the account page).
+- [ ] **Add two-factor authentication and an active-sessions list.**
 - [ ] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode.
 - [ ] **Translate the interface** into multiple languages.
 
@@ -187,7 +191,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ## Cleanup
 
-- [ ] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
+- [x] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
 - [ ] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet.
 - [ ] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`).
   It is harmless today because the parameter is unused.

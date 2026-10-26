@@ -8,7 +8,7 @@ const test = require('node:test');
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { ref, set, update, remove, serverTimestamp } = require('firebase/database');
+const { ref, set, get, update, remove, serverTimestamp } = require('firebase/database');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
 let env;
@@ -160,6 +160,25 @@ test('rooms: an abort names the side that aborts', async () => {
 	await assertFails(update(ref(db('bob'), 'rooms/R2/blue'), { connected: true }));
 });
 
+test('rooms: a takeback removes turns only when the opponent accepts', async () => {
+	const playing = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true },
+		turns: { t1: { color: 'red', actions: ['a1'], timestamp: 1 }, t2: { color: 'blue', actions: ['b2'], timestamp: 2 } } });
+	await seed({ rooms: { R3: playing } });
+	await assertFails(remove(ref(db('alice'), 'rooms/R3/turns/t2')));
+	await assertFails(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'blue', keys: { t1: true, t2: true } }));
+	await assertFails(set(ref(db('mallory'), 'rooms/R3/takeback'), { by: 'red', keys: { t1: true, t2: true } }));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'red', keys: { t1: true, t2: true } }));
+	// The requester may not apply it itself.
+	await assertFails(update(ref(db('alice'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null, currentSfn: null }));
+	// A move built on a turn that was taken back is refused; on the latest turn it lands.
+	await assertFails(set(ref(db('alice'), 'rooms/R3/turns/t3'), { color: 'red', actions: ['a2'], timestamp: serverTimestamp(), after: 't2' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R3'), { 'turns/t3': { color: 'red', actions: ['a2'], timestamp: serverTimestamp() }, takeback: null }));
+	// Without a request naming them, turns stay.
+	await seed({ rooms: { R4: playing } });
+	await assertFails(remove(ref(db('bob'), 'rooms/R4/turns/t1')));
+});
+
 test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { OLD: Object.assign({}, waiting, { status: 'finished', ranked: true,
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
@@ -182,4 +201,102 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { EXP: Object.assign({}, waiting, { created: 1 }), FRESH: waiting } });
 	await assertSucceeds(remove(ref(db('mallory'), 'rooms/EXP')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/FRESH')));
+});
+
+test('push tokens: only their owner reads or writes them', async () => {
+	const h = '0123456789abcdef0123456789abcdef';
+	const tok = { token: 'fcm-token', created: serverTimestamp() };
+	await assertSucceeds(set(ref(db('bob'), 'push_tokens/bob/' + h), tok));
+	await assertSucceeds(get(ref(db('bob'), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens/bob/' + h)));
+	await assertFails(get(ref(db(null), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens')));
+	await assertFails(set(ref(db('alice'), 'push_tokens/bob/' + h), tok));
+	await assertFails(remove(ref(db('alice'), 'push_tokens/bob/' + h)));
+	await assertFails(set(ref(db(null), 'push_tokens/bob/' + h), tok));
+	// The key is a token hash, the time the server's, and nothing else rides along.
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/not-a-hash'), tok));
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/' + h), { token: 'x', created: 1 }));
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/' + h), Object.assign({ extra: 1 }, tok)));
+	await assertSucceeds(remove(ref(db('bob'), 'push_tokens/bob/' + h)));
+	// users/ stays public, so tokens never go there.
+	await assertSucceeds(get(ref(db(null), 'users/bob')));
+});
+
+test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at creation', async () => {
+	// The creator may sit in either seat and must name it.
+	const blueSeek = Object.assign({}, waiting, { public: true, casual: true, creatorColor: 'blue',
+		red: { connected: false }, blue: { uid: 'alice', displayName: 'Alice', connected: true } });
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { creatorColor: 'red' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { creatorColor: 'green' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { public: 'yes' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { casual: 1 })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L1'), blueSeek));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L2'), Object.assign({}, waiting, { creatorColor: 'red', public: true })));
+	// Fixed once created, by anyone.
+	await assertFails(set(ref(db('alice'), 'rooms/L1/casual'), false));
+	await assertFails(set(ref(db('alice'), 'rooms/L1/public'), false));
+	await assertFails(set(ref(db('alice'), 'rooms/L1/creatorColor'), 'red'));
+	// A casual room cannot be joined rated.
+	await assertFails(update(ref(db('bob'), 'rooms/L1'),
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/L1'),
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+	await assertFails(set(ref(db('bob'), 'rooms/L1/ranked'), true));
+	// Two joiners race for one seat: the second claim is refused.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/L2'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+	await assertFails(update(ref(db('carol'), 'rooms/L2'),
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: true }));
+	// The creator withdraws a waiting seek (waiting -> expired, then removed).
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L3'), Object.assign({}, waiting, { creatorColor: 'red', public: true })));
+	await assertFails(set(ref(db('bob'), 'rooms/L3/status'), 'expired'));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L3/status'), 'expired'));
+	await assertFails(update(ref(db('bob'), 'rooms/L3'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+	await assertSucceeds(remove(ref(db('alice'), 'rooms/L3')));
+});
+
+test('rooms: the lobby reads a public index; rooms/ itself is not listable', async () => {
+	const { query, orderByChild, equalTo, get } = require('firebase/database');
+	const priv = Object.assign({}, waiting, { creatorColor: 'red' });
+	const pub = Object.assign({}, waiting, { creatorColor: 'red', public: true });
+	const live = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true } });
+	const noSpec = Object.assign({}, live, { allowSpectators: false });
+	await seed({ rooms: { PRIV: priv, PUB: pub, LIVE: live, NOSPEC: noSpec } });
+	// No status-wide (or any) query of rooms/: private invites and
+	// no-spectator games stay unlisted.
+	const rooms = ref(db(null), 'rooms');
+	await assertFails(get(query(rooms, orderByChild('status'), equalTo('waiting'))));
+	await assertFails(get(query(rooms, orderByChild('status'), equalTo('playing'))));
+	await assertFails(get(rooms));
+	// The indexes are public to read.
+	await assertSucceeds(get(ref(db(null), 'open_rooms')));
+	await assertSucceeds(get(ref(db(null), 'live_rooms')));
+	// open_rooms: only a public waiting room, only by its creator.
+	await assertFails(set(ref(db('alice'), 'open_rooms/PRIV'), true));
+	await assertFails(set(ref(db('bob'), 'open_rooms/PUB'), true));
+	await assertFails(set(ref(db(null), 'open_rooms/PUB'), true));
+	await assertFails(set(ref(db('alice'), 'open_rooms/PUB'), { x: 1 }));
+	await assertFails(set(ref(db('alice'), 'open_rooms/NOPE'), true));
+	await assertSucceeds(set(ref(db('alice'), 'open_rooms/PUB'), true));
+	// ... and nobody else may take it down while it is open.
+	await assertFails(remove(ref(db('bob'), 'open_rooms/PUB')));
+	// live_rooms: a playing room that allows spectators, by one of its players.
+	await assertFails(set(ref(db('alice'), 'live_rooms/NOSPEC'), true));
+	await assertFails(set(ref(db('carol'), 'live_rooms/LIVE'), true));
+	await assertFails(set(ref(db('alice'), 'live_rooms/PUB'), true));
+	await assertSucceeds(set(ref(db('bob'), 'live_rooms/LIVE'), true));
+	await assertFails(remove(ref(db('carol'), 'live_rooms/LIVE')));
+	// The joiner moves the room from one list to the other.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/PUB'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false, startedAt: serverTimestamp() }));
+	await assertSucceeds(remove(ref(db('bob'), 'open_rooms/PUB')));
+	await assertSucceeds(set(ref(db('bob'), 'live_rooms/PUB'), true));
+	// Once a room is over (or gone), anyone may clear its stale entry.
+	await assertSucceeds(update(ref(db('alice'), 'rooms/LIVE'), { forfeitedBy: 'red', finishedBy: 'red', winner: 'blue', endReason: 'forfeit', status: 'finished', closedAt: serverTimestamp() }));
+	await assertSucceeds(remove(ref(db('carol'), 'live_rooms/LIVE')));
+	await env.withSecurityRulesDisabled((ctx) => set(ref(ctx.database(), 'open_rooms/GONE'), true));
+	await assertSucceeds(remove(ref(db('carol'), 'open_rooms/GONE')));
 });

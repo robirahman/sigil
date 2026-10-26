@@ -61,19 +61,30 @@ const SPELL_FX = {
 	Fulgurite:            { type: 'burst', color: '#ffe066', shake: true  },
 };
 
+// The animation level: 'full', 'reduced' or 'off'. settings-panel.js sets
+// html[data-motion] on the game pages; elsewhere follow the system setting.
+function sigilMotionLevel() {
+	const m = document.documentElement.getAttribute('data-motion');
+	if (m === 'full' || m === 'reduced' || m === 'off') return m;
+	return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full';
+}
+
 function playSpellEffect(overlayEl, containerEl, spellName) {
 	const fx = SPELL_FX[typeof baseSpellName === 'function' ? baseSpellName(spellName) : spellName];
 	if (!fx || !overlayEl) return;
+	const motion = sigilMotionLevel();
+	if (motion === 'off') return;
 
-	// Create overlay element for the color effect
+	// Create overlay element for the color effect. Reduced motion keeps a
+	// plain colour flash: no growing glow, no shake.
 	const el = document.createElement('div');
-	el.className = 'spell-fx spell-fx--' + fx.type;
+	el.className = 'spell-fx spell-fx--' + (motion === 'reduced' ? 'flash' : fx.type);
 	el.style.setProperty('--fx-color', fx.color);
 	el.addEventListener('animationend', () => el.remove());
 	overlayEl.appendChild(el);
 
 	// Board shake for impactful spells
-	if (fx.shake && containerEl) {
+	if (fx.shake && containerEl && motion === 'full') {
 		containerEl.classList.add('spell-fx--shake');
 		containerEl.addEventListener('animationend', function handler(e) {
 			if (e.target === containerEl) {
