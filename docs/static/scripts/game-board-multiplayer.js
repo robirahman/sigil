@@ -50,6 +50,8 @@ document.addEventListener('alpine:init', () => {
 			redTimer: 0,
 			blueTimer: 0,
 			timerType: 'none',
+			// Each side's vacation end (correspondence), from timer_tick.
+			pausedUntil: { red: null, blue: null },
 			isSpectator: false,
 			// Rated / Casual badge, and why a casual room is unrated.
 			ranked: false,
@@ -253,6 +255,28 @@ document.addEventListener('alpine:init', () => {
 			handleTakebackAccept() { this.sendEvent('takeback_accept'); },
 			handleTakebackDecline() { this.sendEvent('takeback_decline'); },
 			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
+			// "On vacation until …" for each side on vacation (its clock is
+			// stopped: room-clock.js pauses).
+			get vacationText() {
+				if (this.timerType !== 'correspondence' || this.winner || this.gameAborted) return '';
+				const lines = [];
+				for (const c of ['red', 'blue']) {
+					const until = this.pausedUntil && this.pausedUntil[c];
+					if (!until) continue;
+					const d = new Date(until);
+					const when = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+					const who = !this.isSpectator && c === this.myColor ? 'You are'
+						: ((c === 'red' ? this.redName : this.blueName) || (c === 'red' ? 'Red' : 'Blue')) + ' is';
+					lines.push(who + ' on vacation until ' + when + '.');
+				}
+				return lines.join(' ');
+			},
+			// Give the opponent 15 s (live timed games).
+			get canGiveTime() {
+				return !this.isSpectator && this.timerType === 'realtime' && !this.winner && !this.gameAborted
+					&& !this.reviewMode && !!this.whoseTurn;
+			},
+			handleGiveTime() { if (this.canGiveTime) this.sendEvent('give_time'); },
 
 			// Review: open an online room from the reviewed position. The new
 			// room is offered to the opponent through this room's rematch node.
@@ -889,7 +913,12 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'push_arrows') { drawPushArrows(_this.$refs.pushArrows, rest.arrows); }
 					else if (type === 'pushingoptions') { const { sourceNode, ...targets } = rest; _this.pushSourceNode = sourceNode || ''; _this.validMoves = targets; }
-					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
+					else if (type === 'timer_tick') {
+						_this.redTimer = rest.red; _this.blueTimer = rest.blue;
+						const p = rest.paused || {};
+						if (p.red !== _this.pausedUntil.red || p.blue !== _this.pausedUntil.blue) _this.pausedUntil = { red: p.red || null, blue: p.blue || null };
+					}
+					else if (type === 'time_gift') { _this.messageHistory.push(rest.mine ? 'You gave your opponent 15 seconds.' : 'Your opponent gave you 15 seconds.'); }
 					else if (type === 'rematch_state_changed') {
 						const r = rest.rematch || {};
 						const myColor = _this.myColor;

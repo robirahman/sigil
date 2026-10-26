@@ -377,6 +377,34 @@
 				</div>
 			</div>
 
+			<!-- Correspondence vacation: the bank and the pauses are the
+			     server's (functions/vacation.js, setVacation). -->
+			<div class="settings-card vacation-card">
+				<div style="font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px;">Correspondence vacation</div>
+				<div class="settings-card__hint" style="margin-bottom: 10px;">
+					While you are on vacation, your clocks in correspondence games stop, and your opponents see when you are back. You have 14 days a year; ending a vacation early gives back the days not begun. Live games are not affected.
+				</div>
+				<template x-if="vacationActive">
+					<div>
+						<p class="vacation-card__status" x-text="'On vacation until ' + vacationUntilText + '.'"></p>
+						<button class="account-button vacation-card__end" x-on:click="endVacation" x-bind:disabled="vacationBusy">End vacation now</button>
+					</div>
+				</template>
+				<template x-if="!vacationActive">
+					<div>
+						<p class="vacation-card__left" x-text="vacationDaysLeft + (vacationDaysLeft === 1 ? ' day' : ' days') + ' left this year.'"></p>
+						<div x-show="vacationDaysLeft > 0">
+							<label for="vacation-days">Days</label>
+							<select id="vacation-days" x-model.number="vacationDays" x-bind:disabled="vacationBusy">
+								<template x-for="n in vacationDaysLeft" x-bind:key="n"><option x-bind:value="n" x-text="n"></option></template>
+							</select>
+							<button class="account-button vacation-card__start" x-on:click="startVacation" x-bind:disabled="vacationBusy">Start vacation</button>
+						</div>
+					</div>
+				</template>
+				<p class="error-msg vacation-card__error" x-text="vacationError"></p>
+			</div>
+
 			<!-- Multi-core AI (2026-10 round 2): hidden while root split across
 			     workers measures no gain (engine/reports/2026-10-r2-multicore.md).
 			     The setting works (localStorage sigil.rustWorkers = 'auto');
@@ -469,6 +497,29 @@
 				_linkCredential: null,
 				_authBusy: false,
 				_setupFailed: false,
+				// vacations/{uid} (read-only here), and the form.
+				vacation: null,
+				vacationDays: 1,
+				vacationBusy: false,
+				vacationError: '',
+				_vacationTick: 0,
+				get vacationActive() {
+					void this._vacationTick;
+					const v = this.vacation;
+					return !!(v && typeof v.until === 'number' && v.from <= Date.now() && Date.now() < v.until);
+				},
+				get vacationUntilText() {
+					if (!this.vacation) return '';
+					const d = new Date(this.vacation.until);
+					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+				},
+				// Same bank as functions/vacation.js daysLeft: 14 a calendar year (UTC).
+				get vacationDaysLeft() {
+					void this._vacationTick;
+					const v = this.vacation;
+					if (!v || v.year !== new Date().getUTCFullYear()) return 14;
+					return Math.max(0, 14 - (v.usedDays || 0));
+				},
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -549,6 +600,7 @@
 						this.showMapControl = !!(this.profile && this.profile.showMapControl);
 						// Default OFF; only explicit true enables.
 						this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
+						this._loadVacation();
 					} else {
 						this.profile = null;
 						this.annotationMode = false;
@@ -559,6 +611,34 @@
 					}
 					this.loading = false;
 				},
+
+				async _loadVacation() {
+					if (!this.user || this.isOffline) return;
+					try {
+						this.vacation = (await firebase.database().ref('vacations/' + this.user.uid).once('value')).val();
+					} catch (e) {
+						this.vacation = null;
+					}
+					this.vacationDays = Math.min(Math.max(1, this.vacationDays), Math.max(1, this.vacationDaysLeft));
+					this._vacationTick++;
+				},
+
+				async _callVacation(days) {
+					this.vacationError = '';
+					this.vacationBusy = true;
+					try {
+						await firebase.functions().httpsCallable('setVacation')({ days });
+					} catch (e) {
+						const why = { 'already-on-vacation': 'You are already on vacation.', 'not-enough-days': 'Not enough vacation days left this year.',
+							'not-on-vacation': 'You are not on vacation.' }[e && e.message];
+						this.vacationError = why || ('The vacation could not be changed (' + ((e && (e.message || e.code)) || 'unknown error') + ').');
+					}
+					await this._loadVacation();
+					this.vacationBusy = false;
+				},
+
+				startVacation() { return this._callVacation(Number(this.vacationDays) || 1); },
+				endVacation() { return this._callVacation(0); },
 
 				async renameUser() {
 					this.error = '';

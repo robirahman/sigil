@@ -62,6 +62,9 @@ class SpectatorController {
 		const tc = (this.sync && this.sync.timeControl) || { type: 'none' };
 		if (tc.type !== 'none' && typeof this.sync.listenToTimer === 'function') {
 			this.sync.listenToTimer((data) => { this._timerState = data; });
+			if (typeof this.sync.listenToClockRecords === 'function') {
+				this.sync.listenToClockRecords((rec) => { this._clockRec = rec; });
+			}
 			this._timerInterval = setInterval(() => this._tickTimer(tc), 250);
 		}
 		await this._delay(500);
@@ -74,6 +77,11 @@ class SpectatorController {
 		if (!ts || !ts.activeColor || !ts.lastUpdated) return;
 		if (this.board && this.board.gameover) { this._stopTimer(); return; }
 		const now = this.sync.serverNow();
+		if (typeof roomTimerView === 'function') {
+			const view = roomTimerView(ts, Object.assign({ timeControl: tc }, this._clockRec), now);
+			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused });
+			return;
+		}
 		if (tc.type === 'realtime') {
 			const elapsed = now - ts.lastUpdated;
 			const activeRemaining = ts[ts.activeColor] - elapsed;

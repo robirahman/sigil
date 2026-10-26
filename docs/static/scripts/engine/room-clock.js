@@ -17,8 +17,9 @@
  *     only). The rules let a seat give only to the other seat.
  */
 
-// The one gift size a client may write (database.rules.json).
-const ROOM_GIFT_MS = 15000;
+// The one gift size a client may write (database.rules.json). `var`: a page
+// may load this file twice (auth-status.js adds it when it is missing).
+var ROOM_GIFT_MS = 15000;
 
 /**
  * Milliseconds of `color`'s pauses inside [from, to] (overlapping pauses
@@ -141,6 +142,33 @@ function roomTimeLeft(room, color, now) {
 	return running ? remaining - (now - last.timestamp) : remaining;
 }
 
+/**
+ * The clocks a game page shows, from the players' `timer` node
+ * ({red, blue, activeColor, lastUpdated}: realtime banked ms, or
+ * correspondence deadlines) plus the room's pauses and gifts, which that
+ * node leaves out. `out` names the side whose clock has run out (the page
+ * claims the flag), `paused` each side's vacation end (or null).
+ */
+function roomTimerView(ts, room, now) {
+	const tc = (room && room.timeControl) || {};
+	const active = ts.activeColor;
+	const view = { red: ts.red, blue: ts.blue, out: null,
+		paused: { red: roomPausedUntil(room, 'red', now), blue: roomPausedUntil(room, 'blue', now) } };
+	if (tc.type === 'realtime') {
+		for (const c of ['red', 'blue']) {
+			view[c] = (c === active ? ts[c] - (now - ts.lastUpdated) : ts[c]) + roomGiftMs(room, c, now);
+		}
+		if (view[active] <= 0) view.out = active;
+	} else if (tc.type === 'correspondence' && ts[active] > 0) {
+		// The deadline moves on by the time paused since the last move; it
+		// shows as if the running vacation is taken in full.
+		const until = view.paused[active];
+		view[active] = ts[active] + roomPausedMs(room, active, ts.lastUpdated, until ? Math.max(now, until) : now);
+		if (now > ts[active] + roomPausedMs(room, active, ts.lastUpdated, now)) view.out = active;
+	}
+	return view;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, ROOM_GIFT_MS };
+	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS };
 }

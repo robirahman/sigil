@@ -66,3 +66,22 @@ test('a player on vacation in several games is paused in each correspondence gam
 	// Over: no more pauses.
 	assert.deepStrictEqual(missingPauses(rooms.A, { alice: v }, v.until), []);
 });
+
+test('the game page\'s clocks add the pauses and gifts its timer node leaves out', () => {
+	const { roomTimerView } = require('../engine-loader').requireShared('room-clock.js');
+	// Correspondence: blue on vacation for three days; the deadline shows as
+	// if taken in full, and blue is not out at the old deadline.
+	const ts = { red: 0, blue: T + DAY_MS, activeColor: 'blue', lastUpdated: T };
+	const corr = { timeControl: { type: 'correspondence', moveTimeout: DAY_MS },
+		pauses: { p: { color: 'blue', from: T + 1000, to: T + 1000 + 3 * DAY_MS } } };
+	const v = roomTimerView(ts, corr, T + 2 * DAY_MS);
+	assert.deepStrictEqual([v.blue, v.out, v.paused.blue, v.paused.red], [T + 4 * DAY_MS, null, T + 1000 + 3 * DAY_MS, null]);
+	assert.strictEqual(roomTimerView(ts, corr, T + 4 * DAY_MS + 2000).out, 'blue');
+	assert.strictEqual(roomTimerView(ts, { timeControl: corr.timeControl }, T + DAY_MS + 1).out, 'blue');
+	// Realtime: a gift to the running side keeps it in the game.
+	const rt = { timeControl: { type: 'realtime', initialTime: 60_000 }, gifts: { g: { to: 'red', ms: 15_000, at: T + 5000 } } };
+	const live = { red: 10_000, blue: 30_000, activeColor: 'red', lastUpdated: T };
+	const w = roomTimerView(live, rt, T + 12_000);
+	assert.deepStrictEqual([w.red, w.blue, w.out], [13_000, 30_000, null]);
+	assert.strictEqual(roomTimerView(live, rt, T + 25_000).out, 'red');
+});
