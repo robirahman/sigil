@@ -208,7 +208,10 @@ function runPuzzle(puzzle) {
 				if (stage !== 'done') return finish({ status: 'fail', why: 'game ended early at stage ' + stage });
 				return finish({ status: 'ok' });
 			}
-			if (ev.type === 'whoseturndisplay' && ev.color === opp && puzzle.mate === 1) {
+			// (An opponent holding a charged Seal of Destruction loses right after
+			// this prompt, at the start of their turn.)
+			if (ev.type === 'whoseturndisplay' && ev.color === opp && puzzle.mate === 1
+				&& !(gc.board.chargedSpells[opp] || []).includes('Seal_of_Destruction')) {
 				return finish({ status: 'fail', why: 'mate-in-1 solution did not end the game; opponent to move at ' + boardToSfn(gc.board) });
 			}
 		}, { aiColor: opp, ai: opponent, variant: puzzle.variant || 'standard' });

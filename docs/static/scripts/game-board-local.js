@@ -1969,8 +1969,10 @@ document.addEventListener('alpine:init', () => {
 				// ---------------------------------------------------------------
 				let _puzzleExpectGameOver = false;
 
-				// The page's hook for results (daily streak): solved, failed or
-				// revealed, once per attempt.
+				// The page's hook for results (rating, daily streak): 'solved',
+				// 'failed', 'revealed'; then 'failed-final' once a failed mate
+				// puzzle can no longer be corrected, or 'solved' when it is
+				// (the mover won within the count after the judge ruled an escape).
 				function _puzzleReport(status) {
 					if (typeof window !== 'undefined' && typeof window.SIGIL_PUZZLE_ON_RESULT === 'function') {
 						try { window.SIGIL_PUZZLE_ON_RESULT(puzzle, status); } catch (e) { /* page hook */ }
@@ -2001,9 +2003,16 @@ document.addEventListener('alpine:init', () => {
 					_puzzleReport('solved');
 				}
 				_this._puzzleSolve = _puzzleSolve;
+				_this._puzzleOnGameOver = (payload) => _puzzleOnGameOver(payload);   // tests
 
 				function _puzzleOnTurn(t) {
 					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
+					// A failed mate puzzle can still be corrected to solved while the
+					// mover is within the puzzle's turn count (see _puzzleOnGameOver);
+					// past it, the failure is final.
+					if (_this.puzzleStatus === 'failed' && puzzle.kind !== 'winning' && _this.puzzleMoves > puzzle.mate) {
+						_puzzleReport('failed-final');
+					}
 					if (_this.puzzleStatus !== 'playing') return;
 					if (t.color !== puzzle.mover) {
 						// The scripted defence just replayed: it must land on the
@@ -2071,8 +2080,15 @@ document.addEventListener('alpine:init', () => {
 							? 'Correct! Two more to go.' : 'Correct! Now find the finishing move.';
 						return;
 					}
-					// Final solver turn: the game must be over now.
-					if (!over) {
+					// Final solver turn: the game must be over now -- or about to be:
+					// an opponent left holding a charged Seal of Destruction loses at
+					// the start of their turn (GameController's opening check).
+					const other = puzzle.mover === 'red' ? 'blue' : 'red';
+					const claimed = !!(_engineRef && _engineRef.board && _engineRef.board.chargedSpells
+						&& (_engineRef.board.chargedSpells[other] || []).includes('Seal_of_Destruction'));
+					if (!over && claimed) {
+						_puzzleExpectGameOver = 'claim';
+					} else if (!over) {
 						_puzzleFail('That was not the finishing move: the mate was in ' + puzzle.mate + ' and this is your turn ' + puzzle.mate + '. Play on, or Retry.');
 					} else {
 						_puzzleExpectGameOver = true;
@@ -2081,6 +2097,9 @@ document.addEventListener('alpine:init', () => {
 
 				function _puzzleOnWhoseTurn(payload) {
 					if (_this.puzzleStatus !== 'playing') return;
+					// A Seal of Destruction claim ends the game just after this
+					// prompt for the opponent's turn: wait for the game-over.
+					if (_puzzleExpectGameOver === 'claim') return;
 					if (_puzzleExpectGameOver && payload.color !== puzzle.mover) {
 						_puzzleExpectGameOver = false;
 						_this.puzzleDiagnostic = 'The solver counted your turn as a win, but the live game continued. Position: ' + _this.currentSfn;
@@ -2091,20 +2110,23 @@ document.addEventListener('alpine:init', () => {
 				function _puzzleOnGameOver(payload) {
 					_puzzleExpectGameOver = false;
 					if (puzzle.kind !== 'winning' && _this.puzzleStatus === 'failed' && payload.winner === puzzle.mover
-						&& _this.puzzleMoves <= puzzle.mate) {
+						&& _this.puzzleMoves <= puzzle.mate && !_this._puzzleSeenSolution) {
 						// The engine judged an earlier move as an escape, yet the mover
 						// won within the puzzle's count: the JUDGE was wrong. Worth a report.
 						_this.puzzleDiagnostic = 'Engine misjudgement: it ruled that a move let it escape, but you still won within ' + puzzle.mate + ' turns. ' + (_this.puzzleJudge || '');
-						_this.puzzleStatus = 'solved';
-						_this.puzzleMessage = 'Solved (despite the engine\'s verdict) — please report this position.';
+						// Through the normal solve path: local progress and the result report.
+						_this.puzzleStatus = 'playing';
+						_puzzleSolve('Solved (despite the engine\'s verdict) — please report this position.');
 						return;
 					}
+					if (_this.puzzleStatus === 'failed') _puzzleReport('failed-final');
 					if (_this.puzzleStatus !== 'playing') return;
 					if (payload.winner === puzzle.mover) _puzzleSolve();
 					else _puzzleFail('The opponent won. Retry, or show the solution.');
 				}
 
 				_this.puzzleRetry = function () {
+					_puzzleReport('retry');     // a failure pending correction stands
 					_this.puzzleStatus = 'playing';
 					_this.puzzleStep = 0;
 					_this.puzzleMessage = '';
@@ -2138,7 +2160,12 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus === 'playing') {
 						_this.puzzleStatus = 'revealed';
 						_puzzleReport('revealed');
+					} else if (_this.puzzleStatus === 'failed' && !_this._puzzleSeenSolution) {
+						// A failure that could still be corrected is final once the
+						// solution has been seen: a later win no longer counts.
+						_puzzleReport('failed-final');
 					}
+					_this._puzzleSeenSolution = true;
 					const lines = [];
 					const sols = puzzle.solutions || [];
 					const shown = sols.slice(0, 3);

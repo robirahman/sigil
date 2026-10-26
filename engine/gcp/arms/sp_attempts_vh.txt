@@ -1,0 +1,1 @@
+very_hard,gs://focus-surfer-494820-g0-sigil/puzzles/sp_candidates_2026-10-23.json,264

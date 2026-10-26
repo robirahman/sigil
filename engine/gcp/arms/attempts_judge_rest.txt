@@ -1,0 +1,4 @@
+very_easy,docs/static/puzzles/mate_puzzles.json,22,m2+m3
+easy,docs/static/puzzles/mate_puzzles.json,22,m2+m3
+medium,docs/static/puzzles/mate_puzzles.json,22,m2+m3
+hard,docs/static/puzzles/mate_puzzles.json,22,m2+m3

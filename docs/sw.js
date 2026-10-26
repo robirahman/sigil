@@ -58,6 +58,7 @@ const SAME_ORIGIN_PRECACHE = [
 	// The puzzle set (the page fetches it no-cache; this makes it work offline
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
+	'./static/scripts/puzzle-rating.js',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',

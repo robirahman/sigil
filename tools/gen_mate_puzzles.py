@@ -269,7 +269,9 @@ def collect_positions(hyd, args, old):
                     'old_id': op['id'] if op else None,
                     'dist': last_turn.get(gid, 0) - t['turnNumber'],
                     'last': bool(g['turns']) and g['turns'][-1]['turnNumber'] == t['turnNumber'],
-                    'won_soon': bool(hints) and g.get('winner') == t.get('color')})
+                    # The mover went on to win soon (whether or not the record
+                    # holds the after-position: self-play shards miss the last one).
+                    'won_soon': g.get('winner') == t.get('color') and last_turn.get(gid, 0) - t['turnNumber'] <= 5})
     for pk, op in old_by_pos.items():
         if pk in seen_pos or not in_shard(op['game']['id'], args.shard):
             continue
@@ -401,6 +403,8 @@ def main():
     ap.add_argument('--winning-work', default=None,
                     help='jsonl of winning-turn verdicts (tools/winning_turns.py); written by --winning, read at assembly')
     ap.add_argument('--meta-work', default=None, help='jsonl cache of per-puzzle difficulty inputs (assembly)')
+    ap.add_argument('--skip-meta', action='store_true',
+                    help='no difficulty searches (a candidate set; merge_puzzle_sets.py bins the final set)')
     ap.add_argument('--old', default=None, help='the previous puzzle set: every puzzle in it is re-proven and reported on')
     ap.add_argument('--report', default=None, help='write a JSON report (funnels, re-verification of --old)')
     ap.add_argument('--out', default=os.path.join(REPO, 'docs', 'static', 'puzzles', 'mate_puzzles.json'))
@@ -667,9 +671,10 @@ def main():
 
     # ---- difficulty inputs (cached) and tags
     meta = load_work([args.meta_work]) if args.meta_work else {}
-    mtodo = [(p['id'], p['sfn'], set(p['solution_keys']),
-              next((x['after'] for x in p['solutions'] if x.get('actions')), None))
-             for p in puzzles if p['id'] not in meta]
+    mtodo = [] if args.skip_meta else [
+        (p['id'], p['sfn'], set(p['solution_keys']),
+         next((x['after'] for x in p['solutions'] if x.get('actions')), None))
+        for p in puzzles if p['id'] not in meta]
     if mtodo and not args.meta_work:
         sys.exit('assembly needs --meta-work (a cache file for the difficulty searches)')
     if mtodo:

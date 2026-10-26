@@ -94,6 +94,7 @@
 			}
 			.puzzle-panel__filter select option { color: #222; }
 			.puzzle-panel__daily { color: #f0d77a; }
+			.puzzle-panel__rating { margin-top: 4px; color: var(--color-text-warm, #eee); }
 			.puzzle-panel__tags { color: var(--color-text-muted, #aaa); font-size: 0.85em; margin: 0 0 6px; }
 			.puzzle-loading { padding: 80px 0; text-align: center; color: var(--color-text-muted, #aaa); }
 		</style>
@@ -165,12 +166,14 @@
 									<button class="action-button" x-on:click="puzzleShowSolution()" x-show="puzzleStatus !== 'solved' && puzzleStatus !== 'revealed'">Show solution</button>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.prev" x-show="window.SIGIL_PUZZLE_NAV.prev">&larr; Previous</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.next" x-show="window.SIGIL_PUZZLE_NAV.next">Next &rarr;</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" x-show="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random" x-show="window.SIGIL_PUZZLE_NAV.random">Random</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back">Back to the game</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
 									<span class="puzzle-panel__daily" id="puzzle-daily-status"></span>
+									<div class="puzzle-panel__rating" id="puzzle-rating-status"></div>
 									<div class="puzzle-panel__filters" x-html="window.SIGIL_PUZZLE_FILTER_HTML"></div>
 								</div>
 							</div>
@@ -361,6 +364,7 @@
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js?v=35"></script>
 		<script src="static/scripts/engine/position-rating.js?v=34"></script>
+		<script src="static/scripts/puzzle-rating.js"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
@@ -401,6 +405,21 @@
 			 * ranked games); ?daily=1 is today's puzzle, the same for everyone.
 			 * With no pick, the first unsolved puzzle of the pool is shown.
 			 */
+			// Results not yet confirmed written, keyed by account and puzzle: a
+			// failure held for correction, or a result whose rating write is in
+			// flight. Leaving by any path (back, reload, the header, closing the
+			// tab) cannot erase one -- the next visit records it first.
+			const PENDING_KEY = 'sigil_puzzle_pending_results';
+			const pendingKey = (uid, id) => (uid || '') + '|' + id;
+			function pendingAll() {
+				try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}') || {}; } catch (e) { return {}; }
+			}
+			function pendingEdit(fn) {
+				try { const m = pendingAll(); fn(m); localStorage.setItem(PENDING_KEY, JSON.stringify(m)); } catch (e) { /* storage blocked */ }
+			}
+			// `daily` is the UTC day when the result is that day's daily puzzle.
+			const pendingPut = (uid, id, solved, daily) => pendingEdit(m => { m[pendingKey(uid, id)] = { id, uid: uid || null, solved: !!solved, daily: daily || null, at: Date.now() }; });
+			const pendingDrop = (uid, id) => pendingEdit(m => { delete m[pendingKey(uid, id)]; });
 			const PUZZLE_SETS = { m1: 'Mate in 1', m2: 'Mate in 2', m3: 'Mate in 3', win: 'Winning turn' };
 			function puzzleSet(p) { return p.kind === 'winning' ? 'win' : 'm' + p.mate; }
 			function utcDay(offsetDays) {
@@ -426,13 +445,29 @@
 				const d = readDaily();
 				d.done = d.done || {};
 				if (d.done[day]) return d;
+				const newest = Object.keys(d.done).every(k => k < day);
 				d.done[day] = status;
-				if (status === 'solved') {
-					d.streak = d.last === utcDay(-1) ? (d.streak || 0) + 1 : 1;
-					d.last = day;
-					d.best = Math.max(d.best || 0, d.streak);
+				const dayBefore = (k) => new Date(Date.parse(k + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+				if (newest) {
+					// The usual case: today's (or the latest) result extends or ends the streak.
+					if (status === 'solved') {
+						d.streak = d.last === dayBefore(day) ? (d.streak || 0) + 1 : 1;
+						d.last = day;
+						d.best = Math.max(d.best || 0, d.streak);
+					} else {
+						d.streak = 0;
+					}
 				} else {
-					d.streak = 0;
+					// An older day recorded late (a recovered pending result): the
+					// streak is rebuilt from the log in calendar order.
+					let run = 0, prev = null, last = null;
+					for (const k of Object.keys(d.done).sort()) {
+						if (d.done[k] === 'solved') { run = prev === dayBefore(k) ? run + 1 : 1; prev = last = k; }
+						else { run = 0; prev = null; }
+						d.best = Math.max(d.best || 0, run);
+					}
+					d.streak = run;
+					d.last = last || d.last;
 				}
 				// Keep the log short.
 				const days = Object.keys(d.done).sort();
@@ -495,6 +530,7 @@
 					prev: k > 0 ? link(k - 1) : '',
 					next: k < pool.length - 1 ? link(k + 1) : '',
 					random: '',
+					rated: '',
 					back: set.back || '',
 				};
 				const side = puzzle.mover === 'red' ? 'Red' : 'Blue';
@@ -563,8 +599,48 @@
 				} else if (params.has('id')) {
 					pos = pool.findIndex(p => p.id === params.get('id'));
 				}
+				// The viewer's puzzle rating (Firebase when signed in, else this device).
+				let viewer = null;
+				try {
+					viewer = typeof firebaseAuthSettled === 'function' ? await firebaseAuthSettled() : null;
+					if (viewer && viewer.isAnonymous) viewer = null;
+				} catch (e) { viewer = null; }
+				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
+				// Results an earlier visit left unconfirmed are recorded first, each
+				// where it was rated: device-mode entries (no uid -- signed out, or
+				// the account read had failed) on this device's rating whoever is
+				// signed in now; account entries only for that account (another
+				// account signed in since is not charged; they wait for it).
+				const myUid = viewer ? viewer.uid : null;
+				const owed = Object.values(pendingAll()).filter(e => !e.uid || e.uid === myUid);
+				const deadline = Date.now() + 8000;
+				for (const e of owed) {
+					const pz = all.find(p => p.id === e.id);
+					if (!pz) { pendingDrop(e.uid, e.id); continue; }
+					if (Date.now() > deadline) break;   // the rest wait for the next visit
+					// A daily's result counts for its day even when it never settled
+					// (a no-op when settle() already logged it).
+					if (e.daily) recordDaily(e.daily, e.solved ? 'solved' : 'failed');
+					try {
+						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
+						const done = await Promise.race([recordPuzzleResult(e.uid ? viewer : null, pz, e.solved, current || undefined).then(() => true),
+							new Promise(r => setTimeout(() => r(false), 5000))]);
+						if (done) pendingDrop(e.uid, e.id);
+					} catch (err) { /* offline or refused: try again next visit */ }
+				}
+				// Offline (or a database that never answers), the account read can
+				// hang; the board must not wait for it. 4 s, then the device rating.
+				const deviceRating = () => loadPuzzleRating(null);
+				try {
+					rated = navigator.onLine
+						? await Promise.race([loadPuzzleRating(viewer),
+							new Promise((resolve) => setTimeout(() => resolve(null), 4000))]) || await deviceRating()
+						: await deviceRating();
+				} catch (e) { /* offline: defaults */ }
 				if (pos < 0) {
-					pos = pool.findIndex(p => !solved[p.id]);
+					// No pick: an unattempted puzzle near the player's rating.
+					const next = pickRatedPuzzle(pool, rated.rating, rated.attempts, solved);
+					pos = next ? pool.indexOf(next) : 0;
 					if (pos < 0) pos = 0;
 				}
 				const puzzle = pool[pos];
@@ -590,7 +666,10 @@
 					return r;
 				};
 				window.SIGIL_PUZZLE = puzzle;
-				window.SIGIL_PUZZLE_NAV = daily ? { prev: '', next: '', random: link(randomOther()) } : {
+				const ratedQuery = daily ? '' : query().toString();
+				const ratedLink = 'puzzles.html' + (ratedQuery ? '?' + ratedQuery : '');
+				window.SIGIL_PUZZLE_NAV = daily ? { prev: '', next: '', random: link(randomOther()), rated: 'puzzles.html' } : {
+					rated: ratedLink,
 					prev: pos > 0 ? link(pool[pos - 1]) : '',
 					next: pos < pool.length - 1 ? link(pool[pos + 1]) : '',
 					random: link(randomOther()),
@@ -627,7 +706,7 @@
 					+ sets.map(k => a({ set: k }, PUZZLE_SETS[k], !daily && filt.set === k)).join('') + '</span>'
 					+ '<span class="puzzle-panel__filter">Difficulty: ' + a({ d: null }, 'Any', !filt.d)
 					+ [1, 2, 3, 4, 5].map(d => a({ d }, String(d), filt.d === d)).join('') + '</span>'
-					+ '<span class="puzzle-panel__filter">Theme: <select onchange="location.href=this.value">'
+					+ '<span class="puzzle-panel__filter">Theme: <select onchange="SIGIL_PUZZLE_GO(this.value)">'
 					+ '<option value="puzzles.html?' + query({ tag: null }).toString() + '">Any</option>'
 					+ tags.map(t => '<option value="puzzles.html?' + query({ tag: t }).toString() + '"'
 						+ (filt.tag === t ? ' selected' : '') + '>' + esc(t) + ' (' + counts[t] + ')</option>').join('')
@@ -636,10 +715,75 @@
 					+ '</span>';
 
 				// Daily puzzle bookkeeping (the board reports each result).
+				const ratingEl = document.getElementById('puzzle-rating-status');
+				const showRating = (extra) => {
+					ratingEl.textContent = 'Your puzzle rating: ' + rated.rating
+						+ (rated.signedIn ? '' : ' (this device; sign in to keep it)')
+						+ ' · this puzzle: ' + puzzleNow.rating + (extra || '');
+				};
+				let puzzleNow = { rating: Math.round(puzzle.rating || PUZZLE_RATING_START), plays: 0 };
+				showRating();
+				// A result waits for this read (up to 4 s), so a quick guest result
+				// is computed against the live rating, not the calibration.
+				const puzzleLive = Promise.race([
+					loadPuzzleCurrentRating(puzzle).then((r) => { puzzleNow = r; showRating(); }),
+					new Promise((r) => setTimeout(r, 4000))]).catch(() => {});
+				let rating_recorded = false;
+				let recording = null;
+				// The identity the rating line was built from: when the account
+				// could not be read (offline, or the read timed out), results go
+				// to the device rating shown, not to a server write that may hang.
+				const ratingUser = rated.signedIn ? viewer : null;
+				// A result is saved before the page leaves: links in the puzzle
+				// panel wait (up to 5 s) for a pending rating write.
+				window.addEventListener('pagehide', () => { if (pendingFail) settle('failed'); });
+				window.SIGIL_PUZZLE_GO = (url) => {
+					if (pendingFail) settle('failed');      // leaving: the failure stands
+					if (!recording) { location.href = url; return; }
+					Promise.race([recording, new Promise((r) => setTimeout(r, 5000))])
+						.finally(() => { location.href = url; });
+				};
+				document.getElementById('puzzle-root').addEventListener('click', (ev) => {
+					const link = ev.target.closest && ev.target.closest('a[href]');
+					if (!link || !(recording || pendingFail)) return;
+					ev.preventDefault();
+					window.SIGIL_PUZZLE_GO(link.href);
+				}, true);
+				// The result that counts: a solve, a reveal, or a failure that can
+				// no longer be corrected. A failed mate puzzle can still turn into a
+				// solve (the mover wins within the count after the judge ruled an
+				// escape), so its failure is recorded once that is impossible
+				// ('failed-final') or when the player leaves the puzzle.
+				let pendingFail = false;
+				const settle = (final) => {
+					if (rating_recorded) return;
+					rating_recorded = true;
+					pendingFail = false;
+					const uid = ratingUser ? ratingUser.uid : null;
+					pendingPut(uid, puzzle.id, final === 'solved', daily ? today : null);   // until the write lands
+					recording = puzzleLive.then(() => recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow)).then((r) => {
+						pendingDrop(uid, puzzle.id);   // recorded (or attempted before): nothing left pending
+						if (!r) { showRating(' · already attempted, rating unchanged'); return; }
+						rated.rating = r.after;
+						puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
+						showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
+					}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); })
+						.finally(() => { recording = null; });
+					if (daily) {
+						const d = recordDaily(today, final === 'solved' ? 'solved' : (final === 'revealed' ? 'revealed' : 'failed'));
+						document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+					}
+				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
-					if (!daily || p.id !== puzzle.id) return;
-					const d = recordDaily(today, status);
-					document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+					if (p.id !== puzzle.id) return;
+					if (status === 'failed' && puzzle.kind !== 'winning') {
+						// Held in storage too (see PENDING_KEY).
+						pendingFail = true;
+						pendingPut(ratingUser ? ratingUser.uid : null, puzzle.id, false, daily ? today : null);
+						return;
+					}
+					if (status === 'failed-final' || status === 'retry') { if (pendingFail) settle('failed'); return; }
+					settle(status);
 				};
 				const d0 = readDaily();
 				if (daily || d0.streak) {
