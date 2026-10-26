@@ -224,6 +224,10 @@ test('rooms: pauses are the server\'s; a gift goes only to the opponent, in a li
 	await assertSucceeds(update(ref(db('bob'), 'rooms/L1'), gift('red', 'blue')));
 	// One a second per seat.
 	await assertFails(update(ref(db('bob'), 'rooms/L1'), gift('red', 'blue')));
+	// The marker cannot be cleared to skip the wait, alone or with a gift.
+	await assertFails(remove(ref(db('bob'), 'rooms/L1/giftAt/blue')));
+	await assertFails(set(ref(db('bob'), 'rooms/L1/giftAt/blue'), null));
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), Object.assign(gift('red', 'blue'), { 'giftAt/blue': null })));
 	// A gift is never changed or taken back.
 	let k = null;
 	await env.withSecurityRulesDisabled(async (c) => { k = Object.keys((await get(ref(c.database(), 'rooms/L1/gifts'))).val())[0]; });

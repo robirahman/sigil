@@ -188,7 +188,7 @@
         },
         "giftAt": {
           "$color": {
-            ".write": "auth !== null && ($color === 'red' || $color === 'blue') && root.child('rooms/' + $roomId + '/' + $color + '/uid').val() === auth.uid && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
+            ".write": "auth !== null && newData.exists() && ($color === 'red' || $color === 'blue') && root.child('rooms/' + $roomId + '/' + $color + '/uid').val() === auth.uid && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
             ".validate": "newData.hasChildren(['key', 'at']) && newData.child('at').val() === now && newData.child('key').isString() && newData.parent().parent().child('gifts/' + newData.child('key').val()).exists() && !root.child('rooms/' + $roomId + '/gifts/' + newData.child('key').val()).exists()",
             "$other": {
               ".validate": "$other === 'key' || $other === 'at'"
