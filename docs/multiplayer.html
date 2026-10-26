@@ -281,6 +281,75 @@
 			cursor: pointer;
 		}
 		.in-game-share:hover { background: var(--color-surface-hover); }
+		/* Preset emotes: a picker beside the clocks, a bubble under the sender's name. */
+		.ladder-details__card > .red,
+		.ladder-details__card > .blue { position: relative; }
+		.emote-bubble {
+			position: absolute;
+			top: 100%;
+			left: 50%;
+			z-index: 40;
+			transform: translateX(-50%);
+			margin-top: 4px;
+			padding: 3px 10px;
+			border-radius: 12px;
+			border: 2px solid currentColor;
+			background: var(--color-surface-raised);
+			color: var(--color-text-bright);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			font-weight: normal;
+			white-space: nowrap;
+			pointer-events: none;
+			animation: emote-pop 0.25s ease-out;
+		}
+		.emote-bubble--red { border-color: var(--color-red-player); }
+		.emote-bubble--blue { border-color: var(--color-blue-player); }
+		@keyframes emote-pop {
+			from { opacity: 0; transform: translateX(-50%) scale(0.6); }
+			to { opacity: 1; transform: translateX(-50%) scale(1); }
+		}
+		html:is([data-motion="reduced"], [data-motion="off"]) .emote-bubble { animation: none; }
+		.emote-picker { position: relative; display: flex; justify-content: center; margin-top: 2px; }
+		.emote-picker__toggle {
+			padding: 0 6px;
+			background: none;
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			font-size: 0.8em;
+			cursor: pointer;
+		}
+		.emote-picker__toggle:hover:not(:disabled) { background: var(--color-surface-hover); }
+		.emote-picker__toggle:disabled { opacity: 0.5; cursor: default; }
+		.emote-picker__menu {
+			position: absolute;
+			top: 100%;
+			left: 50%;
+			z-index: 60;
+			transform: translateX(-50%);
+			display: grid;
+			grid-template-columns: repeat(2, max-content);
+			gap: 4px;
+			margin-top: 4px;
+			padding: 6px;
+			background: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			box-shadow: 0 2px 8px rgb(0 0 0 / 50%);
+		}
+		.emote-picker__item {
+			padding: 4px 8px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			white-space: nowrap;
+			cursor: pointer;
+		}
+		.emote-picker__item:hover, .emote-picker__item:focus-visible { background: var(--color-surface-hover); }
 	</style>
 	<script>
 		var webpDetector = new Image();
@@ -290,7 +359,7 @@
 	<script src="static/scripts/theme-manager.js"></script>
 	<script src="static/scripts/settings-panel.js"></script>
 </head>
-<body>
+<body data-emotes>
 	<header>
 		<div class="container">
 			<div class="header-container">
@@ -569,7 +638,7 @@
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })"
 				x-on:keydown.window="handleReviewKey($event)"
-				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly"
+				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly; setEmotesMuted($event.detail.muteEmotes)"
 				x-bind:class="{ 'review-with-ai-active': reviewMode }">
 				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-on:sigil-settings.window="isMuted = $event.detail.muted" x-bind:aria-label="isMuted ? 'Unmute sound' : 'Mute sound'" x-bind:title="isMuted ? 'Unmute sound' : 'Mute sound'" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: soundManager.muted }"></button>
 				<button class="in-game-share" x-on:click="copyGameLink" x-text="linkCopied ? 'Copied!' : 'Share game link'"></button>
@@ -584,6 +653,7 @@
 								<template x-if="!redUid">
 									<span class="name" x-text="redName"></span>
 								</template>
+								<span class="emote-bubble emote-bubble--red" aria-hidden="true" x-show="emoteBubble.red" x-text="emoteBubble.red" x-cloak></span>
 							</div>
 							<div class="timer">
 								<div class="main">
@@ -610,6 +680,19 @@
 										<span aria-hidden="true" x-text="'\u{1F441} ' + spectatorCount"></span>
 									</span>
 								</div>
+								<!-- Preset emotes (seated players; muted in Settings). -->
+								<div class="emote-picker" x-show="canEmote" x-cloak
+									x-on:keydown.escape.stop="emoteMenuOpen = false" x-on:click.outside="emoteMenuOpen = false">
+									<button type="button" class="emote-picker__toggle" aria-controls="emote-menu"
+										x-bind:aria-expanded="emoteMenuOpen ? 'true' : 'false'" x-bind:disabled="emoteCooling"
+										aria-label="Send an emote" title="Send an emote" x-on:click="emoteMenuOpen = !emoteMenuOpen"><span aria-hidden="true">&#x1F4AC;</span></button>
+									<div class="emote-picker__menu" id="emote-menu" x-show="emoteMenuOpen">
+										<template x-for="em in availableEmotes" x-bind:key="em.id">
+											<button type="button" class="emote-picker__item" x-bind:data-emote="em.id" x-text="em.text" x-on:click="sendEmote(em.id)"></button>
+										</template>
+									</div>
+								</div>
+								<div class="visually-hidden emote-live" role="status" aria-live="polite" x-text="emoteAnnounce"></div>
 							</div>
 							<div class="blue">
 								<template x-if="blueUid">
@@ -618,6 +701,7 @@
 								<template x-if="!blueUid">
 									<span class="name" x-text="blueName"></span>
 								</template>
+								<span class="emote-bubble emote-bubble--blue" aria-hidden="true" x-show="emoteBubble.blue" x-text="emoteBubble.blue" x-cloak></span>
 							</div>
 						</div>
 					</div>

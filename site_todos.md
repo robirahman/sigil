@@ -38,7 +38,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
 - [x] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move and takebacks by agreement: done. Draw offers: not applicable (Sigil has no draws; threefold repetition is a Blue win).
-- [ ] **Add in-game chat or preset emotes.**
+- [x] **Add in-game chat or preset emotes.** Done: ten preset emotes (no free text) from a picker beside the clocks, shown as a 3 s bubble under the sender's name with live-region text; the rules take only the fixed ids from a seated player, one per 3 s by server time ("Well played" / "Thanks" for a minute after the game); "Mute emotes" in the settings panel.
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
 - [x] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
 - [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.

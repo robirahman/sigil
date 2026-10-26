@@ -14,17 +14,18 @@
  *   artOnly  the game components     localStorage 'sigilArtOnlySpellCircles'
  * The settings new with this panel live together in localStorage
  * 'sigil_settings': volume (0..1), motion ('full' | 'reduced' | 'off', or
- * null to follow the system's prefers-reduced-motion), colourblind and
- * confirmEndTurn.
+ * null to follow the system's prefers-reduced-motion), colourblind,
+ * confirmEndTurn and muteEmotes (online games: hide preset emotes and the
+ * picker; its row shows only on pages with body[data-emotes]).
  *
  * Every change dispatches a 'sigil-settings' window event whose detail is
- * SigilSettings.snapshot(); the game components listen for artOnly, the
- * mute button for muted.
+ * SigilSettings.snapshot(); the game components listen for artOnly (and
+ * online, muteEmotes), the mute button for muted.
  */
 const SIGIL_SETTINGS_KEY = 'sigil_settings';
 
 const SigilSettings = {
-	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false },
+	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false, muteEmotes: false },
 
 	_load() {
 		let saved = null;
@@ -87,6 +88,7 @@ const SigilSettings = {
 			artOnly: this.get('artOnly'),
 			colourblind: !!s.colourblind,
 			confirmEndTurn: !!s.confirmEndTurn,
+			muteEmotes: !!s.muteEmotes,
 		};
 	},
 
@@ -203,6 +205,8 @@ function _sigilBuildDialogs() {
 	const artOnly = h('input', { type: 'checkbox', 'data-setting': 'artOnly' });
 	const colourblind = h('input', { type: 'checkbox', 'data-setting': 'colourblind' });
 	const confirmEnd = h('input', { type: 'checkbox', 'data-setting': 'confirmEndTurn' });
+	const muteEmotes = h('input', { type: 'checkbox', 'data-setting': 'muteEmotes' });
+	const hasEmotes = document.body.hasAttribute('data-emotes');
 	const shortcutsBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Keyboard shortcuts (?)' });
 	const closeBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Close' });
 
@@ -218,8 +222,11 @@ function _sigilBuildDialogs() {
 			row('Art-only spell circles', artOnly, 'Hide spell names and descriptions on the board circles.'),
 			row('Colourblind markers', colourblind, 'A diamond on red stones and a ring on blue ones, also on glows, locks and clocks.'),
 			row('Confirm before ending a turn', confirmEnd, 'End Turn asks once more before passing.'),
+		].concat(hasEmotes ? [
+			row('Mute emotes', muteEmotes, 'Hide the preset emotes in online games.'),
+		] : [], [
 			h('div', { class: 'settings-panel__actions' }, [shortcutsBtn, closeBtn]),
-		]),
+		])),
 	]);
 
 	const list = h('dl', { class: 'shortcuts-overlay__list' });
@@ -249,6 +256,7 @@ function _sigilBuildDialogs() {
 		artOnly.checked = s.artOnly;
 		colourblind.checked = s.colourblind;
 		confirmEnd.checked = s.confirmEndTurn;
+		muteEmotes.checked = s.muteEmotes;
 	};
 
 	theme.addEventListener('change', () => SigilSettings.set('theme', theme.value));
@@ -265,6 +273,7 @@ function _sigilBuildDialogs() {
 	artOnly.addEventListener('change', () => SigilSettings.set('artOnly', artOnly.checked));
 	colourblind.addEventListener('change', () => SigilSettings.set('colourblind', colourblind.checked));
 	confirmEnd.addEventListener('change', () => SigilSettings.set('confirmEndTurn', confirmEnd.checked));
+	muteEmotes.addEventListener('change', () => SigilSettings.set('muteEmotes', muteEmotes.checked));
 
 	SigilDialog.openSettings = () => { refresh(); SigilDialog.open(panel); };
 	SigilDialog.toggleShortcuts = () => {

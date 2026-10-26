@@ -254,6 +254,62 @@ document.addEventListener('alpine:init', () => {
 			handleTakebackDecline() { this.sendEvent('takeback_decline'); },
 			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
 
+			// Preset emotes (SIGIL_EMOTES in firebase-sync.js): a picker beside
+			// the clocks for the seated players, a bubble under the sender's
+			// name for SIGIL_EMOTE_BUBBLE_MS, and a polite live-region line.
+			// "Mute emotes" (settings panel) hides them all, picker included.
+			emoteList: typeof SIGIL_EMOTES !== 'undefined' ? SIGIL_EMOTES : [],
+			emotesMuted: typeof SigilSettings !== 'undefined' && !!SigilSettings.get('muteEmotes'),
+			emoteMenuOpen: false,
+			emoteCooling: false,
+			emoteBubble: { red: '', blue: '' },
+			emoteAnnounce: '',
+			// After the game: "Well played" / "Thanks" for a while (the rules allow a minute).
+			emoteAfterOpen: false,
+			_emoteTimers: {},
+			// Set once the game's controller exists (_engine is not declared
+			// data, so a getter reading it would not update).
+			emoteReady: false,
+			get canEmote() {
+				if (this.isSpectator || this.emotesMuted || this.reviewMode || this.gameAborted || !this.emoteReady) return false;
+				if (this.myColor !== 'red' && this.myColor !== 'blue') return false;
+				return !this.winner || this.emoteAfterOpen;
+			},
+			get availableEmotes() {
+				return this.winner ? this.emoteList.filter((em) => em.after) : this.emoteList;
+			},
+			async sendEmote(id) {
+				this.emoteMenuOpen = false;
+				// The sync object as the lobby built it: through Alpine's proxy
+				// (this._engine.sync) the SDK's references misbehave.
+				const sync = window._multiplayerState && window._multiplayerState.sync;
+				if (!this.canEmote || this.emoteCooling || !sync || typeof sync.sendEmote !== 'function') return;
+				// The rules hold each seat to one emote per SIGIL_EMOTE_GAP_MS.
+				this.emoteCooling = true;
+				setTimeout(() => { this.emoteCooling = false; }, SIGIL_EMOTE_GAP_MS + 200);
+				await sync.sendEmote(this.myColor, id);
+			},
+			_showEmote(v) {
+				if (this.emotesMuted || !v || (v.color !== 'red' && v.color !== 'blue')) return;
+				const em = this.emoteList.find((x) => x.id === v.e);
+				if (!em) return;
+				this.emoteBubble[v.color] = em.text;
+				const side = v.color === 'red' ? 'Red' : 'Blue';
+				const name = v.color === 'red' ? this.redName : this.blueName;
+				const who = v.color === this.myColor ? 'You' : (name ? name + ' (' + side + ')' : side);
+				this.emoteAnnounce = who + ': ' + em.text;
+				clearTimeout(this._emoteTimers[v.color]);
+				this._emoteTimers[v.color] = setTimeout(() => { this.emoteBubble[v.color] = ''; }, SIGIL_EMOTE_BUBBLE_MS);
+			},
+			setEmotesMuted(on) {
+				this.emotesMuted = !!on;
+				if (!on) return;
+				this.emoteMenuOpen = false;
+				this.emoteBubble.red = '';
+				this.emoteBubble.blue = '';
+				this.emoteAnnounce = '';
+			},
+
 			// Review: open an online room from the reviewed position. The new
 			// room is offered to the opponent through this room's rematch node.
 			get canPlayFromPosition() {
@@ -751,6 +807,8 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					_this._engine = engine;
+					if (sync && typeof sync.listenForEmotes === 'function') sync.listenForEmotes((v) => _this._showEmote(v));
+					_this.emoteReady = true;
 					if (!isSpectator && sync) sync.listenToSpectators((n) => { _this.spectatorCount = n; });
 					// A spectator who arrives before the first move of a room
 					// from a position replays from its start.
@@ -956,6 +1014,9 @@ document.addEventListener('alpine:init', () => {
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);
 						_this.showReset = false;
 						_this.winner = rest.winner;
+						// Leave a margin under the rules' minute after closedAt.
+						_this.emoteAfterOpen = true;
+						setTimeout(() => { _this.emoteAfterOpen = false; _this.emoteMenuOpen = false; }, SIGIL_EMOTE_AFTER_MS - 10000);
 						if (rest.gameLog && rest.gameLog.length > 0) {
 							const sfns = [rest.gameLog[0].sfnBefore];
 							const labels = ['Start'];

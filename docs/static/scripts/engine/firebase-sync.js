@@ -13,6 +13,30 @@ const _INVITE_EXPIRY_MS = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined'
 	? ROOM_INVITE_EXPIRY_MS
 	: (72 * 60 * 60 * 1000);
 
+/**
+ * Preset emotes for online games, in picker order. The ids are fixed by
+ * database.rules.json (rooms/$roomId/emotes/$emoteId/e): keep both lists in
+ * step. "Well played" and "Thanks" stay open for a minute after the game.
+ */
+const SIGIL_EMOTES = [
+	{ id: 'hello', text: 'Hello!' },
+	{ id: 'glhf', text: 'Good luck!' },
+	{ id: 'nice', text: 'Nice move!' },
+	{ id: 'wow', text: 'Wow!' },
+	{ id: 'think', text: 'Thinking…' },
+	{ id: 'oops', text: 'Oops!' },
+	{ id: 'sorry', text: 'Sorry!' },
+	{ id: 'thanks', text: 'Thanks!', after: true },
+	{ id: 'gg', text: 'Well played!', after: true },
+	{ id: 'rematch', text: 'Rematch?' },
+];
+/** The rules refuse a seat's emote within this long of its last one. */
+const SIGIL_EMOTE_GAP_MS = 3000;
+/** How long after the game ends the `after` emotes are still accepted. */
+const SIGIL_EMOTE_AFTER_MS = 60000;
+/** How long a bubble stays over the sender's name. */
+const SIGIL_EMOTE_BUBBLE_MS = 3000;
+
 class FirebaseSync {
 	constructor(db) {
 		this.db = db;
@@ -1058,6 +1082,47 @@ class FirebaseSync {
 		} catch (e) {
 			console.error('[Sync] abortGame FAILED:', e.code, e.message);
 		}
+	}
+
+	/* ----- Emotes ----- */
+
+	/**
+	 * Send a preset emote from our seat. One write holds the emote and
+	 * lastEmote/{color}, which names it: the rules accept it only when the
+	 * seat's previous emote is more than SIGIL_EMOTE_GAP_MS old (server time).
+	 * Returns true when the server took it.
+	 */
+	async sendEmote(color, id) {
+		if (!this.roomRef || (color !== 'red' && color !== 'blue')) return false;
+		const key = this.roomRef.child('emotes').push().key;
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		try {
+			await this.roomRef.update({
+				['emotes/' + key]: { color, e: id, at: ts },
+				['lastEmote/' + color]: { at: ts, key },
+			});
+			return true;
+		} catch (e) {
+			console.warn('[Sync] sendEmote refused:', e.code || e.message);
+			return false;
+		}
+	}
+
+	/**
+	 * Watch for emotes: callback({ color, e, at }) for each new one. Emotes
+	 * already in the room when the page opens are not replayed: the query's
+	 * first child_added events come before its first value event, and are
+	 * skipped (no clock comparison, so a skewed offset cannot hide them).
+	 */
+	listenForEmotes(callback) {
+		if (!this.roomRef) return;
+		const q = this.roomRef.child('emotes').limitToLast(1);
+		let primed = false;
+		q.on('child_added', (snap) => {
+			const v = snap.val();
+			if (primed && v) callback(v);
+		});
+		q.once('value', () => { primed = true; });
 	}
 
 	/* ----- Takebacks by agreement ----- */

@@ -179,6 +179,53 @@ test('rooms: a takeback removes turns only when the opponent accepts', async () 
 	await assertFails(remove(ref(db('bob'), 'rooms/R4/turns/t1')));
 });
 
+test('rooms: emotes are preset ids from a seated player, one per 3 s', async () => {
+	const playing = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true } });
+	await seed({ rooms: { E1: playing } });
+	const emote = (uid, room, key, color, e) => update(ref(db(uid), 'rooms/' + room), {
+		['emotes/' + key]: { color, e, at: serverTimestamp() },
+		['lastEmote/' + color]: { at: serverTimestamp(), key },
+	});
+	// A spectator, the wrong colour, an unknown id, or an emote without its
+	// lastEmote stamp are refused.
+	await assertFails(emote('mallory', 'E1', 'k0', 'red', 'hello'));
+	await assertFails(emote('alice', 'E1', 'k0', 'blue', 'hello'));
+	await assertFails(emote('alice', 'E1', 'k0', 'red', 'loser'));
+	await assertFails(set(ref(db('alice'), 'rooms/E1/emotes/k0'), { color: 'red', e: 'hello', at: serverTimestamp() }));
+	await assertFails(set(ref(db('alice'), 'rooms/E1/lastEmote/red'), { at: serverTimestamp(), key: 'k0' }));
+	await assertFails(update(ref(db('alice'), 'rooms/E1'), {
+		'emotes/k0': { color: 'red', e: 'hello', at: serverTimestamp(), extra: 1 },
+		'lastEmote/red': { at: serverTimestamp(), key: 'k0' } }));
+	// Two in one write share a stamp: refused.
+	await assertFails(update(ref(db('alice'), 'rooms/E1'), {
+		'emotes/k0': { color: 'red', e: 'hello', at: serverTimestamp() },
+		'emotes/k1': { color: 'red', e: 'nice', at: serverTimestamp() },
+		'lastEmote/red': { at: serverTimestamp(), key: 'k0' } }));
+	await assertSucceeds(emote('alice', 'E1', 'k1', 'red', 'hello'));
+	await assertSucceeds(emote('bob', 'E1', 'k2', 'blue', 'glhf'));
+	// The same seat again within 3 s, or after deleting its stamp: refused.
+	await assertFails(emote('alice', 'E1', 'k3', 'red', 'nice'));
+	await assertFails(remove(ref(db('alice'), 'rooms/E1/lastEmote/red')));
+	// An emote cannot be rewritten or removed.
+	await assertFails(set(ref(db('alice'), 'rooms/E1/emotes/k1/e'), 'oops'));
+	await assertFails(remove(ref(db('bob'), 'rooms/E1/emotes/k1')));
+	// More than 3 s after the last one: allowed.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/E1/lastEmote/red/at'), Date.now() - 3500));
+	await assertSucceeds(emote('alice', 'E1', 'k3', 'red', 'nice'));
+	// A finished game: "Well played" and "Thanks" for a minute, nothing else.
+	const done = Object.assign({}, playing, { status: 'finished', winner: 'red', finishedBy: 'red', closedAt: Date.now() - 5000 });
+	await seed({ rooms: { E2: done, E3: Object.assign({}, done, { closedAt: Date.now() - 120000 }),
+		E4: Object.assign({}, playing, { status: 'waiting' }) } });
+	await assertFails(emote('bob', 'E2', 'k1', 'blue', 'hello'));
+	await assertSucceeds(emote('bob', 'E2', 'k1', 'blue', 'gg'));
+	await assertSucceeds(emote('alice', 'E2', 'k2', 'red', 'thanks'));
+	await assertFails(emote('alice', 'E3', 'k1', 'red', 'gg'));
+	await assertFails(emote('alice', 'E4', 'k1', 'red', 'hello'));
+	// Emotes go with the room: a rated room is still removable by a player.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/E2/ratedAt'), 1));
+	await assertSucceeds(remove(ref(db('alice'), 'rooms/E2')));
+});
+
 test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { OLD: Object.assign({}, waiting, { status: 'finished', ranked: true,
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
