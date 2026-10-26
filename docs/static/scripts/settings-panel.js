@@ -165,6 +165,7 @@ const SigilDialog = {
 const SIGIL_SHORTCUTS = [
 	['Enter', 'End turn (or Submit). Press twice when "Confirm before ending a turn" is on.'],
 	['D', 'Dash'],
+	['I', 'On a focused spell: open its tooltip and move to its "More about this spell" link (Escape goes back)'],
 	['Escape', 'Close a tooltip, this list or the settings; cancel an armed End Turn or Forfeit'],
 	['?', 'Show or hide this list'],
 	['Tab', 'Move between board nodes, spells and buttons; Enter or Space activates the focused one'],

@@ -725,7 +725,7 @@
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
 					x-on:mouseenter="holdSpellTooltip()"
-					x-on:focusout="handleTooltipFocusOut($event)"
+					x-on:focusout="handleTooltipFocusOut($event)" x-on:keydown="handleTooltipKey($event)"
 					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">

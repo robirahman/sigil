@@ -177,7 +177,7 @@ document.addEventListener('alpine:init', () => {
 						this._loadReviewFromPayload({
 							spellNames,
 							winner: h.Result && h.Result !== '*' ? h.Result : '',
-							redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+							redName: h.Red || 'Red', blueName: h.Blue || 'Blue', variant,
 							sfns: [h.FinalSfn], turnLabels: ['Final position'],
 							annotations: _sgnHeaderToAnnotations(h.Annotations),
 						});
@@ -202,7 +202,7 @@ document.addEventListener('alpine:init', () => {
 				this._loadReviewFromPayload({
 					spellNames,
 					winner: h.Result && h.Result !== '*' ? h.Result : '',
-					redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+					redName: h.Red || 'Red', blueName: h.Blue || 'Blue', variant,
 					sfns, turnLabels: labels,
 					annotations: _sgnHeaderToAnnotations(h.Annotations),
 				});
@@ -231,6 +231,13 @@ document.addEventListener('alpine:init', () => {
 				this.spellDict = dict;
 				this.spells.images = images;
 				this.spells.text = text;
+				// An imported review never sends spellsetup: publish its rules for
+				// the help popover here (variant from the payload, else the SFN).
+				if (typeof sigilPublishGameRules === 'function') {
+					let variant = payload.variant || null;
+					if (!variant) { try { variant = sfnToDict(payload.sfns[0]).variant; } catch (e) { variant = null; } }
+					sigilPublishGameRules(variant || 'standard', spellNames);
+				}
 				this.reviewSfns = payload.sfns.slice();
 				this.reviewTurnLabels = (payload.turnLabels || []).slice();
 				// A legacy v1 export carries its per-turn log (`gameLog`): keep it so
@@ -861,6 +868,29 @@ document.addEventListener('alpine:init', () => {
 
 			holdSpellTooltip() {
 				clearTimeout(this._spellTooltipTimer);
+			},
+
+			// Keyboard route to the tooltip's "More about this spell" link: the
+			// tooltip sits after the board in the DOM, so Tab from a spell never
+			// reaches it. "I" (info) on a focused spell opens its tooltip and
+			// focuses the link; Escape there returns to the spell. ("?" is the
+			// shortcut list, settings-panel.js.)
+			handleSpellKey(e, slot) {
+				if ((e.key !== 'i' && e.key !== 'I') || e.ctrlKey || e.metaKey || e.altKey) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn = e.target;
+				if (this.activeSpell !== slot) this.showSpellTooltip(slot);
+				this.$nextTick(() => {
+					const a = this.$refs.spellTooltip && this.$refs.spellTooltip.querySelector('.tooltip__more');
+					if (a) a.focus();
+				});
+			},
+			handleTooltipKey(e) {
+				if (e.key !== 'Escape' || !this._spellTooltipReturn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn.focus();
 			},
 
 			// Keyboard: the tooltip stays open while focus moves from the spell

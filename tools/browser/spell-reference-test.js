@@ -230,6 +230,35 @@ async function newPage(browser, errors, opts = {}) {
 		await page.evaluate(() => document.activeElement.blur());
 		await sleep(300);
 		check(await page.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).activeSpell) === '', 'focus leaving the spell closes the tooltip');
+		// Keyboard route: "I" on a focused spell moves focus to the tooltip's
+		// link; Escape there returns to the spell.
+		await page.focus('img.charm-spell.charm-spell--2');
+		await page.keyboard.press('i');
+		await sleep(300);
+		const qk = await page.evaluate(() => ({ active: Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).activeSpell,
+			focused: document.activeElement && document.activeElement.className,
+			href: document.activeElement && document.activeElement.getAttribute('href'),
+			want: 'spell.html?name=' + encodeURIComponent(baseSpellName(Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).spellDict.charm2)) }));
+		check(qk.active === 'charm2' && qk.focused === 'tooltip__more' && qk.href === qk.want, '"I" on a spell focuses its tooltip link', JSON.stringify(qk));
+		await page.keyboard.press('Escape');
+		await sleep(300);
+		const back = await page.evaluate(() => document.activeElement && document.activeElement.className);
+		check(/charm-spell--2/.test(back), 'Escape from the tooltip link returns focus to the spell', back);
+		// An imported review (game.html?review=session) publishes its rules too.
+		const ex = EXAMPLES.Fireblast;
+		const rv = await browser.newPage();
+		rv.on('pageerror', e => errors.push('review: ' + e.message));
+		await rv.evaluateOnNewDocument((payload) => {
+			try { if (!sessionStorage.getItem('__seeded')) { sessionStorage.setItem('__seeded', '1'); sessionStorage.setItem('sigil_import_game', payload); } } catch (e) { /* blocked */ }
+		}, JSON.stringify({ type: 'sigil-game', spellNames: ex.sfn.split('/')[1].split(' ')[0].split(','), sfns: [ex.sfn], turnLabels: ['Start'], winner: '' }));
+		await rv.goto(`${BASE}/game.html?review=session`, { waitUntil: 'load' });
+		let pub = null;
+		try {
+			await rv.waitForFunction(() => window.sigilGameRules && window.sigilGameRules.spellNames.length === 9, { timeout: 20000 });
+			pub = await rv.evaluate(() => window.sigilGameRules);
+		} catch (e) { pub = { error: e.message }; }
+		check(pub && pub.variant === 'competitive' && pub.spellNames.includes('Fireblast'), 'an imported review publishes its variant and spells to the help popover', JSON.stringify(pub));
+		await rv.close();
 		// Desktop hover: the pointer can travel from the spell to the link.
 		const box = await page.$eval('img.sorcery-spell.sorcery-spell--1', el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 		await page.mouse.move(box.x, box.y);
