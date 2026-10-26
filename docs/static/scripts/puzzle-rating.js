@@ -105,15 +105,20 @@ async function loadPuzzleCurrentRating(puzzle) {
 
 /**
  * Record the first result on `puzzle` for this viewer and move both ratings.
+ * `current` is the puzzle's rating as the page shows it (a device rating is
+ * computed against it; signed-in players read the live value again).
  * Returns { before, after, delta, puzzleBefore, puzzleAfter } or null when the
  * puzzle was attempted before (only the first result counts).
  */
-async function recordPuzzleResult(user, puzzle, solved) {
+async function recordPuzzleResult(user, puzzle, solved, current) {
 	const u = _puzzleRatedUser(user);
 	if (!u || typeof firebase === 'undefined') {
 		const l = _puzzleLocal();
 		if (l.attempts[puzzle.id] !== undefined) return null;
-		const p = { rating: Math.round(puzzle.rating || PUZZLE_RATING_START), plays: 0 };
+		// The puzzle's rating as shown (the live one when it was loaded),
+		// else the calibration.
+		const p = { rating: current && typeof current.rating === 'number' ? current.rating
+			: Math.round(puzzle.rating || PUZZLE_RATING_START), plays: 0 };
 		const up = puzzleRatingUpdate(l, p, solved);
 		l.attempts[puzzle.id] = solved ? 1 : 0;
 		l.rating = up.user.rating;
