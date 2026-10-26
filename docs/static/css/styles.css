@@ -2817,3 +2817,96 @@ html[data-colourblind] :is(.game-clock__side--red, .cb-mark--red, .providence-ba
 html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-bank__count--blue, .ladder-details__card > .blue .name)::before {
 	content: "\25CB\00A0";
 }
+
+/* --- Arrows and circles (board-marks.js) ---
+   Drawn over the stones; never takes a pointer event itself. */
+.board-marks {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+	z-index: 104;
+	opacity: 0.82;
+}
+.board-mark--preview { opacity: 0.55; }
+
+/* Pencil (draw mode) and Clear. The pencil is for touch screens, where
+   there is no right button; Clear shows wherever there are marks. */
+.board-marks-tools {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 105;
+	display: none;
+	gap: 6px;
+}
+.board-marks-tools__btn {
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid var(--color-border);
+	background: rgba(0, 0, 0, 0.55);
+	color: var(--color-text-warm);
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+.board-marks-tools__btn[aria-pressed="true"] {
+	background: #3fb950;
+	border-color: #3fb950;
+	color: #10220f;
+}
+.board-marks-tools__draw,
+.board-marks-tools__clear { display: none; }
+.board-marks--has .board-marks-tools,
+.board-marks--has .board-marks-tools__clear { display: flex; align-items: center; justify-content: center; }
+@media (hover: none), (pointer: coarse) {
+	.board-marks-tools,
+	.board-marks-tools__draw { display: flex; align-items: center; justify-content: center; }
+}
+/* Draw mode: a drag draws instead of scrolling the page. */
+.board-marks--drawing { touch-action: none; }
+.board-marks--drawing .stone-node { cursor: crosshair; }
+
+/* --- Zen mode (settings-panel.js; Z) ---
+   Only the board, the clocks and the buttons a turn needs. Pages opt in
+   with <body class="zen-page">; html[data-zen] is the stored setting. */
+.zen-exit { display: none; }
+body:not(.zen-page) .zen-only { display: none; }
+html[data-zen] body.zen-page :is(
+	header > .container,
+	.help-menu-container,
+	.feed--history,
+	.ai-thinking,
+	.dev-eval-panel,
+	.annotation-bar,
+	.mute-toggle,
+	.in-game-share,
+	.spectator-banner,
+	.ladder-details .name,
+	.game-meta,
+	.action-button--forfeit,
+	.action-button--take-back,
+	.action-button--export,
+	footer
+) {
+	display: none !important;
+}
+html[data-zen] body.zen-page .zen-exit {
+	display: block;
+	position: fixed;
+	top: 12px;
+	left: 12px;
+	z-index: 100;
+	background: rgba(0, 0, 0, 0.5);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	color: var(--color-text-warm);
+	padding: 6px 10px;
+	font: inherit;
+	font-size: 0.85rem;
+	cursor: pointer;
+}

@@ -305,7 +305,7 @@
 		<button class="settings-toggle" type="button" data-settings-open aria-label="Settings" title="Settings"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
 	</header>
 
-	<div class="main" x-data="multiplayerLobby()" x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly">
+	<div class="main" x-data="multiplayerLobby()" x-effect="document.body.classList.toggle('zen-page', phase === 'playing')" x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly">
 		<!-- Spectator banner -->
 		<div class="spectator-banner" x-show="isSpectator" x-cloak x-text="bannerText"></div>
 
@@ -1900,6 +1900,7 @@
 	<script src="static/scripts/engine/spectator-controller.js"></script>
 	<script src="static/scripts/sound-manager.js"></script>
 	<script src="static/scripts/spell-effects.js"></script>
+	<script src="static/scripts/board-marks.js"></script>
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js?v=34"></script>

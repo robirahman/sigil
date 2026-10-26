@@ -1734,6 +1734,21 @@ document.addEventListener('alpine:init', () => {
 				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
 				bindGameKeys(_this);
 
+				// Arrows and circles (board-marks.js), local only. Play keeps
+				// one set, cleared at the end of each turn; review keeps one
+				// per move, analysis one per tree node.
+				const _marksStones = _this.$el.querySelector('.stone-nodes');
+				_this.boardMarks = (typeof attachBoardMarks === 'function' && _marksStones)
+					? attachBoardMarks(_marksStones.parentElement) : null;
+				if (_this.boardMarks) {
+					const marksKey = () => analysis
+						? (_this.anaMode === 'edit' ? 'edit' : 'node:' + _this.anaCur)
+						: (_this.reviewMode ? 'review:' + _this.reviewIndex : 'play');
+					const follow = () => _this.boardMarks.setKey(marksKey());
+					for (const prop of analysis ? ['anaCur', 'anaMode'] : ['reviewMode', 'reviewIndex']) _this.$watch(prop, follow);
+					follow();
+				}
+
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
 
@@ -1784,6 +1799,7 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'turn_complete') {
 						drawPushArrows(_this.$refs.pushArrows, []);
+						if (_this.boardMarks && !analysis && !_this.reviewMode) _this.boardMarks.clear();
 						const t = rest.turn;
 						if (puzzle && t) _puzzleOnTurn(t);
 						if (tutorial && t) _tutorialOnTurn(t);
@@ -2077,6 +2093,7 @@ document.addEventListener('alpine:init', () => {
 					_this.currentSfn = '';
 					_this.whoseTurn = '';
 					_turnCount = 0;
+					if (_this.boardMarks) _this.boardMarks.clearAll();
 					initEngine();
 				};
 
@@ -2266,6 +2283,7 @@ document.addEventListener('alpine:init', () => {
 					_this.currentSfn = '';
 					_this.whoseTurn = '';
 					_turnCount = 0;
+					if (_this.boardMarks) _this.boardMarks.clearAll();
 					_tutorialShowStep();
 					initEngine();
 				}

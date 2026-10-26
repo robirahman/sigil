@@ -326,6 +326,8 @@ function analysisMixin() {
 				try { n.winner = analysisDecidedWinner(n.sfn); } catch (e) { n.winner = null; }
 			}
 			this.anaTree = tree;
+			// A new tree reuses node ids: drop the old tree's arrows.
+			if (this.boardMarks) this.boardMarks.clearAll();
 			this.anaGoto(Math.max(0, Math.min(at || 0, tree.length - 1)));
 		},
 

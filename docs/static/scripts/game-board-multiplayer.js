@@ -760,6 +760,19 @@ document.addEventListener('alpine:init', () => {
 				// Keyboard shortcuts (game-keys.js, shared with game.html)
 				bindGameKeys(_this, { disabled: () => _this.isSpectator });
 
+				// Arrows and circles (board-marks.js), never sent to the
+				// opponent. Play keeps one set, cleared at the end of each
+				// turn; review keeps one per move. Spectators draw too.
+				const _marksStones = _this.$el.querySelector('.stone-nodes');
+				_this.boardMarks = (typeof attachBoardMarks === 'function' && _marksStones)
+					? attachBoardMarks(_marksStones.parentElement) : null;
+				if (_this.boardMarks) {
+					const follow = () => _this.boardMarks.setKey(_this.reviewMode ? 'review:' + _this.reviewIndex : 'play');
+					_this.$watch('reviewMode', follow);
+					_this.$watch('reviewIndex', follow);
+					follow();
+				}
+
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller
 				// re-announces "Red Turn N" after restoring the snapshot): drop the
@@ -871,6 +884,7 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'turn_complete') {
 						drawPushArrows(_this.$refs.pushArrows, []);
+						if (_this.boardMarks && !_this.reviewMode) _this.boardMarks.clear();
 						// Track the most recent opponent turn for annotation eligibility.
 						const t = rest.turn;
 						if (t && t.color && t.color !== _this.myColor) {
