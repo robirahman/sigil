@@ -15,8 +15,10 @@
  * The settings new with this panel live together in localStorage
  * 'sigil_settings': volume (0..1), motion ('full' | 'reduced' | 'off', or
  * null to follow the system's prefers-reduced-motion), colourblind,
- * confirmEndTurn and muteEmotes (online games: hide preset emotes and the
- * picker; its row shows only on pages with body[data-emotes]).
+ * confirmEndTurn, muteEmotes (online games: hide preset emotes and the
+ * picker; its row shows only on pages with body[data-emotes]) and zen
+ * (html[data-zen]; only pages with <body class="zen-page"> offer it, and Z
+ * toggles it there).
  *
  * Every change dispatches a 'sigil-settings' window event whose detail is
  * SigilSettings.snapshot(); the game components listen for artOnly (and
@@ -25,7 +27,7 @@
 const SIGIL_SETTINGS_KEY = 'sigil_settings';
 
 const SigilSettings = {
-	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false, muteEmotes: false },
+	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false, muteEmotes: false, zen: false },
 
 	_load() {
 		let saved = null;
@@ -89,6 +91,7 @@ const SigilSettings = {
 			colourblind: !!s.colourblind,
 			confirmEndTurn: !!s.confirmEndTurn,
 			muteEmotes: !!s.muteEmotes,
+			zen: !!s.zen,
 		};
 	},
 
@@ -99,6 +102,8 @@ const SigilSettings = {
 		root.setAttribute('data-motion', this.motion());
 		if (s.colourblind) root.setAttribute('data-colourblind', '');
 		else root.removeAttribute('data-colourblind');
+		if (s.zen) root.setAttribute('data-zen', '');
+		else root.removeAttribute('data-zen');
 		if (typeof soundManager !== 'undefined') soundManager.volume = s.volume;
 	},
 };
@@ -167,7 +172,9 @@ const SigilDialog = {
 const SIGIL_SHORTCUTS = [
 	['Enter', 'End turn (or Submit). Press twice when "Confirm before ending a turn" is on.'],
 	['D', 'Dash'],
-	['Escape', 'Close a tooltip, this list or the settings; cancel an armed End Turn or Forfeit'],
+	['Escape', 'Close a tooltip, this list or the settings; cancel an armed End Turn or Forfeit; clear arrows and circles'],
+	['Z', 'Zen mode: only the board, the clocks and the turn buttons', 'zen'],
+	['Right-drag', 'Draw an arrow between two nodes; right-click draws a circle. Again removes it. Shift red, Alt blue, Ctrl yellow. On a touch screen use the pencil on the board'],
 	['?', 'Show or hide this list'],
 	['Tab', 'Move between board nodes, spells and buttons; Enter or Space activates the focused one'],
 	['← →', 'Review: previous / next move'],
@@ -207,9 +214,14 @@ function _sigilBuildDialogs() {
 	const confirmEnd = h('input', { type: 'checkbox', 'data-setting': 'confirmEndTurn' });
 	const muteEmotes = h('input', { type: 'checkbox', 'data-setting': 'muteEmotes' });
 	const hasEmotes = document.body.hasAttribute('data-emotes');
+	const zen = h('input', { type: 'checkbox', 'data-setting': 'zen' });
 	const shortcutsBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Keyboard shortcuts (?)' });
 	const closeBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Close' });
 
+	// Zen rows show only while the page offers zen (body.zen-page, which
+	// multiplayer.html sets only during a game).
+	const zenRow = row('Zen mode', zen, 'Hide everything but the board, the clocks and the turn buttons. Z toggles it.');
+	zenRow.classList.add('zen-only');
 	const panel = h('div', { class: 'settings-panel', id: 'settings-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'settings-panel-title', hidden: '' }, [
 		h('div', { class: 'settings-panel__inner' }, [
 			h('h2', { class: 'settings-panel__title', id: 'settings-panel-title', text: 'Settings' }),
@@ -222,6 +234,7 @@ function _sigilBuildDialogs() {
 			row('Art-only spell circles', artOnly, 'Hide spell names and descriptions on the board circles.'),
 			row('Colourblind markers', colourblind, 'A diamond on red stones and a ring on blue ones, also on glows, locks and clocks.'),
 			row('Confirm before ending a turn', confirmEnd, 'End Turn asks once more before passing.'),
+			zenRow,
 		].concat(hasEmotes ? [
 			row('Mute emotes', muteEmotes, 'Hide the preset emotes in online games.'),
 		] : [], [
@@ -230,9 +243,10 @@ function _sigilBuildDialogs() {
 	]);
 
 	const list = h('dl', { class: 'shortcuts-overlay__list' });
-	for (const [k, v] of SIGIL_SHORTCUTS) {
-		list.appendChild(h('dt', {}, [h('kbd', { text: k })]));
-		list.appendChild(h('dd', { text: v }));
+	for (const [k, v, only] of SIGIL_SHORTCUTS) {
+		const cls = only === 'zen' ? { class: 'zen-only' } : {};
+		list.appendChild(h('dt', cls, [h('kbd', { text: k })]));
+		list.appendChild(h('dd', Object.assign({ text: v }, cls)));
 	}
 	const shortcutsClose = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Close' });
 	const overlay = h('div', { class: 'settings-panel shortcuts-overlay', id: 'shortcuts-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'shortcuts-overlay-title', hidden: '' }, [
@@ -257,6 +271,7 @@ function _sigilBuildDialogs() {
 		colourblind.checked = s.colourblind;
 		confirmEnd.checked = s.confirmEndTurn;
 		muteEmotes.checked = s.muteEmotes;
+		zen.checked = s.zen;
 	};
 
 	theme.addEventListener('change', () => SigilSettings.set('theme', theme.value));
@@ -274,6 +289,12 @@ function _sigilBuildDialogs() {
 	colourblind.addEventListener('change', () => SigilSettings.set('colourblind', colourblind.checked));
 	confirmEnd.addEventListener('change', () => SigilSettings.set('confirmEndTurn', confirmEnd.checked));
 	muteEmotes.addEventListener('change', () => SigilSettings.set('muteEmotes', muteEmotes.checked));
+	zen.addEventListener('change', () => SigilSettings.set('zen', zen.checked));
+
+	// Zen hides the header; this is the way back that stays on screen.
+	const zenExit = h('button', { type: 'button', class: 'zen-exit', text: 'Exit zen (Z)' });
+	zenExit.addEventListener('click', () => SigilSettings.set('zen', false));
+	document.body.appendChild(zenExit);
 
 	SigilDialog.openSettings = () => { refresh(); SigilDialog.open(panel); };
 	SigilDialog.toggleShortcuts = () => {

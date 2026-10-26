@@ -326,6 +326,8 @@ function analysisMixin() {
 				try { n.winner = analysisDecidedWinner(n.sfn); } catch (e) { n.winner = null; }
 			}
 			this.anaTree = tree;
+			// A new tree reuses node ids: drop the old tree's arrows.
+			if (this.boardMarks) this.boardMarks.clearAll();
 			this.anaGoto(Math.max(0, Math.min(at || 0, tree.length - 1)));
 		},
 
@@ -852,6 +854,8 @@ function analysisMixin() {
 			// A new board layout: fresh spells and the start stones on it.
 			if (ed.layout !== BOARD.id) {
 				this.applyBoardLayout(ed.layout);
+				// The editor's arrows belong to the old board's nodes.
+				if (this.boardMarks) this.boardMarks.clear();
 				ed.spells = generateSpellList(['core']);
 				const stones = {};
 				for (const n of NODE_ORDER) stones[n] = null;

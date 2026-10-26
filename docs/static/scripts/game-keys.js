@@ -62,6 +62,29 @@ function bindGameKeys(c, opts) {
 }
 
 /**
+ * Board tools, for players and spectators alike (bindGameKeys is off for
+ * spectators): Z toggles zen mode on pages that offer it (<body
+ * class="zen-page">, settings-panel.js); Escape clears the arrows and
+ * circles of board-marks.js.
+ */
+document.addEventListener('keydown', (e) => {
+	if (e.ctrlKey || e.metaKey || e.altKey) return;
+	if (typeof SigilDialog !== 'undefined' && SigilDialog.isOpen()) return;
+	const tag = document.activeElement?.tagName;
+	if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+	if (e.key === 'Escape') {
+		document.querySelectorAll('.board-marks').forEach(svg => {
+			if (svg.parentNode && svg.parentNode._boardMarks) svg.parentNode._boardMarks.clear();
+		});
+		return;
+	}
+	if ((e.key === 'z' || e.key === 'Z') && document.body.classList.contains('zen-page') && typeof SigilSettings !== 'undefined') {
+		e.preventDefault();
+		SigilSettings.set('zen', !SigilSettings.get('zen'));
+	}
+});
+
+/**
  * With "Confirm before ending a turn" on, the first End Turn (button or
  * Enter) only arms it: the button asks again and the second press passes.
  * Arming decays like Forfeit's. Returns true when the turn should end now.

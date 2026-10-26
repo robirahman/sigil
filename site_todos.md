@@ -104,12 +104,15 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add "ask for more time" and "give opponent +15 s".**
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
-- [ ] **Add zen mode** that hides everything but the board and clocks.
-- [ ] **Add board flip** and a choice of which side the board is drawn from.
+- [x] **Add zen mode** that hides everything but the board and clocks.
+  Done: Z or the settings panel (stored in `sigil_settings`) on game.html and in multiplayer games; keeps the board, clocks and the buttons a turn needs, with an Exit zen button.
+- [x] ~~**Add board flip** and a choice of which side the board is drawn from.~~
+  Not applicable (Robi, 2026-10-26): both players see the board from the same side on the site, so there is no perspective to flip.
 - [x] **Add a correspondence "your move" list across games.** Done: active-games.html, least time left first, and a "Your move (N)" header badge.
 - [ ] **Add a correspondence vacation / pause option.** It changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
 - [ ] **Add move input by typed notation**, and optionally by voice.
-- [ ] **Let players draw arrows and circles** on the board during play and analysis.
+- [x] **Let players draw arrows and circles** on the board during play and analysis.
+  Done: board-marks.js. Right-drag arrows, right-click circles, Shift/Alt/Ctrl colours; a pencil draw mode on touch screens; local only, cleared each turn in play, kept per move in review and per tree node in analysis.html; Escape or the ✕ button clears.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
   Animation speed is the full / reduced / off level; move confirmation asks before End Turn.
 
