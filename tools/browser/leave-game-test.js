@@ -7,10 +7,8 @@
 //   4. vs AI: the dialog opens too.
 //   5. After game over, and in review, the logo leaves at once.
 //   6. The analysis board (same component) never asks.
-//   7. Stale assets from an old service worker (old constants.js and
-//      game-keys.js): the page reloads once (epoch guard), refetching the
-//      stylesheets past the HTTP cache, and the old game-keys.js doesn't
-//      break the game.
+//   7. An old service worker's cached copies live under the unversioned
+//      URLs; game.html loads ?ui=2 ones, so it keeps the guard and styles.
 //
 //   (cd docs && python3 -m http.server 8765) &
 //   node tools/browser/leave-game-test.js http://localhost:8765
@@ -190,30 +188,33 @@ const path = (page) => new URL(page.url()).pathname;
 		check('analysis: the logo leaves at once', !path(page).endsWith('/analysis.html') && dialogs.length === 0, { path: path(page), dialogs });
 		await page.browserContext().close();
 
-		// ---- 7. Stale assets.
+		// ---- 7. An old worker's cache: the unversioned URLs answer with the
+		// previous build (no guardLeavingGame, no moved game.html rules). The
+		// page loads ?ui=2 URLs, so it still gets the guard and the styles.
 		dialogs = [];
 		const local = async (rel) => (await fetch(BASE + '/' + rel)).text();
-		const oldConstants = (await local('static/scripts/engine/constants.js')).replace(/const SIGIL_ASSET_EPOCH = \d+;/, 'const SIGIL_ASSET_EPOCH = 2;');
 		const oldKeys = (await local('static/scripts/game-keys.js')).replace('function guardLeavingGame(', 'function _notYetShipped(');
-		const cssReloads = [];
-		let navs = 0;
+		const oldBoard = (await local('static/scripts/game-board-local.js')).replace(/if \(typeof guardLeavingGame === 'function'\) guardLeavingGame\(/, 'void (');
+		const css = await local('static/css/styles.css');
+		const oldCss = css.slice(0, css.indexOf('/* --- game.html (moved from its inline <style>) --- */'));
+		const oldServed = [];
 		page = await newPage(browser, errors, dialogs, (r) => {
 			const u = r.url();
-			if (r.isNavigationRequest() && u.includes('/game.html')) navs++;
-			if (u.includes('/static/css/styles.css') && r.resourceType() === 'fetch') cssReloads.push(u);
-			if (u.includes('/engine/constants.js')) { r.respond({ status: 200, contentType: 'text/javascript', body: oldConstants }); return true; }
-			if (u.includes('/static/scripts/game-keys.js')) { r.respond({ status: 200, contentType: 'text/javascript', body: oldKeys }); return true; }
-			return false;
+			const old = u.endsWith('/static/scripts/game-keys.js') ? ['text/javascript', oldKeys]
+				: u.endsWith('/static/scripts/game-board-local.js?v=34') ? ['text/javascript', oldBoard]
+				: u.endsWith('/static/css/styles.css') ? ['text/css', oldCss] : null;
+			if (!old) return false;
+			oldServed.push(u.replace(BASE, ''));
+			r.respond({ status: 200, contentType: old[0], body: old[1] });
+			return true;
 		});
 		await page.goto(`${BASE}/game.html`, { waitUntil: 'load', timeout: 90000 });
-		for (let i = 0; i < 40 && navs < 2; i++) await sleep(250);
 		await ready(page);
-		check('stale: the page reloads once for epoch 3', navs === 2
-			&& await page.evaluate(() => sessionStorage.getItem('sigilStaleAssetReload')) === '3', navs);
-		check('stale: styles.css is refetched (fetch, cache: reload)', cssReloads.length >= 1, cssReloads);
-		await sleep(500);
-		check('stale: still one reload, and the game runs on the old game-keys.js', navs === 2
-			&& await page.evaluate(() => typeof guardLeavingGame === 'undefined' && G().actionList.length > 0), navs);
+		check('stale cache: game.html requests none of the old URLs', oldServed.length === 0, oldServed);
+		check('stale cache: the moved rules apply', await page.evaluate(() => getComputedStyle(document.querySelector('body > header')).position === 'absolute'));
+		await page.click('header .logo a');
+		await sleep(300);
+		check('stale cache: the logo still asks', await dialogOpen(page));
 		await page.browserContext().close();
 	} catch (e) {
 		check('exception', false, e.message);
