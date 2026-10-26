@@ -7,7 +7,7 @@
 The self-play shards in gs://focus-surfer-494820-g0-sigil (`v2d4_<base>_<n>.npz`,
 written by the round-3/4 self-play runners) hold, per position, the SFN, the
 game id, the ply, the side to move (`is_red`) and `y` = 1 when the side to move
-went on to win. Consecutive plies of one game are consecutive turns, so the
+went on to win (255: the game hit the ply cap undecided; skipped). Consecutive plies of one game are consecutive turns, so the
 games rebuild into the hydrated format gen_mate_puzzles.py reads
 ({gid: {redUid, blueUid, winner, timestamp, variant, turns: [{color,
 turnNumber, sfnBefore, sfnAfter}]}}). A turn whose next position is missing
@@ -58,6 +58,8 @@ def games_of(z, tag):
     for i, g in enumerate(z['game'].tolist()):
         by[g].append(i)
     for g, idx in by.items():
+        if any(int(z['y'][i]) == 255 for i in idx):
+            continue                # selfplay_v2: the game hit the ply cap, no winner
         idx.sort(key=lambda i: int(z['ply'][i]))
         turns, winner = [], None
         for k, i in enumerate(idx):
