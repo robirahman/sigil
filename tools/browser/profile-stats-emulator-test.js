@@ -201,7 +201,8 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		check('longest win streak 2', (await p.$eval('[data-stat="longest-win"] .stat-tile__value', (e) => e.textContent.trim())) === '2');
 		check('longest losing streak 2', (await p.$eval('[data-stat="longest-loss"] .stat-tile__value', (e) => e.textContent.trim())) === '2');
 		const best = await p.$eval('[data-stat="best-win"]', (e) => e.textContent.replace(/\s+/g, ' ').trim());
-		check('best win 1600 vs Hard AI', /1600/.test(best) && /vs Hard AI/.test(best), best);
+		// AI games are left out: an AI's rating at the time is not stored.
+		check('best win 1100 vs Alice (g1, not the AI)', /1100/.test(best) && /vs Alice/.test(best), best);
 		const worst = await p.$eval('[data-stat="worst-loss"]', (e) => e.textContent.replace(/\s+/g, ' ').trim());
 		check('worst loss 1084 vs Alice (before-game rating)', /1084/.test(worst) && /vs Alice/.test(worst), worst);
 		const kind = await rowsText(p, '[data-mode="byKind"]');
@@ -266,6 +267,24 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		await p.setViewport({ width: 900, height: 900 });
 		await p.reload({ waitUntil: 'load' });
 		await p.waitForFunction((s) => { const el = document.querySelector(s); const d = el && el._x_dataStack && el._x_dataStack[0]; return d && !d.loading && !d.metaLoading && d.metaCovered === 7; }, { timeout: 60000 }, P);
+		// Opponent ratings come from every game, not just the room-field cap:
+		// with the cap at 3, the oldest game (g1) still gives the best win.
+		const capped = await browser.newPage();
+		await capped.evaluateOnNewDocument(() => { window.__PROFILE_META_CAP = 3; try { localStorage.removeItem('sigil_profile_opp_elo_v1'); } catch (e) { /* none */ } });
+		await capped.evaluateOnNewDocument(useEmulators, DB_HOST);
+		await capped.setBypassServiceWorker(true);
+		await capped.setRequestInterception(true);
+		capped.on('request', (req) => {
+			const url = req.url();
+			if (!url.startsWith('https://www.gstatic.com/firebasejs/')) return req.continue();
+			sdk(url).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }), () => req.continue());
+		});
+		await capped.goto(`${BASE}/profile.html?uid=${ME}#stats`, { waitUntil: 'load', timeout: 90000 });
+		await capped.waitForFunction((s) => { const el = document.querySelector(s); const d = el && el._x_dataStack && el._x_dataStack[0]; return d && !d.loading && d.user && !d.metaLoading; }, { timeout: 60000 }, P);
+		const cappedBest = await capped.$eval('[data-stat="best-win"]', (e) => e.textContent.replace(/\s+/g, ' ').trim());
+		check('cap 3: best win still 1100 vs Alice (oldest game)', /1100/.test(cappedBest) && /vs Alice/.test(cappedBest), cappedBest);
+		check('cap 3: room fields for 3 games', (await capped.evaluate((s) => document.querySelector(s)._x_dataStack[0].metaCovered, P)) === 3);
+		await capped.close();
 		const cached = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('sigil_profile_meta_v1') || '{}')).length);
 		check('room fields cached for the 6 rooms found', cached === 6, cached);
 		await p.waitForFunction(() => document.querySelectorAll('[data-insight] svg.ins-chart').length === 3, { timeout: 10000 });

@@ -10,8 +10,9 @@
  *   meta  - what the page reads from the game's public room record,
  *           rooms/{roomCode} (completed_games is not readable by clients):
  *           { spellNames, variant, timeControl, finalSfn, startSfn,
- *           setupSfn } plus oppElo, the opponent's rating before the game
- *           (their own user_games entry; an AI's current rating).
+ *           setupSfn }.
+ *   oppElo - a human opponent's rating before a rated game, from their own
+ *           user_games entry for it (none for AI opponents).
  *
  * Loaded as a classic script by profile.html, and require()-able in node.
  * Uses normalizeVariant / displaySpellName from engine/constants.js and
@@ -139,13 +140,13 @@ const ProfileStats = (() => {
 	/**
 	 * Best win: the win over the highest-rated opponent; worst loss: the loss
 	 * to the lowest-rated one. By the opponent's rating before the game
-	 * (meta.oppElo), so games without one are skipped.
+	 * (oppEloOf), so games without one are skipped.
 	 */
-	function bestWorst(games, metaOf) {
+	function bestWorst(games, oppEloOf) {
 		let bestWin = null, worstLoss = null;
 		for (const g of games) {
-			const m = metaOf(g);
-			const r = m && typeof m.oppElo === 'number' ? m.oppElo : null;
+			const v = oppEloOf ? oppEloOf(g) : null;
+			const r = typeof v === 'number' ? v : null;
 			if (r === null) continue;
 			if (g.result === 'win' && (!bestWin || r > bestWin.oppElo)) bestWin = { game: g, oppElo: r };
 			if (g.result !== 'win' && (!worstLoss || r < worstLoss.oppElo)) worstLoss = { game: g, oppElo: r };
@@ -159,14 +160,14 @@ const ProfileStats = (() => {
 	}
 
 	/** Everything the Stats tab shows. */
-	function summarize(games, metaOf) {
+	function summarize(games, metaOf, oppEloOf) {
 		const meta = (g) => roomMeta(metaOf(g));
 		return {
 			byKind: groupBy(games, (g) => (g.opponentIsAI ? 'vs AI' : 'vs players'), ['vs players', 'vs AI']),
 			byTc: groupBy(games, (g) => (meta(g) ? tcBucket(meta(g).timeControl) : null), TC_ORDER),
 			byVariant: groupBy(games, (g) => (meta(g) ? variantLabel(meta(g).variant, isFromPosition(g, meta(g))) : null), ['Standard']),
 			streaks: streaks(games),
-			bests: bestWorst(games, metaOf),
+			bests: bestWorst(games, oppEloOf),
 		};
 	}
 

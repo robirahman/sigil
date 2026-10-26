@@ -442,7 +442,7 @@
 										</template>
 									</div>
 								</div>
-								<p class="meta-note">Best win and worst loss go by the opponent's rating before the game (an AI's current rating).</p>
+								<p class="meta-note">Best win and worst loss: rated games against players, by the opponent's rating before the game (AI ratings at the time are not stored).</p>
 
 								<template x-for="sec in modeSections" x-bind:key="sec.key">
 									<div x-bind:data-mode="sec.key">
@@ -577,12 +577,17 @@
 		// long game's turns are not downloaded until an export asks for them.
 		const PROFILE_META_FIELDS = ['spellNames', 'variant', 'timeControl', 'finalSfn', 'startSfn', 'setupSfn'];
 		// The most recent games whose rooms are read for the Stats/Insights tabs.
-		const PROFILE_META_CAP = 300;
+		// (profile-stats-emulator-test.js lowers it through window.__PROFILE_META_CAP.)
+		const PROFILE_META_CAP = window.__PROFILE_META_CAP || 300;
 		// Games read at once (each is a handful of small reads).
 		const PROFILE_FETCH_BATCH = 20;
 		// Finished rooms do not change: their fields are kept in localStorage.
 		const PROFILE_META_CACHE_KEY = 'sigil_profile_meta_v1';
 		const PROFILE_META_CACHE_MAX = 2000;
+		// Opponent-rating reads at once (one number each).
+		const PROFILE_OPP_BATCH = 50;
+		const PROFILE_OPP_CACHE_KEY = 'sigil_profile_opp_elo_v1';
+		const PROFILE_OPP_CACHE_MAX = 5000;
 		// Spells shown in the spell chart (the table lists them all).
 		const PROFILE_SPELL_CHART_ROWS = 12;
 
@@ -597,6 +602,18 @@
 					for (const k of keys.slice(0, keys.length - PROFILE_META_CACHE_MAX)) delete cache[k];
 				}
 				localStorage.setItem(PROFILE_META_CACHE_KEY, JSON.stringify(cache));
+			} catch (e) { /* storage full or blocked: no cache */ }
+		}
+
+		function _profileOppEloCacheRead() {
+			try { return JSON.parse(localStorage.getItem(PROFILE_OPP_CACHE_KEY) || '{}') || {}; } catch (e) { return {}; }
+		}
+		function _profileOppEloCacheWrite(cache) {
+			try {
+				const keys = Object.keys(cache);
+				// Push ids sort by time: drop the oldest.
+				if (keys.length > PROFILE_OPP_CACHE_MAX) for (const k of keys.sort().slice(0, keys.length - PROFILE_OPP_CACHE_MAX)) delete cache[k];
+				localStorage.setItem(PROFILE_OPP_CACHE_KEY, JSON.stringify(cache));
 			} catch (e) { /* storage full or blocked: no cache */ }
 		}
 
@@ -615,8 +632,10 @@
 				// Search
 				filters: { opponent: '', result: 'all', rated: 'all', spell: '', from: '', to: '' },
 
-				// Room fields by game id (see PROFILE_META_FIELDS), plus oppElo.
+				// Room fields by game id (see PROFILE_META_FIELDS).
 				meta: {},
+				// A human opponent's rating before the game, by game id.
+				oppElo: {},
 				metaLoading: false,
 				metaCovered: 0,
 				stats: null,
@@ -760,9 +779,9 @@
 				},
 
 				/**
-				 * Room fields of the PROFILE_META_CAP most recent games, and each
-				 * opponent's rating before the game, PROFILE_FETCH_BATCH games at a
-				 * time; the tabs refresh after each batch.
+				 * Room fields of the PROFILE_META_CAP most recent games,
+				 * PROFILE_FETCH_BATCH games at a time (the tabs refresh after each
+				 * batch), then the opponents' ratings.
 				 */
 				async _loadMeta(db) {
 					this.metaLoading = true;
@@ -778,12 +797,6 @@
 					this.meta = Object.assign({}, meta);
 					this.metaCovered = recent.length - todo.length;
 					this._recompute();
-					// An AI's rating before the game is not stored: its current one
-					// (AI ratings are pinned) stands in, one read per AI.
-					const aiElo = {};
-					const aiUids = Array.from(new Set(recent.filter((g) => g.opponentIsAI && g.opponentUid).map((g) => g.opponentUid)));
-					await Promise.all(aiUids.map((u) => db.ref('users/' + u + '/elo').once('value')
-						.then((s) => { aiElo[u] = s.val(); }, () => {})));
 					const one = async (g) => {
 						const m = { code: g.roomCode, at: g.timestamp };
 						const reads = [];
@@ -791,12 +804,6 @@
 							for (const f of PROFILE_META_FIELDS) {
 								reads.push(db.ref('rooms/' + g.roomCode + '/' + f).once('value').then((s) => { if (s.exists()) m[f] = s.val(); }));
 							}
-						}
-						// A human opponent's rating before a rated game is in their own
-						// user_games entry for it (public, like this player's).
-						if (g.rated && g.opponentUid && !g.opponentIsAI) {
-							reads.push(db.ref('user_games/' + g.opponentUid + '/' + g.id + '/eloBefore').once('value')
-								.then((s) => { if (typeof s.val() === 'number') m.oppElo = s.val(); }));
 						}
 						await Promise.all(reads.map((r) => r.catch(() => {})));
 						return m;
@@ -813,20 +820,46 @@
 						this.meta = Object.assign({}, meta);
 						this._recompute();
 					}
-					for (const g of recent) {
-						if (g.opponentIsAI && typeof aiElo[g.opponentUid] === 'number' && meta[g.id]) {
-							meta[g.id] = Object.assign({}, meta[g.id], { oppElo: aiElo[g.opponentUid] });
-						}
-					}
-					this.meta = Object.assign({}, meta);
 					_profileMetaCacheWrite(cache);
+					await this._loadOppElo(db);
 					this.metaLoading = false;
 					this._recompute();
 				},
 
+				/**
+				 * Each human opponent's rating before every rated game (all games,
+				 * not just PROFILE_META_CAP: one small read each), for Best win /
+				 * Worst loss. It is in their own user_games entry for the game
+				 * (public, like this player's). AI opponents have no user_games and
+				 * their rating moves, so AI games are left out rather than shown
+				 * at today's rating.
+				 */
+				async _loadOppElo(db) {
+					const cache = _profileOppEloCacheRead();
+					const known = {};
+					const todo = [];
+					for (const g of this.games) {
+						if (!g.rated || !g.opponentUid || g.opponentIsAI) continue;
+						if (typeof cache[g.id] === 'number') known[g.id] = cache[g.id];
+						else todo.push(g);
+					}
+					this.oppElo = Object.assign({}, known);
+					for (let i = 0; i < todo.length; i += PROFILE_OPP_BATCH) {
+						const batch = todo.slice(i, i + PROFILE_OPP_BATCH);
+						const got = await Promise.all(batch.map((g) => db.ref('user_games/' + g.opponentUid + '/' + g.id + '/eloBefore')
+							.once('value').then((s) => s.val(), () => null)));
+						batch.forEach((g, k) => {
+							if (typeof got[k] === 'number') known[g.id] = cache[g.id] = got[k];
+						});
+						this.oppElo = Object.assign({}, known);
+						this._recompute();
+					}
+					_profileOppEloCacheWrite(cache);
+				},
+
 				_recompute() {
 					const metaOf = (g) => this.meta[g.id];
-					this.stats = ProfileStats.summarize(this.games, metaOf);
+					this.stats = ProfileStats.summarize(this.games, metaOf, (g) => this.oppElo[g.id]);
 					this.insights = ProfileStats.insights(this.games, metaOf);
 					if (this.tab === 'insights') this.$nextTick(() => this.renderCharts());
 				},
