@@ -218,11 +218,18 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		check('no banner left for Bob', await pageB.evaluate(() => !document.querySelector('.challenge-banner')));
 
 		// ---- 5. Blocking ----
+		// A challenge from Alice still open when Bob blocks her goes too.
+		await rest('PATCH', '', {
+			'rooms/OPENCH': { status: 'waiting', created: Date.now(), ranked: false, variant: 'standard', spellNames: ['a'], timeControl: { type: 'none' },
+				creatorColor: 'red', invite: bob, allowSpectators: true, red: { uid: alice, displayName: 'Alice', connected: true }, blue: { connected: false } },
+			['challenges/' + bob + '/OPENCH']: { from: alice, at: Date.now(), tc: { type: 'none' }, variant: 'standard' },
+		});
 		await pageB.goto(`${BASE}/profile.html?uid=${alice}`, { waitUntil: 'load', timeout: 90000 });
 		await pageB.waitForSelector('.profile__block', { visible: true, timeout: 30000 });
 		await pageB.click('.profile__block');
 		await pageB.waitForFunction(() => document.querySelector('.profile__block').textContent.trim() === 'Unblock', { timeout: 15000, polling: 250 });
 		check('block recorded', (await rest('GET', 'blocks/' + bob + '/' + alice)) === true);
+		check('blocking drops her open challenge', (await rest('GET', 'challenges/' + bob + '/OPENCH')) === null);
 
 		await pageA.goto(`${BASE}/profile.html?uid=${bob}`, { waitUntil: 'load', timeout: 90000 });
 		await pageA.waitForSelector('.profile__block', { visible: true, timeout: 30000 });

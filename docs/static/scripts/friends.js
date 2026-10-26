@@ -88,15 +88,23 @@
 		return (await db().ref('blocks/' + uid + '/' + target).once('value')).val() === true;
 	}
 
-	/** Block: also stops following them. */
+	/** Block: also stops following them and drops their open challenges. */
 	async function block(target) {
 		requireSignedIn();
 		delete blockCache[target];
-		await db().ref().update({
+		const updates = {
 			['blocks/' + uid + '/' + target]: true,
 			['follows/' + uid + '/' + target]: null,
 			['followers/' + target + '/' + uid]: null,
+		};
+		const pending = (await db().ref('challenges/' + uid).once('value')).val() || {};
+		Object.keys(pending).forEach((room) => {
+			if (pending[room] && pending[room].from === target) updates['challenges/' + uid + '/' + room] = null;
 		});
+		Object.keys(challenges).forEach((room) => { if (challenges[room].from === target) delete challenges[room]; });
+		await db().ref().update(updates);
+		renderBanner();
+		emit();
 	}
 
 	async function unblock(target) {
@@ -177,7 +185,9 @@
 			const r = (await db().ref('rooms/' + room).once('value')).val();
 			const creator = r && r.creatorColor === 'blue' ? 'blue' : 'red';
 			const open = r && r.status === 'waiting' && r.invite === me && r[creator] && r[creator].uid === c.from;
-			if (!open) {
+			// Sent before we blocked them: dropped, not shown.
+			const blocked = open && (await db().ref('blocks/' + me + '/' + c.from).once('value')).val() === true;
+			if (!open || blocked) {
 				db().ref('challenges/' + me + '/' + room).remove().catch(() => {});
 				return;
 			}
@@ -203,8 +213,12 @@
 		}, () => {});
 	}
 
-	async function accept(room) {
-		if (uid) await db().ref('challenges/' + uid + '/' + room).remove().catch(() => {});
+	/**
+	 * Open the room, which joins it. The challenge stays until the seat is
+	 * ours (multiplayer.html removes it after the join): removed earlier, the
+	 * challenger's waiting screen would read it as declined.
+	 */
+	function accept(room) {
 		location.href = ROOT + 'multiplayer.html?id=' + encodeURIComponent(room);
 	}
 

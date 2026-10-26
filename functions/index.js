@@ -275,6 +275,8 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		updates['live_rooms/' + code] = null;
 		if (room.status === 'waiting') {
 			updates['rooms/' + code] = null;
+			// A challenge it sent goes with the room.
+			if (typeof room.invite === 'string' && room.invite) updates['challenges/' + room.invite + '/' + code] = null;
 		} else if (room.status === 'playing') {
 			// Resigned, and the seat already anonymous: recordRoom and
 			// rateGame then never see the uid.
