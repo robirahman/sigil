@@ -156,6 +156,15 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		check('… and on the giver\'s page', afterA - beforeA > 12000 && afterA - beforeA <= 15000, { beforeA, afterA });
 		const told = await pb.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).messageHistory.slice(-5));
 		check('the opponent is told', told.some((m) => /gave you 15 seconds/.test(m)), told);
+		// Once the opponent's clock reads zero, +15 s is off (a gift then
+		// could only spoil the giver's own claim).
+		const timer0 = await rest('GET', 'rooms/' + live.code + '/timer');
+		await rest('PATCH', 'rooms/' + live.code + '/timer', { [bColor]: -60000, activeColor: bColor, lastUpdated: Date.now() });
+		const hidden = await until(() => pa.evaluate(() => { const b = document.querySelector('.action-button--give-time'); return !!b && b.classList.contains('is-hidden'); }), 10000);
+		check('+15 s is off once the opponent\'s clock reads zero', !!hidden);
+		await rest('PUT', 'rooms/' + live.code + '/timer', timer0);
+		const shownAgain = await until(() => pa.evaluate(() => { const b = document.querySelector('.action-button--give-time'); return !!b && !b.classList.contains('is-hidden'); }), 10000);
+		check('… and back when it does not', !!shownAgain);
 		const st = await rest('GET', 'rooms/' + live.code + '/status');
 		check('the game goes on', st === 'playing', st);
 

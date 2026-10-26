@@ -278,6 +278,20 @@ test('a paused correspondence game is not flagged', async () => {
 	assert.deepStrictEqual([w.rated, w.winner, w.overturned], [true, c.rec.winner, undefined]);
 });
 
+test('a pause stamped after the deadline does not un-flag the player', async () => {
+	const t0 = 1_000_000;
+	const room = { timeControl: { type: 'correspondence', moveTimeout: DAY }, turns: { a: { color: 'red', timestamp: t0 } } };
+	// Blue's deadline is t0 + 1 day; a vacation begun an hour after it.
+	room.pauses = { p: { color: 'blue', from: t0 + DAY + 3_600_000, to: t0 + 5 * DAY } };
+	for (const at of [t0 + DAY + 3_600_000, t0 + DAY + 7_200_000, t0 + 3 * DAY]) assert.strictEqual(flagged(room, 'blue', at), true);
+	// The rating function: a claim closed during that late pause stands.
+	const c = corrClaim();
+	c.room.pauses = { p: { color: c.loser, from: c.at + DAY + 60_000, to: c.at + 5 * DAY } };
+	c.room.closedAt = c.at + DAY + 120_000;
+	const v = await judgeGame(c.rec, ctx({ room: c.room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, c.rec.winner, undefined]);
+});
+
 test('a gift of 15 s extends the opponent\'s time', () => {
 	const t0 = 1_000_000;
 	const room = {

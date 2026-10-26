@@ -122,3 +122,21 @@ test('one sweep both ends an old vacation\'s pause and adds the current one\'s',
 	assert.ok(curP && curP.to === cur.until, JSON.stringify(p));
 });
 
+test('the sweep reads only vacations running or ended within the last day', async () => {
+	const now = Date.now();
+	// A long-gone vacation (ended two days ago) with a pause left running,
+	// and one ended an hour ago: only the recent one is the sweep's.
+	await db.ref('vacations').set({
+		zed: { used: { 2026: 1 }, from: now - 3 * DAY, until: now - 2 * DAY, days: 1 },
+		amy: { used: { 2026: 1 }, from: now - 5 * 3_600_000, until: now - 3_600_000, days: 1 },
+	});
+	await db.ref('rooms').set({
+		Z: Object.assign(room('playing', corr, 'zed', 'bob'), { pauses: { [pauseKey('zed', now - 3 * DAY, 'red')]: { color: 'red', from: now - 3 * DAY, to: now + DAY } } }),
+		Y: Object.assign(room('playing', corr, 'amy', 'bob'), { pauses: { [pauseKey('amy', now - 5 * 3_600_000, 'red')]: { color: 'red', from: now - 5 * 3_600_000, to: now + DAY } } }),
+	});
+	await pauseNewGames(db, now);
+	const r = (await db.ref('rooms').once('value')).val();
+	assert.strictEqual(r.Z.pauses[pauseKey('zed', now - 3 * DAY, 'red')].to, now + DAY);
+	assert.strictEqual(r.Y.pauses[pauseKey('amy', now - 5 * 3_600_000, 'red')].to, now - 3_600_000);
+});
+

@@ -120,7 +120,15 @@ class MultiplayerController {
 			return;
 		}
 		if (message === 'give_time') {
-			if (this._timeControl.type === 'realtime' && !this._timedOut && !(this.board && this.board.gameover)) this.sync.giveTime();
+			// Not once the opponent's clock is out or our claim is under way:
+			// a gift is the only way their side can gain time, and one
+			// landing during our own claim would make it our loss.
+			const opp = this.myColor === 'red' ? 'blue' : 'red';
+			const ts = this._timerState;
+			const view = typeof roomTimerView === 'function' && ts && ts.activeColor && ts.lastUpdated
+				? roomTimerView(ts, this._clockRoom(), this.sync.serverNow()) : null;
+			if (this._timeControl.type === 'realtime' && !this._timedOut && !this._claiming && !(this.board && this.board.gameover)
+				&& !(view && (view.out === opp || view[opp] <= 0))) this.sync.giveTime();
 			return;
 		}
 		if (message === 'claim_win') {
@@ -254,7 +262,7 @@ class MultiplayerController {
 			const view = roomTimerView(ts, this._clockRoom(), now);
 			const opp = this.myColor === 'red' ? 'blue' : 'red';
 			const given = Object.values(this._clockRec.gifts || {}).filter((g) => g && g.to === opp).length;
-			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused,
+			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused, claiming: !!this._claiming,
 				giftsLeft: typeof ROOM_GIFT_MAX === 'number' ? Math.max(0, ROOM_GIFT_MAX - given) : 0 });
 			// Not before the records have loaded: a gift not yet seen
 			// would make the claim wrong.
@@ -303,12 +311,14 @@ class MultiplayerController {
 		const t = Date.now();
 		if (this._flagCheckAt && t - this._flagCheckAt < 2000) return;
 		this._flagCheckAt = t;
+		// From here until the check says no, +15 s is off (handlePlayerAction).
+		this._claiming = true;
 		let room = null;
-		try { room = typeof this.sync.readRoom === 'function' ? await this.sync.readRoom() : null; } catch (e) { return; }
-		if (this._timedOut || !room || room.status !== 'playing') return;
+		try { room = typeof this.sync.readRoom === 'function' ? await this.sync.readRoom() : null; } catch (e) { this._claiming = false; return; }
+		if (this._timedOut || !room || room.status !== 'playing') { this._claiming = false; return; }
 		if (typeof roomTimeLeft === 'function' && typeof sideToMove === 'function') {
 			const left = roomTimeLeft(room, loser, this.sync.serverNow());
-			if (sideToMove(room) !== loser || left === null || left > 0) return;
+			if (sideToMove(room) !== loser || left === null || left > 0) { this._claiming = false; return; }
 		}
 		this._endByTimeout(loser, true);
 	}

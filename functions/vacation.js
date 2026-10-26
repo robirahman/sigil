@@ -246,7 +246,10 @@ async function setVacation(db, uid, days, now) {
  * rooms changed.
  */
 async function pauseNewGames(db, now) {
-	const recs = (await db.ref('vacations').once('value')).val() || {};
+	// Only records still running or ended within the last day (cleanup of
+	// a missed end is done by the next sweep, a minute later): never the
+	// whole history.
+	const recs = (await db.ref('vacations').orderByChild('until').startAt(now - DAY_MS).once('value')).val() || {};
 	const active = {};
 	for (const uid of Object.keys(recs)) if (onVacation(recs[uid], now)) active[uid] = recs[uid];
 	const rooms = await playingRooms(db);

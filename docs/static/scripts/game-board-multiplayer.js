@@ -52,6 +52,8 @@ document.addEventListener('alpine:init', () => {
 			timerType: 'none',
 			// How many more +15 s gifts this seat may give (room-clock.js ROOM_GIFT_MAX).
 			giftsLeft: 0,
+			// Our claim of the opponent's flag is under way (timer_tick).
+			claimingFlag: false,
 			// Each side's vacation end (correspondence), from timer_tick.
 			pausedUntil: { red: null, blue: null },
 			isSpectator: false,
@@ -276,7 +278,10 @@ document.addEventListener('alpine:init', () => {
 			// Give the opponent 15 s (live timed games).
 			get canGiveTime() {
 				return !this.isSpectator && this.timerType === 'realtime' && !this.winner && !this.gameAborted
-					&& !this.reviewMode && !!this.whoseTurn && this.giftsLeft > 0;
+					&& !this.reviewMode && !!this.whoseTurn && this.giftsLeft > 0 && !this.claimingFlag
+					// Not once the opponent's clock reads zero (a gift then would
+					// only spoil our own claim).
+					&& (this.myColor === 'red' ? this.blueTimer : this.redTimer) > 0;
 			},
 			handleGiveTime() { if (this.canGiveTime) this.sendEvent('give_time'); },
 
@@ -918,6 +923,7 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'timer_tick') {
 						_this.redTimer = rest.red; _this.blueTimer = rest.blue;
 						if (typeof rest.giftsLeft === 'number') _this.giftsLeft = rest.giftsLeft;
+						_this.claimingFlag = !!rest.claiming;
 						const p = rest.paused || {};
 						if (p.red !== _this.pausedUntil.red || p.blue !== _this.pausedUntil.blue) _this.pausedUntil = { red: p.red || null, blue: p.blue || null };
 					}
