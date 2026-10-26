@@ -76,9 +76,11 @@ const data = JSON.parse(fs.readFileSync(path.join(DOCS, 'static/puzzles/mate_puz
 const plain = a => a && (a.type === 'move' || a.type === 'blink' || (a.type === 'hard_move' && !a.pushed_to));
 const clickable = data.puzzles.filter(p => p.mate === 1 && p.solutions.length
 	&& p.solutions[0].actions.filter(a => a.type !== 'pass').length === 1 && plain(p.solutions[0].actions[0]));
-const std = clickable.filter(p => p.variant === 'standard').slice(0, 5);
-const comp = clickable.filter(p => p.variant === 'competitive').slice(0, 3);
-const stormSet = std.concat(comp).map((p, i) => Object.assign(JSON.parse(JSON.stringify(p)), { rating: 1000 + 40 * i }));
+const std = clickable.filter(p => p.variant === 'standard').slice(0, 4);
+const comp = clickable.filter(p => p.variant === 'competitive').slice(0, 4);
+// Alternating variants, rating rising: with Math.random pinned to 0 the run
+// plays them in this order, so the board must switch variant in place.
+const stormSet = std.flatMap((p, i) => comp[i] ? [p, comp[i]] : [p]).map((p, i) => Object.assign(JSON.parse(JSON.stringify(p)), { rating: 1000 + 40 * i }));
 const stormBody = JSON.stringify(Object.assign({}, data, { puzzles: stormSet.map((p, i) => Object.assign(p, { index: i })) }));
 const fullBody = JSON.stringify(data);
 
@@ -164,7 +166,7 @@ const OWNER = { Authorization: 'Bearer owner' };
 		await page.close();
 
 		// ---- 2b: a Storm run, signed out
-		page = await open(ctx0, '?tab=storm', { body: stormBody, before: `['sigil_puzzle_storm', 'sigil_puzzles_solved', 'sigil_puzzle_results', 'sigil_puzzle_rating'].forEach(k => localStorage.removeItem(k));` });
+		page = await open(ctx0, '?tab=storm', { body: stormBody, before: `Math.random = () => 0; ['sigil_puzzle_storm', 'sigil_puzzles_solved', 'sigil_puzzle_results', 'sigil_puzzle_rating'].forEach(k => localStorage.removeItem(k));` });
 		await page.waitForSelector('#storm-start', { visible: true, timeout: 30000 });
 		await page.click('#storm-start');
 		await page.waitForFunction(() => window.SIGIL_PUZZLE_BOARD && window.Alpine && window.SIGIL_STORM.current, { timeout: 30000 });
@@ -197,7 +199,7 @@ const OWNER = { Authorization: 'Bearer owner' };
 		check(s.score === 3 && s.left < before.left - 9000, `a miss costs 10 s and the combo (score ${s.score}, ${Math.round((before.left - s.left) / 1000)} s)`);
 		s = await waitFor(x => x.id === x.cur && x.status === 'playing' && x.valid.length > 0, 20000);
 		variants.add(s.variant);
-		check(variants.size === 2 || std.length === 0 || comp.length === 0, 'the board switched between variants in place: ' + [...variants].join(', '));
+		check(variants.size === 2, 'the board switched between variants in place: ' + [...variants].join(', '));
 		check(await noHScroll(page), 'Storm: no horizontal scroll at phone width');
 		const inView = await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); const b = document.getElementById('storm-end').getBoundingClientRect(); return b.top >= 0 && b.bottom <= window.innerHeight; });
 		check(inView, 'the Storm clock and buttons stay in view when the board is scrolled');
@@ -309,6 +311,24 @@ const OWNER = { Authorization: 'Bearer owner' };
 			await ps.waitForFunction(() => /Stormer/.test(document.querySelector('.leaderboard-table') ? document.querySelector('.leaderboard-table').innerText : ''), { timeout: 20000 }).catch(() => {});
 			const lbText = await ps.$eval('.leaderboard-table', el => el.innerText).catch(() => '');
 			check(/Stormer\s+2\b/.test(lbText) && /Best score/i.test(lbText), 'the Storm board shows the score: ' + JSON.stringify(lbText.slice(0, 200)));
+			// Two runs finishing at once both count; the best is the larger.
+			await ps.goto(`${BASE}/puzzles.html?tab=dashboard`, { waitUntil: 'networkidle2' });
+			await ps.waitForFunction(() => typeof recordStormRun === 'function' && firebase.auth().currentUser, { timeout: 20000 });
+			const one = await ps.evaluate(() => recordStormRun(firebase.auth().currentUser, 1).then(x => x.runs, e => 'err ' + e.message));
+			console.log('  single run after the first: ' + one);
+			// (Two devices: one client batches its own transactions on a path into one write.)
+			const run = (pg, n) => pg.evaluate((k) => recordStormRun(firebase.auth().currentUser, k).then(x => x.runs, e => 'err ' + e.message), n);
+			const both = await Promise.all([run(ps, 5), run(pb, 9)]);
+			r = await remote();
+			const lb2 = await (await fetch(`${DB}/storm_leaderboard/${uid}.json?ns=${NS}`, { headers: OWNER })).json();
+			check(r.puzzleStorm.runs === 4 && r.puzzleStorm.best === 9 && lb2.score === 9, 'concurrent runs both count (' + JSON.stringify(both) + ', ' + JSON.stringify(r.puzzleStorm) + ', board ' + lb2.score + ')');
+			// Racing leaf writes keep the earliest first result.
+			const leaf = `users/${uid}/puzzleProgress/results/race-1`;
+			await ps.evaluate((path) => Promise.all([_ppWriteLeaves(firebase.database(), { [path]: { r: 'f', at: 3000 } }),
+				_ppWriteLeaves(firebase.database(), { [path]: { r: 's', at: 2000 } }),
+				_ppWriteLeaves(firebase.database(), { [path]: { r: 'v', at: 4000 } })]), leaf);
+			const raced = await (await fetch(`${DB}/${leaf}.json?ns=${NS}`, { headers: OWNER })).json();
+			check(raced && raced.r === 's' && raced.at === 2000, 'racing first results keep the earliest ' + JSON.stringify(raced));
 			// A forged score for someone else is refused.
 			const forged = await ps.evaluate((u) => firebase.database().ref('users/someone-else/puzzleStorm').set({ best: 99, runs: 1, last: 99, at: 1 }).then(() => 'ok', e => 'denied'), uid);
 			check(forged === 'denied', 'a Storm score for another uid is refused');
