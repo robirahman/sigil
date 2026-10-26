@@ -92,6 +92,7 @@ const UNRATED_REASON_TEXT = {
 	'seat-mismatch': 'the game record did not match its room.',
 	'room-result-mismatch': 'the game record did not match its room.',
 	'same-player': 'both sides were played by one account.',
+	'suspended': 'a player in this game is suspended from rated play.',
 };
 
 /** "Unrated: <why>" for a reason code. */

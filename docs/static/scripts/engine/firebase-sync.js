@@ -329,20 +329,27 @@ class FirebaseSync {
 			// listener then reads them together (_refreshPlayers). The rules
 			// give the seat to the first claim only: a second joiner, or a
 			// join after the creator withdrew, is refused.
+			const join = () => roomRef.update({
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
+				status: 'playing',
+				ranked: this.ranked,
+				// The server's time the game began: the first mover's clock
+				// (functions/rating.js flagged) runs from it.
+				startedAt: firebase.database.ServerValue.TIMESTAMP,
+			});
 			try {
-				await roomRef.update({
-					[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
-					status: 'playing',
-					ranked: this.ranked,
-					// The server's time the game began: the first mover's clock
-					// (functions/rating.js flagged) runs from it.
-					startedAt: firebase.database.ServerValue.TIMESTAMP,
-				});
+				await join();
 			} catch (e) {
 				const now = (await roomRef.once('value').catch(() => null));
 				const v = now && now.val();
 				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
-				throw e;
+				// The rules refuse a rated room to a player suspended from
+				// rated play (user_flags/{uid}/banUntil): the game goes ahead
+				// unrated.
+				if (!this.ranked) throw e;
+				this.ranked = false;
+				this.unratedWhy = 'suspended';
+				await join();
 			}
 			// Off the open-games list, and on Watch Live if spectators may watch.
 			this.db.ref('open_rooms/' + code).remove().catch(() => {});
@@ -571,6 +578,10 @@ class FirebaseSync {
 			// so a move and an acceptance can never both land.
 			const turnKey = this.roomRef.child('turns').push().key;
 			const keys = this._turnKeys || [];
+			if (!this._lastLoaded) {
+				this._last = (await this.roomRef.child('last').once('value')).val();
+				this._lastLoaded = true;
+			}
 			const turn = {
 				color: this.myColor,
 				actions: actions,
@@ -578,6 +589,9 @@ class FirebaseSync {
 			};
 			if (keys.length) turn.after = keys[keys.length - 1];
 			const updates = { ['turns/' + turnKey]: turn, takeback: null };
+			// The turn moves `last` on in the same write. A room begun
+			// before `last` existed (turns but no `last`) stays without it.
+			if (this._last || !keys.length) updates.last = { key: turnKey, color: this.myColor };
 			if (timerUpdate) {
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -785,6 +799,14 @@ class FirebaseSync {
 		// Every turn in the room, including those before a reload (the
 		// controller's log holds only the turns since).
 		this._turnKeys = [];
+		this._turnColors = {};
+		// The room's last turn, { key, color } (database.rules.json): each
+		// turn must follow it and move it on. Rooms begun before it existed
+		// have none and keep the old rule until they finish.
+		this.roomRef.child('last').on('value', (snap) => {
+			this._last = snap.val();
+			this._lastLoaded = true;
+		});
 		// A takeback both players agreed to removes turns: start over from
 		// the room (the reconnect path rebuilds from currentSfn).
 		turnsRef.on('child_removed', () => {
@@ -792,6 +814,7 @@ class FirebaseSync {
 		});
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
+			this._turnColors[snap.key] = (snap.val() || {}).color;
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -1123,6 +1146,13 @@ class FirebaseSync {
 		}
 		const updates = { takeback: null, currentSfn: sfn || null };
 		for (const k of undo) updates['turns/' + k] = null;
+		// `last` goes back to the turn kept, in the same write (the rules
+		// require it), or away with the last turn.
+		if (this._last) {
+			const kept = this._turnKeys.filter((k) => !undo.includes(k));
+			const tip = kept[kept.length - 1];
+			updates.last = tip ? { key: tip, color: this._turnColors[tip] } : null;
+		}
 		// The requester is to move again: their clock runs (a correspondence
 		// deadline restarts from now).
 		const timer = (await this.roomRef.child('timer').once('value')).val();
@@ -1304,7 +1334,14 @@ class FirebaseSync {
 			roomData.startSfn = fromPosition.startSfn;
 			if (fromPosition.startPos) roomData.startPos = fromPosition.startPos;
 		}
-		await this.db.ref('rooms/' + code).set(roomData);
+		try {
+			await this.db.ref('rooms/' + code).set(roomData);
+		} catch (e) {
+			// A player suspended from rated play: the rematch is unrated.
+			if (!roomData.ranked) throw e;
+			roomData.ranked = false;
+			await this.db.ref('rooms/' + code).set(roomData);
+		}
 		if (roomData.allowSpectators) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
 		return code;
 	}
