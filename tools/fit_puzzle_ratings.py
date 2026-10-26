@@ -142,21 +142,39 @@ def main():
                             timeout=300).json() or {}
         # New puzzles are seeded; with --reseed, a puzzle no player has
         # attempted yet (plays 0) takes the new calibration too. A rating that
-        # players have already moved is never overwritten.
-        new = {}
-        for p in data['puzzles']:
-            cur = have.get(p['id'])
+        # players have already moved is never overwritten: each write is a
+        # conditional PUT on the entry's live ETag, decided on the value that
+        # ETag names, so an attempt landing after the bulk read makes it fail
+        # (412) and the entry is decided again on the new value.
+        def wanted(p, cur):
             if cur is None:
-                new[p['id']] = {'rating': p['rating'], 'plays': 0}
-            elif args.reseed and (cur or {}).get('plays', 0) == 0 and cur.get('rating') != p['rating']:
-                new[p['id'] + '/rating'] = p['rating']      # plays untouched
-        print(f'puzzle_ratings: {len(have)} present, {len(new)} to write' + ('' if args.apply else ' (dry run)'))
-        if args.apply and new:
-            r = requests.patch(DB_URL + '/puzzle_ratings.json', params={'access_token': tok},
-                               data=json.dumps(new), timeout=300)
-            r.raise_for_status()
-            print('wrote', len(new))
-
+                return {'rating': p['rating'], 'plays': 0}
+            if args.reseed and (cur.get('plays') or 0) == 0 and cur.get('rating') != p['rating']:
+                return dict(cur, rating=p['rating'])      # plays untouched
+            return None
+        todo = [p for p in data['puzzles'] if wanted(p, have.get(p['id'])) is not None]
+        print(f'puzzle_ratings: {len(have)} present, {len(todo)} to write' + ('' if args.apply else ' (dry run)'))
+        if args.apply:
+            wrote = skipped = 0
+            for p in todo:
+                url = DB_URL + '/puzzle_ratings/' + p['id'] + '.json'
+                for _ in range(5):
+                    g = requests.get(url, params={'access_token': tok}, headers={'X-Firebase-ETag': 'true'}, timeout=60)
+                    g.raise_for_status()
+                    body = wanted(p, g.json())
+                    if body is None:
+                        skipped += 1
+                        break
+                    r = requests.put(url, params={'access_token': tok}, headers={'if-match': g.headers['ETag']},
+                                     data=json.dumps(body), timeout=60)
+                    if r.status_code == 412:
+                        continue          # changed since the read: decide again
+                    r.raise_for_status()
+                    wrote += 1
+                    break
+                else:
+                    raise SystemExit(f'{p["id"]}: entry kept changing; rerun')
+            print(f'wrote {wrote}, skipped {skipped} (played since the bulk read)')
 
 if __name__ == '__main__':
     main()
