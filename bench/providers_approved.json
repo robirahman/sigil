@@ -1,0 +1,4 @@
+{
+ "_comment": "Accounts confirmed (in writing, by the provider) to be opted out of training AND under zero data retention. The harness refuses the private test set for anything not listed; the public dev set only warns. One entry per provider account. model_regex is a Python full-match regex.",
+ "approved": []
+}

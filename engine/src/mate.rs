@@ -558,3 +558,103 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], m
             m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
 }
+
+// ---------------------------------------------------------------------------
+// SigilBench grading (`bench/`): judge ONE submitted turn by proof.
+// ---------------------------------------------------------------------------
+
+/// Time for each re-nomination `judge_turn` makes before calling a turn unproven.
+pub const BENCH_RENOMINATE_MS: u64 = 3_000;
+
+/// Verdict on a submitted turn, by `judge_turn`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnVerdict {
+    /// Proven: the turn forces a win within the allowed number of the mover's
+    /// turns (counting the submitted turn). `true` when it wins on the spot.
+    Mate { immediate: bool },
+    /// Proven NOT to force a win within the allowed turns (exhaustive).
+    NotMate,
+    /// No proof either way: some reply leaves the mover no mate-in-1, and the
+    /// nominate-then-prove search found no mate-in-2 after it. Mate-in-3 only.
+    Unproven,
+}
+
+/// Full position identity for matching a replayed turn against the legal
+/// successors: everything the SFN carries except the side to move, the turn
+/// counter and the (constant) spell list.
+pub type FullKey = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2]);
+
+pub fn full_key(b: &Board) -> FullKey {
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank)
+}
+
+/// The legal successor of `b` (side to move plays) whose position matches
+/// `claimed` (an after-position replayed from a submitted action list, e.g. by
+/// the browser's applyAITurn), as `child` builds it (end-of-turn effects and
+/// the outcome applied). `Ok(None)` = no legal turn reaches that position.
+pub fn legal_successor(b: &Board, claimed: &Board, budget: u64, time_ms: u64)
+    -> Result<Option<Board>, MateError>
+{
+    let mut s = Solver::new(budget, time_ms);
+    let want = full_key(claimed);
+    let c = b.to_move;
+    for t in s.turns(b, c)? {
+        s.tick()?;
+        let n = child(b, &t, c);
+        if full_key(&n) == want { return Ok(Some(n)); }
+    }
+    Ok(None)
+}
+
+/// SigilBench: does the mover's turn that produced `after` (opponent to move,
+/// as `child` builds it) force a win within `n` of the mover's turns, counting
+/// the turn just played? A faster win counts (a mate-in-1 answer to a
+/// mate-in-3 puzzle is correct). Proofs:
+///
+/// * the turn itself wins: `Mate { immediate: true }`.
+/// * n = 2: every reply is enumerated and, after each, the mover's mate-in-1
+///   is settled by full enumeration, so both `Mate` and `NotMate` are proofs.
+/// * n = 3: a reply that wins outright, or (none needing more) is a proof of
+///   `NotMate`; otherwise each reply without a mate-in-1 needs a mate-in-2,
+///   found by nominate-then-prove (`has_mate_in_le2`). A miss there is NOT a
+///   refutation, so it returns `Unproven` rather than `NotMate`.
+/// * n >= 4 is not supported yet (`Unproven` unless decided by the cheap
+///   checks).
+pub fn judge_turn(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n);
+    (r, s.stats)
+}
+
+impl Solver {
+    fn judge_turn(&mut self, after: &Board, c: Color, n: u8) -> Result<TurnVerdict, MateError> {
+        if won_by(after.outcome, c) { return Ok(TurnVerdict::Mate { immediate: true }); }
+        if after.outcome != Outcome::Ongoing || n <= 1 { return Ok(TurnVerdict::NotMate); }
+        let o = c.other();
+        let replies = self.successors(after, o)?;
+        // Cheap pass first: an outright win for the defender refutes at once.
+        if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Ok(TurnVerdict::NotMate); }
+        let mut need_m2: Vec<Board> = Vec::new();
+        for (_, rb) in &replies {
+            if rb.outcome != Outcome::Ongoing { continue; }      // the reply loses on the spot
+            if self.has_mate_in_1(rb, c)? { continue; }
+            if n == 2 { return Ok(TurnVerdict::NotMate); }       // exhaustive: no mate-in-1 here
+            need_m2.push(*rb);
+        }
+        if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
+        if n > 3 { return Ok(TurnVerdict::Unproven); }
+        for rb in &need_m2 {
+            if self.has_mate_in_le2(rb, c)? { continue; }
+            // The inner nomination is a 250 ms search; before calling a turn
+            // unproven, nominate again with a longer 3-ply and a 5-ply search.
+            let mut cands = self.nominate(rb, c, 3, BENCH_RENOMINATE_MS)?;
+            cands.extend(self.nominate(rb, c, 5, BENCH_RENOMINATE_MS)?);
+            cands.sort();
+            cands.dedup();
+            if self.mate2_lines(rb, c, &cands, false, 1)?.is_empty() { return Ok(TurnVerdict::Unproven); }
+        }
+        Ok(TurnVerdict::Mate { immediate: false })
+    }
+}
