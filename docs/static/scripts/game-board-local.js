@@ -1058,6 +1058,7 @@ document.addEventListener('alpine:init', () => {
 				let _saveLoadedSfn = null;
 				let _savedHumanColor = null;
 				let _savedGameLog = null;
+				let _savedAiTelemetry = null;
 				// First turn's pre-turn SFN — persisted so slim saved logs of
 				// games that began from an imported position can be replayed.
 				let _savedSetupSfn = null;
@@ -1111,6 +1112,9 @@ document.addEventListener('alpine:init', () => {
 							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
+							}
+							if (_save.aiTelemetry && typeof _save.aiTelemetry === 'object') {
+								_savedAiTelemetry = _save.aiTelemetry;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -1536,8 +1540,8 @@ document.addEventListener('alpine:init', () => {
 				// stay in sync. Legacy fat saved entries pass through as-is.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 				let _setupSfn = _savedSetupSfn;
-				let _aiTelemetryByPly = {};
-				let _lastAiMeta = null;
+				let _aiTelemetryByPly = (_savedAiTelemetry && _savedAiTelemetry.byPly) ? Object.assign({}, _savedAiTelemetry.byPly) : {};
+				let _lastAiMeta = _savedAiTelemetry || null;
 
 				function _recordAiTelemetry(payload) {
 					if (!payload) return;
@@ -1590,6 +1594,15 @@ document.addEventListener('alpine:init', () => {
 						startPos: _startPos,
 						tookBack: _tookBack,
 						startSfn: _startSfnForUndo,
+						aiTelemetry: (difficulty && Object.keys(_aiTelemetryByPly).length > 0) ? {
+							v: 1,
+							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
+							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_mt256'),
+							threads: (_lastAiMeta && typeof _lastAiMeta.threads === 'number') ? _lastAiMeta.threads : 1,
+							threadsWanted: (_lastAiMeta && typeof _lastAiMeta.threadsWanted === 'number') ? _lastAiMeta.threadsWanted : 1,
+							mtError: (_lastAiMeta && typeof _lastAiMeta.mtError === 'string') ? _lastAiMeta.mtError : false,
+							byPly: Object.assign({}, _aiTelemetryByPly),
+						} : null,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
@@ -1644,6 +1657,9 @@ document.addEventListener('alpine:init', () => {
 					_tookBack = !!aiMode;
 					_humanHasMoved = true;
 					_persistedGameLog = slimGameLog(log.slice(0, h));
+					for (const k of Object.keys(_aiTelemetryByPly)) {
+						if (Number(k) >= h) delete _aiTelemetryByPly[k];
+					}
 					_persistCurrentGame(sfn);
 					gameLive = false;
 					window.location.reload();
