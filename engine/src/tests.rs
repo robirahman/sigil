@@ -4637,9 +4637,19 @@ fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
             let f: Vec<&str> = line.split(' ').collect();
             let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
             let spells: [u8; 9] = sp.try_into().unwrap();
-            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
-            assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
-                       f[4].parse::<i32>().unwrap(), "{name} {line}");
+            let (got, want) = if f.len() == 8 {
+                let walls: u64 = f[3].parse().unwrap();
+                let my_bank: u8 = f[4].parse().unwrap();
+                let their_bank: u8 = f[5].parse().unwrap();
+                let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+                (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), walls, my_bank, their_bank, c),
+                 f[7].parse::<i32>().unwrap())
+            } else {
+                let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+                (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+                 f[4].parse::<i32>().unwrap())
+            };
+            assert_eq!(got, want, "{name} {line}");
             n += 1;
         }
         assert!(n >= 200, "{name}: only {n} golden vectors");
@@ -4777,9 +4787,19 @@ fn mt_network_matches_python_and_sits_on_material_tempo() {
         let f: Vec<&str> = line.split(' ').collect();
         let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
         let spells: [u8; 9] = sp.try_into().unwrap();
-        let c = if f[3] == "1" { Color::Red } else { Color::Blue };
-        assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
-                   f[4].parse::<i32>().unwrap(), "nnue_mt256 {line}");
+        let (got, want) = if f.len() == 8 {
+            let walls: u64 = f[3].parse().unwrap();
+            let my_bank: u8 = f[4].parse().unwrap();
+            let their_bank: u8 = f[5].parse().unwrap();
+            let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), walls, my_bank, their_bank, c),
+             f[7].parse::<i32>().unwrap())
+        } else {
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+             f[4].parse::<i32>().unwrap())
+        };
+        assert_eq!(got, want, "nnue_mt256 {line}");
         n += 1;
     }
     assert!(n >= 200, "only {n} golden vectors");

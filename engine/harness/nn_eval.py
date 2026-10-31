@@ -563,15 +563,28 @@ def cmd_golden(a):
     import sigil_engine  # noqa: F401  (only to fail early if the module is absent)
     rng = np.random.default_rng(1)
     ix = rng.choice(len(D['y']), size=min(a.n, len(D['y'])), replace=False)
-    w_ix = D['walls'][ix] if ('walls' in D and q.get('is_snn2')) else None
-    b_ix = D['bank'][ix] if ('bank' in D and q.get('is_snn2')) else None
+    is_snn2 = bool(q.get('is_snn2'))
+    w_ix = D['walls'][ix] if ('walls' in D and is_snn2) else None
+    b_ix = D['bank'][ix] if ('bank' in D and is_snn2) else None
     v = qforward(q, D['mine'][ix], D['theirs'][ix], D['spells'][ix], D['is_red'][ix], walls=w_ix, bank=b_ix)
-    # one line per vector: mine theirs s0,..,s8 red cs  (read by src/tests.rs)
+    # one line per vector:
+    # SNN2:   mine theirs s0,..,s8 walls my_bank their_bank red cs  (read by tools/nn-wasm-parity.js and tests.rs)
+    # legacy: mine theirs s0,..,s8 red cs
     with open(a.out, 'w') as f:
-        for i, cs in zip(ix, v):
-            f.write(f"{int(D['mine'][i])} {int(D['theirs'][i])} "
-                    f"{','.join(str(int(x)) for x in D['spells'][i])} "
-                    f"{int(D['is_red'][i])} {int(cs)}\n")
+        for k, i in enumerate(ix):
+            cs = v[k]
+            if is_snn2 and w_ix is not None and b_ix is not None:
+                walls_val = int(w_ix[k])
+                my_bank = int(b_ix[k, 0])
+                their_bank = int(b_ix[k, 1])
+                f.write(f"{int(D['mine'][i])} {int(D['theirs'][i])} "
+                        f"{','.join(str(int(x)) for x in D['spells'][i])} "
+                        f"{walls_val} {my_bank} {their_bank} "
+                        f"{int(D['is_red'][i])} {int(cs)}\n")
+            else:
+                f.write(f"{int(D['mine'][i])} {int(D['theirs'][i])} "
+                        f"{','.join(str(int(x)) for x in D['spells'][i])} "
+                        f"{int(D['is_red'][i])} {int(cs)}\n")
     print(f"WROTE {a.out}: {len(ix)} vectors, |cs| mean {np.mean(np.abs(v)):.1f}")
 
 
