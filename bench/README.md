@@ -69,3 +69,15 @@ Useful flags:
 `runs/` is git-ignored. Every results and transcript file carries the canary.
 
 **Training and retention.** Run the private test set only on accounts listed in `providers_approved.json`, with `zero_data_retention` and `no_training` confirmed in writing. The harness refuses the test split otherwise, and warns on the dev split. It also refuses a test-set file whose SHA-256 differs from the published hash (`bench/TEST_SET_SHA256`, which does not exist yet).
+
+## Leaderboard page
+
+`docs/sigilbench.html` reads `docs/static/data/sigilbench/leaderboard.json`, which holds aggregates only (no answers or transcripts). To rebuild it after a run:
+
+```bash
+gcloud storage cp -r gs://focus-surfer-494820-g0-sigilbench-private/dev-runs <root>/
+# add the run to bench/leaderboard/runs.json, then
+python3 bench/tools/build_leaderboard.py --runs-root <root>/dev-runs
+```
+
+The page is not linked from the site menu yet; it is reachable at `/sigilbench.html` once merged.

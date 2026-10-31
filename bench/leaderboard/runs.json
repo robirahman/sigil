@@ -1,0 +1,18 @@
+{
+ "_comment": "Runs shown on docs/sigilbench.html. `dir` is a local copy of a run directory (results.jsonl, run.json); the canonical copies live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>. Rebuild with: python3 bench/tools/build_leaderboard.py --runs-root <local dir holding the gcs paths>",
+ "split": "dev",
+ "runs": [
+  {"gcs": "dev-runs/2026-10-31/haiku_medium", "label": "Claude Haiku 5.5", "config": "effort medium, 64k output"},
+  {"gcs": "dev-runs/2026-10-31/haiku_full", "label": "Claude Haiku 5.5", "config": "effort high, 64k output"},
+  {"gcs": "dev-runs/2026-10-31/haiku_high_128k", "label": "Claude Haiku 5.5", "config": "effort high, 128k output"},
+  {"gcs": "dev-runs/2026-10-31/gemini38flash_high", "label": "Gemini 3.8 Flash", "config": "thinking high, 64k output"}
+ ],
+ "baselines": [
+  {"id": "random", "label": "Random legal turn", "config": "uniform over distinct legal positions, seed 0",
+   "date": "2026-10-31", "git_commit": "9cc9cc2",
+   "correct": 0, "total": 100, "by_n": {"1": [0, 34], "2": [0, 33], "3": [0, 33]},
+   "status_counts": {"wrong": 69, "unproven": 28, "grader_error": 3}},
+  {"id": "engine", "label": "Sigil NNUE engine", "config": "pending", "pending": true},
+  {"id": "humans", "label": "Human experts (Robi, Andy)", "config": "pending", "pending": true}
+ ]
+}
