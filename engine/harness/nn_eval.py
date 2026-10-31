@@ -101,22 +101,42 @@ def _prep_file(args):
         return None
     mine = np.zeros(n, np.uint64)
     theirs = np.zeros(n, np.uint64)
+    walls = np.zeros(n, np.uint64)
+    bank = np.zeros((n, 2), np.uint8)
     ev = {e: np.zeros(n, np.int32) for e in evals}
     is_red = z['is_red'].astype(bool)
     for i, s in enumerate(sfn):
-        board = s.split('/', 1)[0]
-        r = b = 0
+        s_str = str(s)
+        parts = s_str.split()
+        board = parts[0].split('/', 1)[0]
+        r = b = w = 0
         for j, ch in enumerate(board):
             if ch == 'r':
                 r |= 1 << j
             elif ch == 'b':
                 b |= 1 << j
+            elif ch == 'x':
+                w |= 1 << j
         mine[i], theirs[i] = (r, b) if is_red[i] else (b, r)
-        pb = se.Board.from_sfn(str(s))
+        walls[i] = w
+        bank_r = bank_b = 0
+        for tok in parts[1:]:
+            if tok.startswith('pm:'):
+                sub = tok[3:].split(':')
+                if len(sub) == 2:
+                    try:
+                        bank_r = min(3, max(0, int(sub[0])))
+                        bank_b = min(3, max(0, int(sub[1])))
+                    except ValueError:
+                        pass
+        bank[i, 0] = bank_r if is_red[i] else bank_b
+        bank[i, 1] = bank_b if is_red[i] else bank_r
+        pb = se.Board.from_sfn(s_str)
         c = 'red' if is_red[i] else 'blue'
         for e in evals:
             ev[e][i] = pb.evaluate(c, e)
-    out = dict(mine=mine, theirs=theirs, spells=z['spells'].astype(np.uint8),
+    out = dict(mine=mine, theirs=theirs, walls=walls, bank=bank,
+               spells=z['spells'].astype(np.uint8),
                is_red=is_red.astype(np.uint8), score=z['score'].astype(np.int32),
                y=z['y'].astype(np.uint8), game=z['game'].astype(np.int64),
                ply=z['ply'].astype(np.int16), kind=z['kind'].astype(np.uint8))
@@ -228,7 +248,7 @@ def score_target(score, k):
 
 
 # --------------------------------------------------------------------------- model
-def build_model(H, L2, L3, cap):
+def build_model(H, L2, L3, cap, snn2=False):
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
@@ -241,6 +261,10 @@ def build_model(H, L2, L3, cap):
             self.E = nn.Parameter(torch.zeros(N_E, H))
             self.G = nn.Parameter(torch.zeros(N_G, H))
             self.pov = nn.Parameter(torch.full((2, H), 0.25))
+            self.snn2 = snn2
+            if snn2:
+                self.wall = nn.Parameter(torch.zeros(N_NODES, H))
+                self.bank = nn.Parameter(torch.zeros(8, H))
             self.l2 = nn.Linear(H, L2)
             self.l3 = nn.Linear(L2, L3)
             self.l4 = nn.Linear(L3, 1)
@@ -254,25 +278,32 @@ def build_model(H, L2, L3, cap):
             # src/nn.rs will actually compute.
             self.fq = False
 
-        def forward(self, x, eidx, gidx, pov):
+        def forward(self, x, eidx, gidx, pov, walls=None, bank=None):
             if self.fq:
-                return self.forward_q(x, eidx, gidx, pov)
+                return self.forward_q(x, eidx, gidx, pov, walls, bank)
             acc = x @ self.base
             acc = acc + F.embedding_bag(eidx, self.E, per_sample_weights=x, mode='sum')
             acc = acc + F.embedding_bag(gidx, self.G, mode='sum')
             acc = acc + self.pov[pov]
+            if self.snn2 and walls is not None and bank is not None:
+                acc = acc + walls @ self.wall
+                acc = acc + self.bank[bank[:, 0]] + self.bank[4 + bank[:, 1]]
             h = acc.clamp(0, 1)
             h = self.l2(h).clamp(0, 1)
             h = self.l3(h).clamp(0, 1)
             return (100 * self.l4(h).squeeze(1)).clamp(-self.cap, self.cap)
 
-        def forward_q(self, x, eidx, gidx, pov):
+        def forward_q(self, x, eidx, gidx, pov, walls=None, bank=None):
             rnd = lambda t, sc: t + (torch.round(t * sc) / sc - t).detach()
             flo = lambda t, sc: t + (torch.floor(t * sc) / sc - t).detach()
             acc = x @ rnd(self.base, Q)
             acc = acc + F.embedding_bag(eidx, rnd(self.E, Q), per_sample_weights=x, mode='sum')
             acc = acc + F.embedding_bag(gidx, rnd(self.G, Q), mode='sum')
             acc = acc + rnd(self.pov, Q)[pov]
+            if self.snn2 and walls is not None and bank is not None:
+                acc = acc + walls @ rnd(self.wall, Q)
+                rw = rnd(self.bank, Q)
+                acc = acc + rw[bank[:, 0]] + rw[4 + bank[:, 1]]
             h = acc.clamp(0, 1)
             h = flo(F.linear(h, rnd(self.l2.weight, Q), rnd(self.l2.bias, Q * Q)), Q).clamp(0, 1)
             h = flo(F.linear(h, rnd(self.l3.weight, Q), rnd(self.l3.bias, Q * Q)), Q).clamp(0, 1)
@@ -303,16 +334,22 @@ def quantize(net):
             'w4': np.clip(r(net.l4.weight[0], Q), -32767, 32767).astype(np.int16),
             'b4': np.int32(r(net.l4.bias, Q * Q)[0]),
             'cap': int(net.cap),
+            'is_snn2': bool(getattr(net, 'snn2', False)),
         }
+        if q['is_snn2']:
+            q['wall'] = r(net.wall, Q).astype(np.int16)
+            q['bank'] = r(net.bank, Q).astype(np.int16)
     q['E'][0] = 0
     return q
 
 
-def qforward(q, mine, theirs, spells, is_red, chunk=200_000):
+def qforward(q, mine, theirs, spells, is_red, walls=None, bank=None, chunk=200_000):
     """Integer forward pass, bit-for-bit what src/nn.rs computes. Returns centistones."""
     if len(mine) > chunk:
         return np.concatenate([qforward(q, mine[s:s + chunk], theirs[s:s + chunk],
-                                        spells[s:s + chunk], is_red[s:s + chunk], chunk)
+                                        spells[s:s + chunk], is_red[s:s + chunk],
+                                        walls[s:s + chunk] if walls is not None else None,
+                                        bank[s:s + chunk] if bank is not None else None, chunk)
                                for s in range(0, len(mine), chunk)])
     x = occupancy(mine, theirs).astype(np.int32)                          # (n, 78)
     e = e_index(spells)
@@ -324,6 +361,12 @@ def qforward(q, mine, theirs, spells, is_red, chunk=200_000):
             acc[on] += E[e[on, f]]
     acc += q['G'].astype(np.int32)[g_index(spells)].sum(axis=1)
     acc += q['pov'].astype(np.int32)[1 - is_red.astype(np.int64)]       # 0 = red POV
+    if q.get('is_snn2') and walls is not None and bank is not None:
+        bits = np.arange(N_NODES, dtype=np.uint64)
+        w_mat = ((walls[:, None] >> bits) & np.uint64(1)).astype(np.int32)
+        acc += w_mat @ q['wall'].astype(np.int32)
+        acc += q['bank'].astype(np.int32)[np.clip(bank[:, 0], 0, 3)]
+        acc += q['bank'].astype(np.int32)[4 + np.clip(bank[:, 1], 0, 3)]
     h = np.clip(acc, 0, Q).astype(np.int64)
     h = np.clip((h @ q['w2'].astype(np.int64).T + q['b2']) >> 6, 0, Q)
     h = np.clip((h @ q['w3'].astype(np.int64).T + q['b3']) >> 6, 0, Q)
@@ -332,25 +375,33 @@ def qforward(q, mine, theirs, spells, is_red, chunk=200_000):
 
 
 MAGIC = b'SNN1'
+MAGIC_SNN2 = b'SNN2'
 
 
 def write_bin(q, path):
     H = q['base'].shape[1]
     L2, L3 = q['w2'].shape[0], q['w3'].shape[0]
+    is_snn2 = q.get('is_snn2', False)
+    magic = MAGIC_SNN2 if is_snn2 else MAGIC
     with open(path + '.tmp', 'wb') as f:
-        f.write(MAGIC)
+        f.write(magic)
         f.write(struct.pack('<6i', H, L2, L3, q['cap'], N_E, N_G))
         for k in ('base', 'E', 'G', 'pov'):
             f.write(q[k].astype('<i2').tobytes())
         f.write(q['w2'].astype('i1').tobytes()); f.write(q['b2'].astype('<i4').tobytes())
         f.write(q['w3'].astype('i1').tobytes()); f.write(q['b3'].astype('<i4').tobytes())
         f.write(q['w4'].astype('<i2').tobytes()); f.write(struct.pack('<i', int(q['b4'])))
+        if is_snn2:
+            f.write(q['wall'].astype('<i2').tobytes())
+            f.write(q['bank'].astype('<i2').tobytes())
     os.replace(path + '.tmp', path)
 
 
 def read_bin(path):
     b = open(path, 'rb').read()
-    assert b[:4] == MAGIC
+    magic = b[:4]
+    assert magic in (MAGIC, MAGIC_SNN2)
+    is_snn2 = (magic == MAGIC_SNN2)
     H, L2, L3, cap, ne, ng = struct.unpack('<6i', b[4:28])
     o = 28
     def take(dt, n, shape):
@@ -365,6 +416,10 @@ def read_bin(path):
          'w4': take('<i2', L3, (L3,))}
     q['b4'] = np.int32(struct.unpack('<i', b[o:o + 4])[0]); o += 4
     q['cap'] = cap
+    q['is_snn2'] = is_snn2
+    if is_snn2:
+        q['wall'] = take('<i2', N_NODES * H, (N_NODES, H))
+        q['bank'] = take('<i2', 8 * H, (8, H))
     assert o == len(b), (o, len(b))
     return q
 
@@ -388,8 +443,11 @@ def cmd_train(a):
     print(f"split={a.split} train={tr.sum()} test={te.sum()} k={k:.4f} b={b:.4f} "
           f"lam={lam} base={a.base} device={dev}", flush=True)
 
-    net = build_model(a.hidden, a.l2, a.l3, a.cap).to(dev)
+    is_snn2 = getattr(a, 'snn2', False)
+    net = build_model(a.hidden, a.l2, a.l3, a.cap, snn2=is_snn2).to(dev)
     first = [net.base, net.E, net.G, net.pov]
+    if is_snn2:
+        first.extend([net.wall, net.bank])
     rest = list(net.l2.parameters()) + list(net.l3.parameters()) + list(net.l4.parameters())
     opt = torch.optim.Adam([{'params': first, 'lr': a.lr},
                             {'params': rest, 'lr': a.lr}])
@@ -398,6 +456,8 @@ def cmd_train(a):
     # Stage the training arrays on the device once (compact: two u64 per row).
     mine = T(D['mine'].view(np.int64), torch.int64)
     theirs = T(D['theirs'].view(np.int64), torch.int64)
+    walls = T(D['walls'].view(np.int64), torch.int64) if (is_snn2 and 'walls' in D) else None
+    bank = T(D['bank'].astype(np.int64), torch.int64) if (is_snn2 and 'bank' in D) else None
     spells = T(D['spells'].astype(np.int64), torch.int64)
     povt = T(1 - D['is_red'].astype(np.int64), torch.int64)
     e0t = T(e0, torch.float32)
@@ -416,7 +476,9 @@ def cmd_train(a):
         e[:, onm, 0] = bse
         e[:, onm, 1] = bse + 1
         g = sp * 9 + torch.arange(9, device=dev)[None, :]
-        return x, e.reshape(len(ix), 78), g, povt[ix]
+        w_vec = ((walls[ix, None] >> bits) & 1).float() if walls is not None else None
+        b_vec = bank[ix] if bank is not None else None
+        return x, e.reshape(len(ix), 78), g, povt[ix], w_vec, b_vec
 
     def predict(ix_all, bs=65536):
         out = []
@@ -477,7 +539,9 @@ def cmd_train(a):
         tsn, _ = score_target(D['score'][te], kk_)
         res[name[3:]] = {'outcome_ll': xent(z, y[te]), 'score_xent': xent(z[m], tsn[m]),
                          'k': kk_}
-    qte = qforward(q, D['mine'][te], D['theirs'][te], D['spells'][te], D['is_red'][te])
+    w_te = D['walls'][te] if ('walls' in D and q.get('is_snn2')) else None
+    b_te = D['bank'][te] if ('bank' in D and q.get('is_snn2')) else None
+    qte = qforward(q, D['mine'][te], D['theirs'][te], D['spells'][te], D['is_red'][te], walls=w_te, bank=b_te)
     fte = predict(np.flatnonzero(te))
     for tag, v in (('net_float', fte), ('net_quant', qte.astype(np.float64))):
         z = k * (e0[te] + v) / 100 + b
@@ -499,7 +563,9 @@ def cmd_golden(a):
     import sigil_engine  # noqa: F401  (only to fail early if the module is absent)
     rng = np.random.default_rng(1)
     ix = rng.choice(len(D['y']), size=min(a.n, len(D['y'])), replace=False)
-    v = qforward(q, D['mine'][ix], D['theirs'][ix], D['spells'][ix], D['is_red'][ix])
+    w_ix = D['walls'][ix] if ('walls' in D and q.get('is_snn2')) else None
+    b_ix = D['bank'][ix] if ('bank' in D and q.get('is_snn2')) else None
+    v = qforward(q, D['mine'][ix], D['theirs'][ix], D['spells'][ix], D['is_red'][ix], walls=w_ix, bank=b_ix)
     # one line per vector: mine theirs s0,..,s8 red cs  (read by src/tests.rs)
     with open(a.out, 'w') as f:
         for i, cs in zip(ix, v):
@@ -536,6 +602,8 @@ def main():
     p.add_argument('--l2reg', type=float, default=1.0)
     p.add_argument('--split', default='game')
     p.add_argument('--base', default='tfit_spell')
+    p.add_argument('--snn2', action='store_true',
+                   help='train SNN2 architecture with wall and bank embeddings')
     p.add_argument('--qat', type=int, default=0,
                    help='train the last N epochs quantisation-aware (fake-quant, STE)')
     p.add_argument('--device', default='cuda')

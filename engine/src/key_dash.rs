@@ -62,8 +62,6 @@ pub const REASONS_ALL: u8 = 31;
 /// How many first moves get a key-dash scan. The scan is per post-move board, so
 /// this multiplies the whole cost; 4 covers the moves a search realistically plays.
 pub const KEY_DASH_MOVES: usize = 4;
-/// Sacrifice stones considered, cheapest first (doomed stones sort to the front).
-const SAC_CANDS: usize = 5;
 /// Sacrifice combinations tried per post-move board.
 const SAC_COMBOS: usize = 3;
 /// Key dashes kept per position after ranking.

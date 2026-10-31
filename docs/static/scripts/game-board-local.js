@@ -1536,6 +1536,32 @@ document.addEventListener('alpine:init', () => {
 				// stay in sync. Legacy fat saved entries pass through as-is.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 				let _setupSfn = _savedSetupSfn;
+				let _aiTelemetryByPly = {};
+				let _lastAiMeta = null;
+
+				function _recordAiTelemetry(payload) {
+					if (!payload) return;
+					_lastAiMeta = payload;
+					const ply = (payload.turnNumber !== undefined) ? payload.turnNumber : (_engineRef && _engineRef.board ? _engineRef.board.turnNumber : null);
+					if (ply === null || ply === undefined) return;
+					const row = {};
+					const addNum = (k, v) => { if (typeof v === 'number' && Number.isFinite(v)) row[k] = v; };
+					addNum('d', payload.depth);
+					addNum('sd', payload.seldepth);
+					addNum('od', payload.overflowDepth);
+					addNum('n', payload.nodes);
+					addNum('exp', payload.expanded);
+					addNum('s', payload.scoreCentistones !== undefined ? payload.scoreCentistones : payload.score);
+					addNum('m', payload.mateIn);
+					if (typeof payload.mateProven === 'boolean') row.mp = payload.mateProven;
+					addNum('ms', payload.timeMs);
+					addNum('bms', payload.budgetMs);
+					addNum('cms', payload.clockMs);
+					addNum('pd', payload.ponderDepth);
+					addNum('pn', payload.ponderNodes);
+					addNum('tt', payload.ttPermille);
+					_aiTelemetryByPly[String(ply)] = row;
+				}
 
 				// Don't persist a game until the human has actually played a
 				// turn — otherwise merely opening a match (or letting the AI
@@ -1952,6 +1978,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'ai_think_report') {
+						_recordAiTelemetry(rest);
 						handleAiThinkReportEvent(rest);
 						return;
 					}
@@ -2917,6 +2944,18 @@ document.addEventListener('alpine:init', () => {
 						}
 						if (_this.evalAnnotations && Object.keys(_this.evalAnnotations).length > 0) {
 							gameRecord.eval_annotations = Object.assign({}, _this.evalAnnotations);
+						}
+
+						if (difficulty && Object.keys(_aiTelemetryByPly).length > 0) {
+							const meta = _lastAiMeta || {};
+							gameRecord.aiTelemetry = {
+								v: 1,
+								eval: String(meta.eval || 'nnue_mt256'),
+								threads: (typeof meta.threads === 'number' && Number.isFinite(meta.threads)) ? meta.threads : 1,
+								threadsWanted: (typeof meta.threadsWanted === 'number' && Number.isFinite(meta.threadsWanted)) ? meta.threadsWanted : 1,
+								mtError: (typeof meta.mtError === 'string') ? meta.mtError : false,
+								byPly: Object.assign({}, _aiTelemetryByPly),
+							};
 						}
 
 						// Persist the game to localStorage first so a crash or close

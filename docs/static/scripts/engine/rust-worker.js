@@ -216,7 +216,11 @@ self.onmessage = async (e) => {
 				msg.sfn, msg.timeMs >>> 0, (msg.widthScale || 4) >>> 0,
 				msg.historySfns || [], msg.evalName || 'nnue_mt256',
 				a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth);
-			self.postMessage({ type: 'result', id, res: JSON.parse(raw) });
+			const res = JSON.parse(raw);
+			res.threads = _threads;
+			res.threads_wanted = _wantThreads;
+			if (_mtError) res.mt_error = _mtError;
+			self.postMessage({ type: 'result', id, res });
 		} finally {
 			_busy = false;
 		}

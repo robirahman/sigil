@@ -813,7 +813,7 @@ class GameController {
 		// its move is never applied.
 		if (this._timeoutColor) throw new TimeoutError(this._timeoutColor);
 		if (this.ai.lastMeta) {
-			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
+			this.emit({ type: 'ai_think_report', color, turnNumber: board.turnNumber, ...this.ai.lastMeta });
 		}
 		// AI turns record their SimActions (replayed via applyAITurn on
 		// import) instead of an input-token transcript.

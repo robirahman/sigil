@@ -632,6 +632,10 @@ pub struct Search {
     opening_pick: Option<crate::opening::OpeningPick>,
     /// Repetition counts for positions already played in the real game.
     base_history: std::collections::HashMap<u64, u8>,
+    /// Keys in `base_history` that have already reached count >= 2; when a new
+    /// 2-fold key appears, the TT is cleared once so stale bounds from before
+    /// the position became a 1-move repetition-mate target cannot mask it.
+    twofold_keys: Vec<u64>,
     /// Zobrist keys along the current search path.
     path: Vec<u64>,
     deadline: Option<f64>,   // absolute ms from now_ms()
@@ -789,6 +793,7 @@ impl Search {
             hist_cast: [[0; 39]; 2],
             hist_dash: [0; 2],
             base_history: std::collections::HashMap::new(),
+            twofold_keys: Vec::new(),
             path: Vec::with_capacity(MAX_PLY),
             deadline: None,
             node_limit: None,
@@ -1017,11 +1022,47 @@ impl Search {
     /// counts repetitions against actual history rather than only its own path.
     pub fn add_history(&mut self, key: u64) {
         *self.base_history.entry(key).or_insert(0) += 1;
+        self.check_history_staleness();
+    }
+
+    /// Set the recorded game history from a slice of keys.
+    pub fn set_history_keys(&mut self, keys: &[u64]) {
+        self.base_history.clear();
+        for &k in keys {
+            *self.base_history.entry(k).or_insert(0) += 1;
+        }
+        self.check_history_staleness();
+    }
+
+    /// If any key in `base_history` has reached count >= 2 and was not in
+    /// `twofold_keys`, the TT contains scores evaluated before the position
+    /// became an immediate repetition-mate target. Clear the TT once and update
+    /// `twofold_keys`.
+    pub fn check_history_staleness(&mut self) {
+        let mut new_twofold = false;
+        for (&k, &count) in &self.base_history {
+            if count >= 2 && !self.twofold_keys.contains(&k) {
+                new_twofold = true;
+                break;
+            }
+        }
+        if new_twofold {
+            self.tt.clear();
+        }
+        self.twofold_keys.clear();
+        for (&k, &count) in &self.base_history {
+            if count >= 2 {
+                self.twofold_keys.push(k);
+            }
+        }
     }
 
     /// Forget the recorded game history (a persistent `Search` is handed the
     /// whole history again before every move, so it must not accumulate).
-    pub fn clear_history(&mut self) { self.base_history.clear(); }
+    pub fn clear_history(&mut self) {
+        self.base_history.clear();
+        self.twofold_keys.clear();
+    }
 
     /// Reset everything a previous game could have left behind: the table, the
     /// killers, the history and the generation counter. A fresh `Search::new`
@@ -1030,6 +1071,7 @@ impl Search {
         self.tt.clear();
         self.killers = [[None; 2]; MAX_PLY];
         self.base_history.clear();
+        self.twofold_keys.clear();
         self.age = 0;
     }
 
@@ -1037,6 +1079,11 @@ impl Search {
     /// to prove a persistent table actually carries knowledge between moves.
     pub fn tt_filled(&self) -> usize {
         self.tt.filled()
+    }
+
+    /// Total number of table slots.
+    pub fn tt_len(&self) -> usize {
+        self.tt.slots.len()
     }
 
     #[inline]
@@ -1074,6 +1121,7 @@ impl Search {
                             mut progress: Option<&mut dyn FnMut(i32, i32, u64)>)
         -> (Option<Turn>, i32, SearchStats)
     {
+        self.check_history_staleness();
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
@@ -1443,9 +1491,10 @@ impl Search {
         let ov_depth;
         if child.outcome == Outcome::Ongoing {
             // The root is the child's parent: it counts toward repetition.
-            self.path.push(root_key);
+            let pushed_root = !self.base_history.contains_key(&root_key);
+            if pushed_root { self.path.push(root_key); }
             let _ = self.deepen(&child, c.other(), (MAX_PLY as i32 - 1).min(63), remaining_ms, &mut none);
-            self.path.pop();
+            if pushed_root { self.path.pop(); }
             ov_depth = self.stats.depth_completed;
         } else {
             self.ignore_decisive = true;
@@ -2106,17 +2155,129 @@ impl Search {
     }
 
     /// Ordered turns with the TT/killer hints promoted to the front.
-    fn ordered_turns(&mut self, b: &Board, c: Color, ply: usize, hint: Option<Turn>,
+    pub fn ordered_turns(&mut self, b: &Board, c: Color, ply: usize, hint: Option<Turn>,
                      width: usize) -> Vec<Turn>
     {
         self.ordered_turns_action_hint(b, c, ply, hint.map(|t| t.slice()[0]), width)
     }
 
+    pub fn has_twofold_target(&self) -> bool {
+        self.base_history.values().any(|&c| c >= 2)
+            || self.path.iter().any(|&k| self.rep_count(k) >= 2)
+    }
+
+    fn promote_repetition_mate(&self, b: &Board, c: Color, v: &mut Vec<Turn>) {
+        if c != Color::Blue || !self.has_twofold_target() {
+            return;
+        }
+        for i in 0..v.len() {
+            let mut child = *b;
+            child.apply_turn(&v[i], c);
+            child.turn_counter += 1;
+            child.to_move = c.other();
+            let ckey = crate::zobrist::ZOBRIST.key_js(&child);
+            if self.rep_count(ckey) + 1 >= 3 {
+                let t = v.remove(i);
+                v.insert(0, t);
+                return;
+            }
+        }
+        for t in b.key_dash_turns(c, crate::key_dash::REASONS_ALL, 16) {
+            let mut child = *b;
+            child.apply_turn(&t, c);
+            child.turn_counter += 1;
+            child.to_move = c.other();
+            let ckey = crate::zobrist::ZOBRIST.key_js(&child);
+            if self.rep_count(ckey) + 1 >= 3 {
+                if let Some(pos) = v.iter().position(|x| x.slice() == t.slice()) {
+                    let found = v.remove(pos);
+                    v.insert(0, found);
+                } else {
+                    v.insert(0, t);
+                }
+                return;
+            }
+        }
+        for (n, p, blink, place) in b.ordered_first_steps(c) {
+            let a = if blink { Action::Blink { node: n, push_to: p } } else { Action::Move { node: n, push_to: p } };
+            let prefix = match place {
+                Some((pn, pp)) => Turn::single(a).push_pub(Action::Place { node: pn, push_to: pp }),
+                None => Turn::single(a),
+            };
+            let mut bm = *b;
+            bm.do_move_with_pub(n, p, c);
+            if let Some((pn, pp)) = place { bm.do_placement(pn, pp, c); }
+
+            // Move-only turn:
+            let mut child = bm;
+            child.turn_counter += 1;
+            child.to_move = c.other();
+            let ckey = crate::zobrist::ZOBRIST.key_js(&child);
+            if self.rep_count(ckey) + 1 >= 3 {
+                let t = prefix.push_pub(Action::Pass);
+                if let Some(pos) = v.iter().position(|x| x.slice() == t.slice()) {
+                    let found = v.remove(pos);
+                    v.insert(0, found);
+                } else {
+                    v.insert(0, t);
+                }
+                return;
+            }
+
+            // Move + Dash turns:
+            if bm.total[c.idx()] > 2 {
+                let cost = bm.dash_cost(c) as usize;
+                let mut cands: Vec<u8> = Vec::new();
+                let mut m = bm.dash_sacrificeable(c);
+                while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
+                if cands.len() >= cost {
+                    let combos: Vec<([u8; 2], u8)> = if cost == 1 {
+                        cands.iter().map(|&s| ([s, 0], 1)).collect()
+                    } else {
+                        let mut cb = Vec::new();
+                        for i in 0..cands.len() {
+                            for j in (i + 1)..cands.len() { cb.push(([cands[i], cands[j]], 2)); }
+                        }
+                        cb
+                    };
+                    for (sacs, n_sacs) in combos {
+                        let mut bd = bm;
+                        for &s in &sacs[..n_sacs as usize] { bd.stones[c.idx()] &= !(1u64 << s); }
+                        bd.update();
+                        if bd.outcome != Outcome::Ongoing { continue; }
+                        let dt = bd.all_moveable(c);
+                        if dt == 0 { continue; }
+                        for (node, push_to) in bd.move_variants_pub(dt, c) {
+                            let mut child2 = bd;
+                            child2.do_move_with_pub(node, push_to, c);
+                            child2.turn_counter += 1;
+                            child2.to_move = c.other();
+                            let ckey2 = crate::zobrist::ZOBRIST.key_js(&child2);
+                            if self.rep_count(ckey2) + 1 >= 3 {
+                                let t = prefix
+                                    .push_pub(Action::Dash { sacs, n_sacs, node, push_to })
+                                    .push_pub(Action::Pass);
+                                if let Some(pos) = v.iter().position(|x| x.slice() == t.slice()) {
+                                    let found = v.remove(pos);
+                                    v.insert(0, found);
+                                } else {
+                                    v.insert(0, t);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `ordered_turns` with the TT hint and killer hints promoted.
     fn ordered_turns_action_hint(&mut self, b: &Board, c: Color, ply: usize,
                                  hint: Option<Action>, width: usize) -> Vec<Turn>
     {
-        // Pull only `width` turns from the LAZY generator. Collecting everything
-        // here was what capped the search at depth ~1: generation, not evaluation,
+        // Progressive widening: width of the candidate list is depth-dependent.
+        // Deep in the tree a small width suffices because dominated branches are
         // dominated. The iterator is best-first, so this is a beam over a ranked
         // stream rather than a blind truncation.
         // Best-first across move / cast / dash classes with a per-class quota, so
@@ -2139,6 +2300,11 @@ impl Search {
             v = it.by_ref().take(width).collect();
             if it.has_more() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }
+            if self.key_dash_extra > 0 && width >= self.key_dash_min_width {
+                for t in b.key_dash_turns(c, self.key_dash_reasons, self.key_dash_extra) {
+                    if !v.iter().any(|x| x.slice() == t.slice()) { v.push(t); }
+                }
+            }
         } else if self.legacy_order || width < self.merge_min_width {
             // The additive path takes the stream WITHOUT reserved slots and appends
             // the key dashes afterwards, so nothing falls out of the budget.
@@ -2210,9 +2376,13 @@ impl Search {
         if hint.is_some() || k0.is_some() || k1.is_some() {
             let mut tiers: [Vec<Turn>; 3] = [Vec::new(), Vec::new(), Vec::new()];
             let mut rest: Vec<Turn> = Vec::with_capacity(v.len());
+            let mut hint_promoted = false;
             for t in v.drain(..) {
                 let a = t.slice()[0];
-                if Some(a) == hint { tiers[0].push(t); }
+                if Some(a) == hint && !hint_promoted {
+                    tiers[0].push(t);
+                    hint_promoted = true;
+                }
                 else if Some(a) == k0 { tiers[1].push(t); }
                 else if Some(a) == k1 { tiers[2].push(t); }
                 else { rest.push(t); }
@@ -2233,6 +2403,7 @@ impl Search {
             order.sort_by_key(|&i| -hs[i]);
             v = order.into_iter().map(|i| v[i]).collect();
         }
+        self.promote_repetition_mate(b, c, &mut v);
         v
     }
 
@@ -2276,6 +2447,7 @@ impl Search {
                           max_depth: i32, time_ms: u64)
         -> (usize, i32, SearchStats)
     {
+        self.check_history_staleness();
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();

@@ -673,11 +673,20 @@ pub const SHIPPED_EVAL: &str = "nnue_mt256";
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
+#[cfg(not(target_arch = "wasm32"))]
 pub const EVAL_NAMES: [&str; 26] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
     "nnue_spell3", "nnue_spell4", "nnue_mt256",
+];
+
+#[cfg(target_arch = "wasm32")]
+pub const EVAL_NAMES: [&str; 23] = [
+    "default", "structural", "material", "mtempo", "snotempo",
+    "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
+    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
+    "nnue_mt256",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -702,10 +711,13 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "tfit_spell2" => TFIT_SPELL2,
         "tfit_spell_v2" => TFIT_SPELL_V2,
         // Step 5: the network residual on top of `tfit_spell` (default OFF).
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell" => Weights { nn: Some(&crate::nn::NNUE_SPELL), ..TFIT_SPELL },
         // Round 2: residuals on `tfit_spell_v2`, cap 256 (default OFF).
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell3" => Weights { nn: Some(&crate::nn::NNUE_SPELL3), ..TFIT_SPELL_V2 },
         // Round 4: equal-spell data, Rock Slide pile-up rule (engine v29).
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell4" => Weights { nn: Some(&crate::nn::NNUE_SPELL4), ..TFIT_SPELL_V2 },
         // Engine v32 (2026-10-20, engine/reports/2026-10-eval-simplification.md): the
         // net on material + tempo alone -- no positional terms, no per-spell table.
