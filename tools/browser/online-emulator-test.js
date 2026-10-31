@@ -18,9 +18,13 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8765';
 const NS = 'sigil-js-default-rtdb';
+// The emulators' addresses (firebase emulators:exec sets them), so a
+// private emulator config with other ports works too.
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 
 // Point the page's Firebase at the emulators as soon as the app exists.
-function useEmulators() {
+function useEmulators(dbHost, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -30,8 +34,8 @@ function useEmulators() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				return app;
 			};
 		},
@@ -54,7 +58,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 
 (async () => {
 	const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
-	const put = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`,
+	const put = await fetch(`http://${DB_HOST}/.settings/rules.json?ns=${NS}`,
 		{ method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: rules });
 	if (put.status !== 200) throw new Error('rules upload: ' + put.status + ' ' + await put.text());
 
@@ -68,7 +72,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			const ctx = await browser.createBrowserContext();
 			contexts.push(ctx);
 			const p = await ctx.newPage();
-			await p.evaluateOnNewDocument(useEmulators);
+			await p.evaluateOnNewDocument(useEmulators, DB_HOST, AUTH_HOST);
 			// The service worker's cached CDN scripts race the emulator hook,
 			// and gstatic downloads flake here: serve the SDK from memory.
 			await p.setBypassServiceWorker(true);
@@ -109,7 +113,16 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		const bluePage = redPage === pageA ? pageB : pageA;
 		const tryPush = (p, color) => p.evaluate(async (c, col) => {
 			try {
-				await firebase.database().ref('rooms/' + c + '/turns').push({ color: col, actions: ['pass'], timestamp: firebase.database.ServerValue.TIMESTAMP });
+				// As firebase-sync.js sendTurn writes it: after the room's last
+				// turn, moving rooms/{id}/last on in the same write.
+				const roomRef = firebase.database().ref('rooms/' + c);
+				// From the server: this page's cache may not have the other
+				// side's last turn yet.
+				const last = (await roomRef.child('last').get()).val();
+				const key = roomRef.child('turns').push().key;
+				const turn = { color: col, actions: ['pass'], timestamp: firebase.database.ServerValue.TIMESTAMP };
+				if (last) turn.after = last.key;
+				await roomRef.update({ ['turns/' + key]: turn, last: { key, color: col } });
 				return 'ok';
 			} catch (e) { return e.code || e.message; }
 		}, code, color);
@@ -209,10 +222,14 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		// A turn written while the request stands is still the opponent's to remove only.
 		const tbRoom = await roomOf(code2);
 		const firstKey = Object.keys(tbRoom.turns)[0];
-		const selfRemove = await redP.evaluate(async (c, k) => {
-			try { await firebase.database().ref('rooms/' + c + '/turns/' + k).remove(); return 'ok'; } catch (e) { return e.code; }
-		}, code2, firstKey);
-		check('the requester cannot remove turns itself', selfRemove !== 'ok');
+		// As red, but over REST: a refused remove from red's page would still
+		// drop the turn locally first, and that local event reloads the page
+		// (takeback_done) under the evaluate.
+		const redToken = await redP.evaluate(() => firebase.auth().currentUser.getIdToken());
+		const selfRemove = await fetch(`http://${DB_HOST}/rooms/${code2}/turns/${firstKey}.json?ns=${NS}&auth=${redToken}`,
+			{ method: 'DELETE' }).then((r) => r.status);
+		check('the requester cannot remove turns itself', selfRemove === 401 || selfRemove === 403, { status: selfRemove });
+		check('the turns are still there', !!(await roomOf(code2)).turns[firstKey]);
 		await Promise.all([
 			redP.waitForNavigation({ timeout: 60000 }).catch(() => null),
 			blueP.waitForNavigation({ timeout: 60000 }).catch(() => null),
@@ -235,7 +252,15 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		await redP.evaluate(() => firebase.database().goOnline());
 		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).syncBanner === '', { timeout: 15000, polling: 500 })
 			.then(() => check('banner clears on reconnect', true), () => check('banner clears on reconnect', false));
-		const seatBack = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c + '/red').once('value')).val(), code2);
+		// The banner clears on .info/connected; the seat is re-announced after
+		// that (_goOnline: three onDisconnect registrations, then two writes,
+		// each awaiting the server), so give it time under load.
+		let seatBack = null;
+		for (let i = 0; i < 40; i++) {
+			seatBack = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c + '/red').once('value')).val(), code2);
+			if (seatBack && seatBack.connected === true && !seatBack.disconnectedAt) break;
+			await new Promise((r) => setTimeout(r, 250));
+		}
 		check('seat marked present again', seatBack.connected === true && !seatBack.disconnectedAt, seatBack);
 
 		// Blue leaves for good.

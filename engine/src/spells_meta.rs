@@ -122,6 +122,7 @@ pub const SORCERIES: [u8; 13] = [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37];
 pub const CHARMS: [u8; 13] = [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38];
 
 /// Ids referenced by static checks and resolvers elsewhere.
+pub const FLOURISH: u8 = 0;
 pub const SEAL_OF_LIGHTNING: u8 = 4;
 pub const SEAL_OF_WIND: u8 = 9;
 pub const SEAL_OF_SUMMER: u8 = 14;

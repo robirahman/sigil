@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, ABANDON_GRACE_MS, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, roomTurns, ABANDON_GRACE_MS, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -81,6 +81,13 @@ test('casual, guest-account and unrated-pack games are not rated', async () => {
 	casual.ranked = false;
 	assert.strictEqual((await judgeGame(casual, ctx())).reason, 'casual');
 	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isFullAccount: async () => false }))).reason, 'guest-account');
+	// A suspended player's games are not rated, AI games included; only the
+	// human players are looked up.
+	const asked = [];
+	const susp = await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async (uid) => { asked.push(uid); return true; } }));
+	assert.deepStrictEqual([susp.rated, susp.reason], [false, 'suspended']);
+	assert.strictEqual(asked.length, 1);
+	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async () => false }))).rated, true);
 	const panda = clone(AI.N3WMQJ);
 	panda.spellNames[0] = 'Stampede';
 	assert.strictEqual((await judgeGame(panda, ctx())).reason, 'unrated-pack');
@@ -196,6 +203,31 @@ test('a loss on time counts only if the clock was out when the room closed', asy
 	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, last.color, undefined]);
 });
 
+test('an upheld abandonment claim names the player who left', async () => {
+	const room = onlineRoom();
+	delete room.gameLog;
+	const keys = Object.keys(room.turns).sort().slice(0, 4);
+	room.turns = Object.fromEntries(keys.map((k) => [k, room.turns[k]]));
+	const lastTs = room.turns[keys[3]].timestamp;
+	Object.assign(room, { timeControl: { type: 'realtime', initialTime: 600_000, increment: 0 },
+		endReason: 'abandon', winner: 'red', finishedBy: 'red',
+		blue: { uid: 'bob', connected: false, disconnectedAt: lastTs + 1000 } });
+	const rec = Object.assign(onlineRecord(room), { winner: 'red' });
+	room.closedAt = lastTs + 1000 + ABANDON_GRACE_MS;
+	const v = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.abandonedBy], [true, 'red', 'blue']);
+	// Upheld in an unrated room too: casual, or a guest seat.
+	const casual = Object.assign({}, room, { ranked: false, casual: true });
+	const vc = await judgeGame(Object.assign({}, rec, { ranked: false }), ctx({ room: casual }));
+	assert.deepStrictEqual([vc.rated, vc.reason, vc.abandonedBy], [false, 'casual', 'blue']);
+	const vg = await judgeGame(rec, ctx({ room, isFullAccount: async (u) => u !== 'bob' }));
+	assert.deepStrictEqual([vg.rated, vg.reason, vg.abandonedBy], [false, 'guest-account', 'blue']);
+	// A claim made too early is the claimer's loss, and nobody's abandonment.
+	room.closedAt = lastTs + 5000;
+	const early = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([early.rated, early.winner, early.overturned, early.abandonedBy], [true, 'blue', true, undefined]);
+});
+
 test('a loss on time is recomputed from the turn timestamps', () => {
 	const t0 = 1_000_000;
 	const room = {
@@ -222,6 +254,138 @@ test('a loss on time is recomputed from the turn timestamps', () => {
 	const corr = { timeControl: { type: 'correspondence', moveTimeout: 86_400_000 }, turns: room.turns };
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 3_600_000), false);
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 86_400_000), true);
+});
+
+// ---- vacation pauses and +15 s gifts (room-clock.js) ----
+
+const DAY = 86_400_000;
+
+// A correspondence room cut to its first ten turns, closed with a claim on
+// time by the side that moved last; `at` is the last turn's time.
+function corrClaim() {
+	const room = onlineRoom();
+	delete room.gameLog;
+	const keys = Object.keys(room.turns).sort().slice(0, 10);
+	room.turns = Object.fromEntries(keys.map((k) => [k, room.turns[k]]));
+	const last = room.turns[keys[keys.length - 1]];
+	const loser = last.color === 'red' ? 'blue' : 'red';
+	Object.assign(room, { timeControl: { type: 'correspondence', moveTimeout: DAY },
+		endReason: 'time', winner: last.color, finishedBy: last.color });
+	return { room, rec: Object.assign(onlineRecord(room), { winner: last.color }), at: last.timestamp, loser };
+}
+
+test('a paused correspondence game is not flagged', async () => {
+	const t0 = 1_000_000;
+	const room = {
+		timeControl: { type: 'correspondence', moveTimeout: DAY },
+		turns: { a: { color: 'red', timestamp: t0 } },
+		// Blue went on vacation an hour into the move, for three days.
+		pauses: { p: { color: 'blue', from: t0 + 3_600_000, to: t0 + 3_600_000 + 3 * DAY } },
+	};
+	assert.strictEqual(flagged(room, 'blue', t0 + 2 * DAY), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 3 * DAY + 3_600_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 4 * DAY - 10_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 4 * DAY), true);
+	// Ended early (setVacation writes `to`): the clock runs again from then.
+	room.pauses.p.to = t0 + DAY;
+	assert.strictEqual(flagged(room, 'blue', t0 + 2 * DAY - 3_600_000 - 10_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 2 * DAY - 3_600_000), true);
+	// Two overlapping pauses count once; a pause before the move counts nothing.
+	room.pauses = {
+		p: { color: 'blue', from: t0 + 1000, to: t0 + 1000 + DAY },
+		q: { color: 'blue', from: t0 + 1000 + DAY / 2, to: t0 + 1000 + DAY },
+		old: { color: 'blue', from: t0 - 5 * DAY, to: t0 },
+	};
+	assert.strictEqual(flagged(room, 'blue', t0 + 2 * DAY - 10_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 2 * DAY + 1000), true);
+	// The rating function: a claim made while the loser was on vacation is
+	// the claimer's own loss.
+	const c = corrClaim();
+	c.room.pauses = { p: { color: c.loser, from: c.at + 1000, to: c.at + 5 * DAY } };
+	c.room.closedAt = c.at + DAY + 3_600_000;
+	const v = await judgeGame(c.rec, ctx({ room: c.room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, c.loser, true]);
+	delete c.room.pauses;
+	const w = await judgeGame(c.rec, ctx({ room: c.room }));
+	assert.deepStrictEqual([w.rated, w.winner, w.overturned], [true, c.rec.winner, undefined]);
+});
+
+test('a pause stamped after the deadline does not un-flag the player', async () => {
+	const t0 = 1_000_000;
+	const room = { timeControl: { type: 'correspondence', moveTimeout: DAY }, turns: { a: { color: 'red', timestamp: t0 } } };
+	// Blue's deadline is t0 + 1 day; a vacation begun an hour after it.
+	room.pauses = { p: { color: 'blue', from: t0 + DAY + 3_600_000, to: t0 + 5 * DAY } };
+	for (const at of [t0 + DAY + 3_600_000, t0 + DAY + 7_200_000, t0 + 3 * DAY]) assert.strictEqual(flagged(room, 'blue', at), true);
+	// The rating function: a claim closed during that late pause stands.
+	const c = corrClaim();
+	c.room.pauses = { p: { color: c.loser, from: c.at + DAY + 60_000, to: c.at + 5 * DAY } };
+	c.room.closedAt = c.at + DAY + 120_000;
+	const v = await judgeGame(c.rec, ctx({ room: c.room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, c.rec.winner, undefined]);
+});
+
+test('a gift of 15 s extends the opponent\'s time', () => {
+	const t0 = 1_000_000;
+	const room = {
+		timeControl: { type: 'realtime', initialTime: 60_000, increment: 0 },
+		turns: {
+			a: { color: 'red', timestamp: t0 },
+			b: { color: 'blue', timestamp: t0 + 30_000 },
+			c: { color: 'red', timestamp: t0 + 50_000 },
+		},
+	};
+	// Blue has 30 s from t0 + 50 s (see above); red gives blue 15 s.
+	assert.strictEqual(flagged(room, 'blue', t0 + 80_000), true);
+	room.gifts = { g: { to: 'blue', ms: 15_000, at: t0 + 60_000 } };
+	assert.strictEqual(flagged(room, 'blue', t0 + 80_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 94_000), true);
+	// Two gifts, two times 15 s; a gift to red gives blue nothing.
+	room.gifts.h = { to: 'blue', ms: 15_000, at: t0 + 61_000 };
+	room.gifts.r = { to: 'red', ms: 15_000, at: t0 + 62_000 };
+	assert.strictEqual(flagged(room, 'blue', t0 + 107_000), false);
+	assert.strictEqual(flagged(room, 'blue', t0 + 109_000), true);
+	// At most 20 gifts count (the rules allow no more), however many are stored.
+	const many = { timeControl: room.timeControl, turns: room.turns, gifts: {} };
+	for (let i = 0; i < 50; i++) many.gifts['g' + i] = { to: 'blue', ms: 15_000, at: t0 + 60_000 };
+	assert.strictEqual(flagged(many, 'blue', t0 + 80_000 + 20 * 15_000 - 3_000), false);
+	assert.strictEqual(flagged(many, 'blue', t0 + 80_000 + 20 * 15_000), true);
+	// Before the first move too.
+	const fresh = { timeControl: { type: 'realtime', initialTime: 60_000 }, startedAt: t0,
+		gifts: { g: { to: 'red', ms: 15_000, at: t0 + 1000 } } };
+	assert.strictEqual(flagged(fresh, 'red', t0 + 70_000), false);
+	assert.strictEqual(flagged(fresh, 'red', t0 + 74_000), true);
+});
+
+test('forged or late pauses and gifts change nothing', async () => {
+	const t0 = 1_000_000;
+	const turns = { a: { color: 'red', timestamp: t0 }, b: { color: 'blue', timestamp: t0 + 30_000 }, c: { color: 'red', timestamp: t0 + 50_000 } };
+	// A pause in a realtime game, a gift in a correspondence game, a gift of
+	// another size, a malformed pause: all ignored.
+	const live = { timeControl: { type: 'realtime', initialTime: 60_000 }, turns,
+		pauses: { p: { color: 'blue', from: t0 + 50_000, to: t0 + 10 * DAY } },
+		gifts: { big: { to: 'blue', ms: 600_000, at: t0 + 55_000 }, bad: { to: 'blue', ms: 15_000, at: 'now' } } };
+	assert.strictEqual(flagged(live, 'blue', t0 + 80_000), true);
+	const corr = { timeControl: { type: 'correspondence', moveTimeout: DAY }, turns,
+		gifts: { g: { to: 'blue', ms: 15_000, at: t0 + 55_000 } },
+		pauses: { p: { color: 'blue', from: String(t0), to: t0 + 10 * DAY }, q: { color: 'blue', from: t0 + 3 * DAY, to: t0 + DAY } } };
+	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + DAY), true);
+	// A pause or a gift recorded after the room closed does not count: the
+	// flag is judged as of closedAt.
+	const c = corrClaim();
+	c.room.closedAt = c.at + DAY + 3_600_000;
+	c.room.pauses = { p: { color: c.loser, from: c.room.closedAt + 1, to: c.at + 5 * DAY } };
+	const v = await judgeGame(c.rec, ctx({ room: c.room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, c.rec.winner, undefined]);
+	const r = corrClaim();
+	r.room.timeControl = { type: 'realtime', initialTime: 60_000, increment: 0 };
+	r.room.closedAt = r.at + 61_000;
+	r.room.gifts = { g: { to: r.loser, ms: 15_000, at: r.room.closedAt + 1 } };
+	const g = await judgeGame(r.rec, ctx({ room: r.room }));
+	assert.deepStrictEqual([g.rated, g.winner, g.overturned], [true, r.rec.winner, undefined]);
+	// Gifts in time would have saved the loser (the clock was well out).
+	for (let i = 0; i < 100; i++) r.room.gifts['g' + i] = { to: r.loser, ms: 15_000, at: r.room.closedAt - 5_000 };
+	const h = await judgeGame(r.rec, ctx({ room: r.room }));
+	assert.deepStrictEqual([h.rated, h.winner, h.overturned], [true, r.loser, true]);
 });
 
 test('turn numbers follow both start-SFN conventions', () => {
@@ -279,4 +443,53 @@ test('ratingUpdates moves Elo by the client formula and indexes both humans', as
 		['completed_games/G2/eloProcessed', 'completed_games/G2/unratedReason', 'user_games/human_player_1/G2']);
 	assert.strictEqual(n['user_games/human_player_1/G2'].rated, false);
 	assert.strictEqual(n['user_games/human_player_1/G2'].eloChange, undefined);
+});
+
+test('ratingUpdates stores the opponent\'s rating before the game, and profile stats use it for AI games', async () => {
+	const e = freshEngine();
+	const v = await judgeGame(AI.N3WMQJ, ctx());
+	const users = { red: { elo: 1500, gamesPlayed: 10, wins: 6, losses: 4, displayName: 'P' },
+		blue: { elo: 1733, gamesPlayed: 99, wins: 50, losses: 49, displayName: 'AI (Very Hard) (Rust)', isAI: true } };
+	const u = ratingUpdates('G3', AI.N3WMQJ, v, users, { red: true, blue: true }, e);
+	const entry = u['user_games/human_player_1/G3'];
+	assert.strictEqual(entry.eloBefore, 1500);
+	assert.strictEqual(entry.opponentEloBefore, 1733);
+	assert.strictEqual(entry.opponentIsAI, true);
+	// An unrated game stores no ratings.
+	const n = ratingUpdates('G4', AI.N3WMQJ, { rated: false, reason: 'casual' }, users, { red: true, blue: true }, e);
+	assert.strictEqual(n['user_games/human_player_1/G4'].opponentEloBefore, undefined);
+
+	// profile-stats.js: the stored rating wins over the looked-up one, and lets
+	// an AI game (no lookup possible) count as the best win.
+	const ProfileStats = require('../../docs/static/scripts/profile-stats.js');
+	const g = (id, result, extra) => Object.assign({ id, gameId: id, timestamp: 1, opponent: id, color: 'red', result, rated: true, eloChange: 0 }, extra);
+	const games = [
+		Object.assign(g('ai', 'win', { opponentIsAI: true }), { opponentEloBefore: entry.opponentEloBefore }),
+		g('human', 'win', { opponentUid: 'h', opponentEloBefore: 1600 }),
+		g('oldHuman', 'loss', { opponentUid: 'o' }),
+		g('oldAi', 'win', { opponentIsAI: true }),
+		g('unrated', 'win', { rated: false, opponentEloBefore: 2500 }),
+	];
+	const looked = { human: 1, oldHuman: 1400 };
+	const s = ProfileStats.summarize(games, () => null, (x) => looked[x.id]);
+	assert.strictEqual(s.bests.bestWin.game.id, 'ai');
+	assert.strictEqual(s.bests.bestWin.oppElo, 1733);
+	assert.strictEqual(s.bests.worstLoss.game.id, 'oldHuman');
+	assert.strictEqual(s.bests.worstLoss.oppElo, 1400);
+});
+
+test('a sequenced room orders its turns by their chain, ties in time included', () => {
+	// b follows a in the same server millisecond, with a push key that sorts
+	// first: by time and key it would come first.
+	const turns = { k2: { color: 'red', timestamp: 5 }, k1: { color: 'blue', timestamp: 5, after: 'k2' }, k3: { color: 'red', timestamp: 9, after: 'k1' } };
+	const colors = (room) => roomTurns(room).map((t) => t.color).join(',');
+	assert.strictEqual(colors({ seq: true, turns }), 'red,blue,red');
+	assert.strictEqual(sideToMove({ seq: true, turns: { k2: turns.k2, k1: turns.k1 } }), 'red');
+	// A room from before sequencing: by time, then key.
+	assert.strictEqual(colors({ turns }), 'blue,red,red');
+	// Turns that are not one chain (a fork, or two starts): by time.
+	const fork = Object.assign({}, turns, { k4: { color: 'blue', timestamp: 7, after: 'k1' } });
+	assert.strictEqual(colors({ seq: true, turns: fork }), 'blue,red,blue,red');
+	const partial = { k3: turns.k3, k9: { color: 'blue', timestamp: 1 } };
+	assert.strictEqual(colors({ seq: true, turns: partial }), 'blue,red');
 });

@@ -19,9 +19,13 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8766';
 const NS = 'sigil-js-default-rtdb';
+// The emulators' addresses (firebase emulators:exec sets them), so a
+// private emulator config with other ports works too.
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 
 // Point the page's Firebase at the emulators as soon as the app exists.
-function useEmulators() {
+function useEmulators(dbHost, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -31,8 +35,8 @@ function useEmulators() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				return app;
 			};
 		},
@@ -69,11 +73,11 @@ const L = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"
 
 (async () => {
 	const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
-	const put = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`,
+	const put = await fetch(`http://${DB_HOST}/.settings/rules.json?ns=${NS}`,
 		{ method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: rules });
 	if (put.status !== 200) throw new Error('rules upload: ' + put.status + ' ' + await put.text());
 	// A clean database: earlier runs' rooms would show in the lists.
-	await fetch(`http://127.0.0.1:9000/.json?ns=${NS}`, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } });
+	await fetch(`http://${DB_HOST}/.json?ns=${NS}`, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } });
 
 	const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-proxy-server'] });
 	let ok = true;
@@ -81,7 +85,7 @@ const L = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"
 	const newPage = async () => {
 		const ctx = await browser.createBrowserContext();
 		const p = await ctx.newPage();
-		await p.evaluateOnNewDocument(useEmulators);
+		await p.evaluateOnNewDocument(useEmulators, DB_HOST, AUTH_HOST);
 		// The service worker's cached CDN scripts race the emulator hook,
 		// and gstatic downloads flake here: serve the SDK from memory.
 		await p.setBypassServiceWorker(true);

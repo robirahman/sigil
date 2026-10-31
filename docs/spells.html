@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link href="static/css/global.css?v202305191" rel="stylesheet" />
 	<link href="static/css/layout.css" rel="stylesheet" />
-	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -102,7 +102,7 @@
 		.tile {
 			width: 96px; padding: 4px 2px 3px; margin: 0;
 			background: none; border: 0; border-right: 1px solid #000; border-bottom: 1px solid #000;
-			cursor: pointer; color: var(--color-text-light, #eee); font: 11px/1.2 'Overlock', sans-serif;
+			cursor: pointer; color: var(--color-text-light, #eee); font: 11px/1.2 'Overlock', sans-serif; text-decoration: none;
 			display: flex; flex-direction: column; align-items: center; gap: 2px;
 		}
 		.tile img { width: 84px; height: 84px; display: block; }
@@ -264,7 +264,7 @@
 			players: {
 				url: 'static/data/spell-charts.json',
 				intro: n => `How the ${n} official spells stack up: a tier list, which spells beat which head to head, and which work well together. These are the developers' judgements from play, not statistics.`,
-				tierNote: 'Within a tier, spells run best to worst from left to right. Hover a card for its text; click one to highlight it in the charts below.',
+				tierNote: 'Within a tier, spells run best to worst from left to right. Click a card for its rules page; click a spell name in the charts below to highlight it.',
 				matchNote: 'Read each row against each column: if you build toward the row spell and your opponent toward the column spell, who is favoured? Blank cells are pairs we have not rated yet.',
 				synNote: 'Does holding both spells let you do something neither does alone? The chart is symmetric. Blank cells are pairs we have not rated yet.',
 				neutral: '=',
@@ -277,7 +277,7 @@
 			engine: {
 				url: 'static/data/spell-charts-engine.json',
 				intro: n => `How the ${n} official spells stack up for the Sigil engine. It measures each spell by how much a player's chance of winning drops when that player cannot use it, in ${D.positions.toLocaleString()} positions from its own games.`,
-				tierNote: 'Spells run best to worst, left to right and down the tiers. Hover a card for its measured value; click one to highlight it in the charts below.',
+				tierNote: 'Spells run best to worst, left to right and down the tiers. Hover a card for its measured value; click one for its rules page. Click a spell name in the charts below to highlight it.',
 				matchNote: 'Each cell is the row spell\'s value to one player minus the column spell\'s value to the other, in points of win probability: ++ / −− a strong edge, + / − an edge, 0 even. An edge counts only when its 95% interval excludes zero. Hover a cell for the measured difference.',
 				synNote: 'Each cell is the value of holding both spells minus their two separate values, in points of win probability: ++ / −− strong synergy or anti-synergy, + / − synergy or anti-synergy, 0 none measurable. A pair counts only when its 95% interval excludes zero; pairs with few samples are uncertain. Hover a cell for the measured difference and sample count.',
 				neutral: '0',
@@ -325,9 +325,9 @@
 				<div class="tier">
 					<div class="tier-label" style="background:${TIER_COLORS[t.key] || '#bbb'}"><b>${t.key}</b><small>${t.name}</small></div>
 					<div class="tier-items">${t.spells.map(n => `
-						<button class="tile" data-spell="${n}" title="${esc(describe(n))}">
+						<a class="tile" data-spell="${n}" href="${rulesUrl(n)}" title="${esc(describe(n))}">
 							<img src="${card(n)}" alt="" loading="lazy" width="84" height="84"><span>${pretty(n)}</span>${typeof (D.spells[n] || {}).value === 'number' ? `<small class="tv">${fmtPP(D.spells[n].value)}</small>` : ''}
-						</button>`).join('')}</div>
+						</a>`).join('')}</div>
 				</div>`).join('') + '</div>';
 		}
 
@@ -364,12 +364,13 @@
 			applyFocus();
 		}
 
-		const slug = n => n.toLowerCase().replace(/_/g, '-');
+		// Each spell's rules page (spell.html, one template for every spell).
+		const rulesUrl = n => 'spell.html?name=' + encodeURIComponent(n);
 
 		function cellInfo(kind, r, c) {
-			const rLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html"><b>${pretty(r)}</b></a>`;
-			if (r === c) return `${rLink} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} Page &rarr;</a>`;
-			const cLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(c)}.html"><b>${pretty(c)}</b></a>`;
+			const rLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="${rulesUrl(r)}"><b>${pretty(r)}</b></a>`;
+			if (r === c) return `${rLink} · <a style="color:var(--color-accent); text-decoration:underline;" href="${rulesUrl(r)}">View ${pretty(r)} Page &rarr;</a>`;
+			const cLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="${rulesUrl(c)}"><b>${pretty(c)}</b></a>`;
 			const k = r + '|' + c, m = match[k], s = syn[k];
 			const mpp = matchPP[k] === undefined ? '' : ` · ${fmtPP(matchPP[k])} points for ${pretty(r)}`;
 			const spp = synPP[k] === undefined ? '' : ` · ${fmtPP(synPP[k])} points` + (synN[k] ? ` (${synN[k].toLocaleString()} samples)` : '');
@@ -377,8 +378,8 @@
 				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`) + mpp;
 			const sTxt = (s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '')) + spp;
 			return kind === 'match'
-				? `${rLink} vs ${cLink}: ${mTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Held together: ${sTxt}.</div>`
-				: `${rLink} + ${cLink}: ${sTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
+				? `${rLink} vs ${cLink}: ${mTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="${rulesUrl(r)}">View ${pretty(r)} &rarr;</a><div class="t">Held together: ${sTxt}.</div>`
+				: `${rLink} + ${cLink}: ${sTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="${rulesUrl(r)}">View ${pretty(r)} &rarr;</a><div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
 		}
 
 		function wire(target, infoId, kind) {
@@ -464,7 +465,6 @@
 		}
 
 		selects.forEach(s => s.addEventListener('change', () => { if (D) draw(); }));
-		el('tier-list').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) setFocus(t.dataset.spell); });
 		wire('matchup-chart', 'matchup-info', 'match');
 		wire('synergy-chart', 'synergy-info', 'syn');
 		document.querySelector('.source-toggle').addEventListener('click', e => {
@@ -492,6 +492,6 @@
 			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 		});
 	</script>
-	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
 </body>
 </html>

@@ -52,7 +52,8 @@
 	if (typeof firebase === 'undefined') return;
 
 	// "Your move" badge and turn notifications (turn-notify.js), which need
-	// the shared turn rule (engine/room-clock.js) first.
+	// the shared turn rule (engine/room-clock.js) first; then follows, blocks
+	// and the challenge banner (friends.js).
 	(function loadTurnNotify() {
 		const add = (src) => {
 			const s = document.createElement('script');
@@ -60,8 +61,9 @@
 			s.async = false;
 			document.head.appendChild(s);
 		};
-		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js');
-		add('static/scripts/turn-notify.js');
+		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js?v=35');
+		add('static/scripts/turn-notify.js?v=35');
+		add('static/scripts/friends.js?v=35');
 	})();
 
 	const el = document.getElementById('auth-status');

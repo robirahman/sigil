@@ -23,7 +23,7 @@
 			rel="stylesheet"
 		/>
 		<link
-			href="static/css/styles.css"
+			href="static/css/styles.css?v=35"
 			rel="stylesheet"
 		/>
 		<link
@@ -44,49 +44,10 @@
 			rel="stylesheet"
 		/>
 		<link
-			href="static/css/help.css"
+			href="static/css/help.css?v=35"
 			rel="stylesheet"
 		/>
 		<title>Local 1v1 - Sigil Online</title>
-		<style>
-		.game-clock { display: flex; justify-content: center; align-items: center; gap: 0.75em; margin: 0.35em auto; font-variant-numeric: tabular-nums; font-size: 1.05em; }
-		.game-clock__side { padding: 0.15em 0.6em; border-radius: 0.4em; opacity: 0.7; border: 1px solid transparent; }
-		.game-clock__side--red { color: #fa3f32; }
-		.game-clock__side--blue { color: #295ccd; }
-		.game-clock__side--active { opacity: 1; font-weight: 700; border-color: currentColor; }
-		.game-clock__side--low.game-clock__side--active { animation: game-clock-pulse 1s ease-in-out infinite; }
-		.game-clock__label { opacity: 0.6; font-size: 0.85em; }
-		@keyframes game-clock-pulse { 50% { opacity: 0.4; } }
-			header {
-				position: absolute;
-			}
-
-			body > .main {
-				padding-top: 0px;
-			}
-
-			.import-form {
-				display: flex;
-				flex-direction: column;
-				gap: 8px;
-				padding: 12px 0;
-			}
-			.import-form textarea {
-				width: 100%;
-				min-height: 48px;
-				font-family: monospace;
-				font-size: 12px;
-				padding: 8px;
-				border-radius: 4px;
-				border: 1px solid #555;
-				background: #1a1a2e;
-				color: #ddd;
-				resize: vertical;
-			}
-			.import-form button {
-				align-self: flex-start;
-			}
-		</style>
 		<script>
 			var webpDetector = new Image();
 			webpDetector.onload = function () {
@@ -96,10 +57,10 @@
 				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
-		<script src="static/scripts/settings-panel.js"></script>
+		<script src="static/scripts/settings-panel.js?v=35"></script>
 	</head>
 
-	<body>
+	<body class="game-page zen-page">
 		<header>
 			<div class="container">
 				<div class="header-container">
@@ -142,6 +103,9 @@
 								<a class="link" href="tutorial.html" target="_blank" rel="noopener">Tutorial</a>
 							</li>
 							<li>
+								<button class="link game-rules-btn">This Game's Rules</button>
+							</li>
+							<li>
 								<button class="link turn-structure-btn">Turn Structure</button>
 							</li>
 							<li>
@@ -152,6 +116,7 @@
 							</li>
 						</ul>
 						<div class="content">
+							<div class="game-rules"></div>
 							<div class="glossary">
 								<p>
 									<strong>Soft Move</strong><br />
@@ -542,7 +507,7 @@
 								Forfeit
 							</button>
 							<button
-								class="action-button"
+								class="action-button action-button--export"
 								x-bind:class="{ 'is-hidden': !currentSfn || winner }"
 								x-on:click="exportPosition"
 								x-text="exportCopied ? 'Copied!' : 'Export Position'"
@@ -647,8 +612,8 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['charm' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['charm' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('charm' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:focus="showSpellTooltip('charm' + i)" x-on:keydown="handleSpellKey($event, 'charm' + i)" aria-keyshortcuts="I"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:keydown.space.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:click.outside="closeSpellTooltip"
@@ -693,8 +658,8 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['ritual' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['ritual' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('ritual' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:focus="showSpellTooltip('ritual' + i)" x-on:keydown="handleSpellKey($event, 'ritual' + i)" aria-keyshortcuts="I"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:click.outside="closeSpellTooltip"
@@ -739,12 +704,12 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['sorcery' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['sorcery' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('sorcery' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:focus="showSpellTooltip('sorcery' + i)" x-on:keydown="handleSpellKey($event, 'sorcery' + i)" aria-keyshortcuts="I"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:click.outside="closeSpellTooltip"
-												x-on:mouseout="handleSpellMouseOut()"
+												x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 											/>
 										</picture>
@@ -796,6 +761,9 @@
 					role="tooltip"
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
+					x-on:mouseenter="holdSpellTooltip()"
+					x-on:focusout="handleTooltipFocusOut($event)" x-on:keydown="handleTooltipKey($event)"
+					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
 						<h2
@@ -806,6 +774,7 @@
 							class="tooltip__content"
 							x-text="spells.text[activeSpell]?.text"
 						></p>
+						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="spellDict[activeSpell] ? sigilSpellPageUrl(spellDict[activeSpell]) : $el.getAttribute('href')" target="_blank" rel="noopener">More about this spell</a>
 						<button
 							class="tooltip-button"
 							x-on:click="handleCastSpell(activeSpell)"
@@ -942,6 +911,10 @@
 						<span>Red accuracy: <strong x-text="aiReview && aiReview.redAccuracy.toFixed(1) + '%'"></strong></span>
 						<span>Blue accuracy: <strong x-text="aiReview && aiReview.blueAccuracy.toFixed(1) + '%'"></strong></span>
 					</div>
+					<div class="ai-review-learn" x-show="learnPlies().length > 0" x-cloak>
+						<button class="ai-review-trigger__btn" x-on:click="startLearnFromMistakes()" x-text="learnButtonText()"
+							title="Replay your own mistakes from this game as puzzles"></button>
+					</div>
 
 					<div class="ai-review-annotate"
 						x-show="currentReviewTurnNumber() !== null"
@@ -985,12 +958,12 @@
 			// drop the caches, refetch the page's scripts past the HTTP cache, and
 			// reload once. The new worker deletes the stale cache when it activates.
 			(function () {
-				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 2) return;
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 3) return;
 				if (!window.caches || !window.fetch) return;
 				try {
 					// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
-					if (sessionStorage.getItem('sigilStaleAssetReload') === '2') return;
-					sessionStorage.setItem('sigilStaleAssetReload', '2');
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '3') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '3');
 				} catch (e) { return; }
 				document.addEventListener('DOMContentLoaded', function () {
 					var urls = ['static/scripts/engine/ai-worker.js'];
@@ -1022,30 +995,33 @@
 		<script src="static/scripts/engine/mcts.js"></script>
 		<script src="static/scripts/engine/minimax-ai.js"></script>
 		<script src="static/scripts/engine/caveman-ai.js"></script>
-		<script src="static/scripts/engine/rust-ai.js?v=34"></script>
+		<script src="static/scripts/engine/rust-ai.js?v=35"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-clock.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
-		<script src="static/scripts/engine/game-review.js?v=34"></script>
+		<script src="static/scripts/engine/game-review.js?v=35"></script>
 		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
-		<script src="static/scripts/engine/firebase-sync.js?v=34"></script>
+		<script src="static/scripts/engine/firebase-sync.js?v=35"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
-		<script src="static/scripts/engine/elo.js?v=34"></script>
-		<script src="static/scripts/engine/position-rating.js?v=34"></script>
+		<script src="static/scripts/engine/elo.js?v=35"></script>
+		<script src="static/scripts/engine/position-rating.js?v=35"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
+		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
-		<script src="static/scripts/game-keys.js"></script>
-		<script src="static/scripts/game-board-local.js?v=34"></script>
-		<script src="static/scripts/help.js"></script>
+		<script src="static/scripts/game-keys.js?v=35"></script>
+		<script src="static/scripts/game-board-local.js?v=35"></script>
+		<script src="static/scripts/rules-reference.js?v=35"></script>
+		<script src="static/scripts/help.js?v=35"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK -->
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 		<script>
 			firebase.initializeApp({
 				apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
@@ -1057,7 +1033,7 @@
 				appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 			});
 		</script>
-		<script src="static/scripts/auth-status.js"></script>
+		<script src="static/scripts/auth-status.js?v=35"></script>
 
 		<script>
 			if ('serviceWorker' in navigator) {

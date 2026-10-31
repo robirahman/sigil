@@ -17,23 +17,33 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const WASM_DIR = path.resolve(process.argv[2] || path.join(ROOT, 'docs/static/wasm'));
 // Optional NET (a baked network's preset name): checks engine/nets/<NET>_golden.txt
-// through nn_eval_raw_net. Default nnue_spell through nn_eval_raw.
-const NET = process.argv[3] || 'nnue_spell';
+// through nn_eval_raw_net. Default nnue_mt256.
+const NET = process.argv[3] || 'nnue_mt256';
 const glue = fs.readFileSync(path.join(WASM_DIR, 'sigil_engine.js'), 'utf8');
 const wasm_bindgen = new Function(glue + '\n;return wasm_bindgen;')();
 (async () => {
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
-	const evalRaw = NET === 'nnue_spell' ? wasm_bindgen.nn_eval_raw
-		: (wasm_bindgen.nn_eval_raw_net && ((...a) => wasm_bindgen.nn_eval_raw_net(NET, ...a)));
+	const evalRaw = (wasm_bindgen.nn_eval_raw_net && ((...a) => wasm_bindgen.nn_eval_raw_net(NET, ...a)))
+		|| wasm_bindgen.nn_eval_raw;
+	const evalRawFull = wasm_bindgen.nn_eval_raw_full && ((...a) => wasm_bindgen.nn_eval_raw_full(NET, ...a));
 	if (typeof evalRaw !== 'function') throw new Error('this build has no nn_eval_raw for ' + NET);
 	const lines = fs.readFileSync(path.join(ROOT, 'engine/nets/' + NET + '_golden.txt'), 'utf8')
 		.split('\n').filter(Boolean);
 	let bad = 0;
 	for (const line of lines) {
-		const [mine, theirs, sp, red, want] = line.split(' ');
-		const got = evalRaw(Uint8Array.from(sp.split(',').map(Number)),
-			BigInt(mine), BigInt(theirs), red === '1');
-		if (got !== Number(want)) { bad++; if (bad <= 5) console.error('MISMATCH ' + line + ' got ' + got); }
+		const parts = line.split(' ');
+		let got;
+		if (parts.length === 8 && typeof evalRawFull === 'function') {
+			const [mine, theirs, sp, walls, my_bank, their_bank, red, want] = parts;
+			got = evalRawFull(Uint8Array.from(sp.split(',').map(Number)),
+				BigInt(mine), BigInt(theirs), BigInt(walls), Number(my_bank), Number(their_bank), red === '1');
+			if (got !== Number(want)) { bad++; if (bad <= 5) console.error('MISMATCH ' + line + ' got ' + got); }
+		} else {
+			const [mine, theirs, sp, red, want] = parts;
+			got = evalRaw(Uint8Array.from(sp.split(',').map(Number)),
+				BigInt(mine), BigInt(theirs), red === '1');
+			if (got !== Number(want)) { bad++; if (bad <= 5) console.error('MISMATCH ' + line + ' got ' + got); }
+		}
 	}
 	if (lines.length < 50) throw new Error('only ' + lines.length + ' golden vectors');
 	if (bad) { console.error(bad + ' of ' + lines.length + ' differ'); process.exit(1); }

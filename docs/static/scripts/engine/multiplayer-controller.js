@@ -28,6 +28,8 @@ class MultiplayerController {
 		this._timerState = { red: 0, blue: 0, activeColor: null, lastUpdated: 0 };
 		this._timeControl = sync.timeControl || { type: 'none' };
 		this._timedOut = false;
+		// The room's pauses (vacations) and gifts of time (room-clock.js).
+		this._clockRec = { pauses: null, gifts: null, startedAt: null };
 
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
@@ -117,6 +119,18 @@ class MultiplayerController {
 			this._acceptTakeback();
 			return;
 		}
+		if (message === 'give_time') {
+			// Not once the opponent's clock is out or our claim is under way:
+			// a gift is the only way their side can gain time, and one
+			// landing during our own claim would make it our loss.
+			const opp = this.myColor === 'red' ? 'blue' : 'red';
+			const ts = this._timerState;
+			const view = typeof roomTimerView === 'function' && ts && ts.activeColor && ts.lastUpdated
+				? roomTimerView(ts, this._clockRoom(), this.sync.serverNow()) : null;
+			if (this._timeControl.type === 'realtime' && !this._timedOut && !this._claiming && !(this.board && this.board.gameover)
+				&& !(view && (view.out === opp || view[opp] <= 0))) this.sync.giveTime();
+			return;
+		}
 		if (message === 'claim_win') {
 			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
 			return;
@@ -177,7 +191,10 @@ class MultiplayerController {
 		const opponent = this.myColor === 'red' ? 'blue' : 'red';
 
 		if (this._timeControl.type === 'realtime') {
-			const myRemaining = Math.max(0, ts[this.myColor] - elapsed + (this._timeControl.increment || 0));
+			// The node holds the time without gifts (room-clock.js adds
+			// them, whenever they arrive), so it is not clamped: it may go
+			// below zero by what we were given.
+			const myRemaining = ts[this.myColor] - elapsed + (this._timeControl.increment || 0);
 			return {
 				red: this.myColor === 'red' ? myRemaining : ts.red,
 				blue: this.myColor === 'blue' ? myRemaining : ts.blue,
@@ -205,10 +222,30 @@ class MultiplayerController {
 		this.sync.listenToTimer((data) => {
 			this._timerState = data;
 		});
+		if (typeof this.sync.listenToClockRecords === 'function') {
+			let seen = null;
+			this.sync.listenToClockRecords((rec) => {
+				this._clockRec = rec;
+				// New gifts, either way, once the first load is in.
+				const keys = Object.keys(rec.gifts || {});
+				if (seen && rec.ready) {
+					for (const k of keys) {
+						const g = rec.gifts[k];
+						if (!seen.has(k) && g) this.emit({ type: 'time_gift', mine: g.to !== this.myColor });
+					}
+				}
+				if (rec.ready) seen = new Set(keys);
+			});
+		}
 
 		this._timerInterval = setInterval(() => {
 			this._tickTimer();
 		}, 250);
+	}
+
+	/** The room as room-clock.js reads it, for the clock records. */
+	_clockRoom() {
+		return Object.assign({ timeControl: this._timeControl }, this._clockRec);
 	}
 
 	/** Called every 250ms to update the timer display and check for timeout. */
@@ -218,6 +255,20 @@ class MultiplayerController {
 
 		const now = this.sync.serverNow();
 		const elapsed = now - ts.lastUpdated;
+
+		// With the room's pauses and gifts: a vacation stops the clock, and
+		// a flag claimed without them would be the claimer's loss.
+		if (typeof roomTimerView === 'function') {
+			const view = roomTimerView(ts, this._clockRoom(), now);
+			const opp = this.myColor === 'red' ? 'blue' : 'red';
+			const given = Object.values(this._clockRec.gifts || {}).filter((g) => g && g.to === opp).length;
+			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused, claiming: !!this._claiming,
+				giftsLeft: typeof ROOM_GIFT_MAX === 'number' ? Math.max(0, ROOM_GIFT_MAX - given) : 0 });
+			// Not before the records have loaded: a gift not yet seen
+			// would make the claim wrong.
+			if (view.out && !this._timedOut && this._clockRec.ready) this._confirmFlag(view.out);
+			return;
+		}
 
 		if (this._timeControl.type === 'realtime') {
 			const activeRemaining = ts[ts.activeColor] - elapsed;
@@ -248,6 +299,28 @@ class MultiplayerController {
 				this._endByTimeout(ts.activeColor, true);
 			}
 		}
+	}
+
+	/**
+	 * Claim `loser`'s flag only once the room as it is on the server now
+	 * agrees (room-clock.js, the rule the rating function applies as of
+	 * closedAt): a gift or a pause that landed after our listeners last
+	 * fired keeps the game going. At most one read every two seconds.
+	 */
+	async _confirmFlag(loser) {
+		const t = Date.now();
+		if (this._flagCheckAt && t - this._flagCheckAt < 2000) return;
+		this._flagCheckAt = t;
+		// From here until the check says no, +15 s is off (handlePlayerAction).
+		this._claiming = true;
+		let room = null;
+		try { room = typeof this.sync.readRoom === 'function' ? await this.sync.readRoom() : null; } catch (e) { this._claiming = false; return; }
+		if (this._timedOut || !room || room.status !== 'playing') { this._claiming = false; return; }
+		if (typeof roomTimeLeft === 'function' && typeof sideToMove === 'function') {
+			const left = roomTimeLeft(room, loser, this.sync.serverNow());
+			if (sideToMove(room) !== loser || left === null || left > 0) { this._claiming = false; return; }
+		}
+		this._endByTimeout(loser, true);
 	}
 
 	/** Stop the timer interval. */

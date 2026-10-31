@@ -17,8 +17,11 @@ const BASE = process.argv[2] || 'http://localhost:8765';
 
 // Captures the controller and its latest prompt: GameController is a global
 // class, defined after this runs, so patch it as soon as it exists.
+// A script's load event fires right after it runs, before the next script, so
+// the patch lands before any page code can start a game; the interval was
+// sometimes too late on a cached reload.
 function hook() {
-	const t = setInterval(() => {
+	const patch = () => {
 		if (typeof GameController === 'undefined' || GameController.prototype.__hooked) return;
 		const start = GameController.prototype.startGame;
 		GameController.prototype.startGame = function (...a) {
@@ -28,8 +31,9 @@ function hook() {
 			return start.apply(this, a);
 		};
 		GameController.prototype.__hooked = true;
-		clearInterval(t);
-	}, 1);
+	};
+	document.addEventListener('load', (e) => { if (e.target && e.target.tagName === 'SCRIPT') patch(); }, true);
+	const t = setInterval(() => { patch(); if (typeof GameController !== 'undefined') clearInterval(t); }, 1);
 }
 const humanPrompt = () => !!(window.__gc && window.__gc._inputResolve && window.__last
 	&& window.__last.awaiting === 'action' && Object.keys(window.__last.moveoptions || {}).length > 0);

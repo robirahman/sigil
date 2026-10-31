@@ -80,7 +80,9 @@ function buildRingLayout(zoneCount) {
 // Bump when a deploy changes a script API that the (network-first) HTML
 // pages call, and raise the number in the pages' stale-asset guards to match
 // (the inline script after each page's constants.js tag).
-const SIGIL_ASSET_EPOCH = 2;
+// 3: the rules reference (help.js "This game's rules", rules-reference.js,
+// the tooltip handlers in game-board-local/multiplayer.js).
+const SIGIL_ASSET_EPOCH = 3;
 
 // Per-layout rules. `spellTarget`: casting this many spells ends the game
 // (the stone leader wins). `winLead`: a real-stone lead of this much over the

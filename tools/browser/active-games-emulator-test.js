@@ -18,12 +18,15 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8931';
 const NS = 'sigil-js-default-rtdb';
-const DB = 'http://127.0.0.1:9000';
+// The emulators' addresses (firebase emulators:exec sets them).
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const DB = 'http://' + DB_HOST;
 const OWNER = { Authorization: 'Bearer owner' };
 
 // Point the page's Firebase at the emulators as soon as the app exists, and
 // record notifications instead of showing them.
-function pageHooks() {
+function pageHooks(dbHost, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -33,8 +36,8 @@ function pageHooks() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				return app;
 			};
 		},
@@ -76,7 +79,7 @@ const DAY = 24 * H;
 	if (put.status !== 200) throw new Error('rules upload: ' + put.status + ' ' + await put.text());
 
 	const email = `ag${Date.now()}@example.com`;
-	const signUp = await (await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
+	const signUp = await (await fetch('http://' + AUTH_HOST + '/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
 		method: 'POST', headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ email, password: 'password123', returnSecureToken: true }),
 	})).json();
@@ -118,7 +121,7 @@ const DAY = 24 * H;
 	const check = (label, cond, extra) => { console.log((cond ? 'ok   ' : 'FAIL ') + label, extra === undefined ? '' : JSON.stringify(extra)); ok = ok && cond; };
 	try {
 		const page = await browser.newPage();
-		await page.evaluateOnNewDocument(pageHooks);
+		await page.evaluateOnNewDocument(pageHooks, DB_HOST, AUTH_HOST);
 		await page.setBypassServiceWorker(true);
 		await page.setRequestInterception(true);
 		page.on('request', (req) => {

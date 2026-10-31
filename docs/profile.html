@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link href="static/css/global.css?v202305191" rel="stylesheet" />
 	<link href="static/css/layout.css" rel="stylesheet" />
-	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -15,6 +15,10 @@
 	<style>
 		body > .main { padding-top: 80px; }
 		.profile {
+			/* A full-width flex item: with auto margins alone it is sized to
+			   its content, and a wide table pushes it past a phone screen. */
+			width: 100%;
+			box-sizing: border-box;
 			max-width: 720px;
 			margin: 0 auto;
 			padding: 24px;
@@ -121,10 +125,127 @@
 			text-decoration: none;
 		}
 		.review-link:hover { text-decoration: underline; }
+		/* Follow, block, challenge (friends.js) */
+		.profile__social { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 16px; font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.9em; }
+		.profile__social button, .profile__social a.profile__btn {
+			padding: 6px 12px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			text-decoration: none;
+			cursor: pointer;
+		}
+		.profile__social button:hover, .profile__social a.profile__btn:hover { background: var(--color-surface-hover); }
+		.profile__social button:disabled { opacity: 0.5; cursor: default; }
+		.profile__social .profile__btn--primary { border-color: var(--color-accent); color: var(--color-text-bright); }
+		.profile__online { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-success, #4caf50); margin-left: 0.4em; vertical-align: middle; }
 		.recent-row { display: flex; gap: 6px; align-items: center; }
 		.recent-row__pip { width: 8px; height: 8px; border-radius: 50%; }
 		.recent-row__pip--win { background: var(--color-success); }
 		.recent-row__pip--loss { background: var(--color-error); }
+		.profile-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--color-border); margin: 8px 0 4px; }
+		.profile-tab {
+			background: none;
+			border: none;
+			border-bottom: 3px solid transparent;
+			margin-bottom: -2px;
+			padding: 8px 14px;
+			color: var(--color-text-dim);
+			font-family: 'Arvo', serif;
+			font-size: 1em;
+			cursor: pointer;
+		}
+		.profile-tab:hover { color: var(--color-text-warm); }
+		.profile-tab.is-active { color: var(--color-text-bright); border-bottom-color: var(--color-accent); }
+		.profile-btn {
+			padding: 6px 14px;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.profile-btn:hover:not(:disabled) { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.profile-btn:disabled { opacity: 0.5; cursor: default; }
+		.game-filters {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+			gap: 8px;
+			margin: 12px 0;
+			padding: 12px;
+			background: var(--color-surface);
+			border-radius: 8px;
+		}
+		.game-filters label {
+			display: flex;
+			flex-direction: column;
+			gap: 3px;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.8em;
+			color: var(--color-text-dim);
+		}
+		.game-filters input, .game-filters select {
+			min-width: 0;
+			padding: 5px 8px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-bg-mid);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1.1em;
+		}
+		.filter-summary, .meta-note {
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-dim);
+			font-size: 0.85em;
+			margin: 6px 0;
+		}
+		.export-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+		.table-scroll { overflow-x: auto; }
+		.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+		.stat-tile { background: var(--color-surface); border-radius: 8px; padding: 10px 12px; font-family: 'Overlock', sans-serif; }
+		.stat-tile__label { color: var(--color-text-dim); font-size: 0.8em; }
+		.stat-tile__value { color: var(--color-text-bright); font-family: 'Arvo', serif; font-size: 1.3em; margin: 2px 0; }
+		.stat-tile__sub { color: var(--color-text-dim); font-size: 0.8em; overflow-wrap: anywhere; }
+		.stat-tile__sub a { color: var(--color-accent); text-decoration: none; }
+		.mode-table td.num, .mode-table th.num { text-align: right; }
+		.mode-table td.num { white-space: nowrap; }
+		.ins-wrap { position: relative; }
+		.ins-chart { display: block; max-width: 100%; height: auto; }
+		.ins-chart .ins-bar { fill: var(--color-accent); }
+		.ins-chart .ins-hit { fill: transparent; }
+		.ins-chart .ins-row:hover .ins-hit { fill: var(--color-surface-hover); opacity: 0.35; }
+		.ins-chart .ins-grid { stroke: var(--color-text-dim); stroke-width: 1; opacity: 0.35; }
+		.ins-chart .ins-grid--mid { opacity: 0.7; }
+		.ins-chart .ins-tick { fill: var(--color-text-dim); font-family: 'Overlock', sans-serif; font-size: 11px; }
+		.ins-chart .ins-label { fill: var(--color-text-warm); font-family: 'Overlock', sans-serif; font-size: 13px; }
+		.ins-chart .ins-value { fill: var(--color-text-warm); font-family: 'Overlock', sans-serif; font-size: 12px; }
+		.ins-chart .ins-value-sub { fill: var(--color-text-dim); }
+		.ins-tip {
+			position: absolute;
+			pointer-events: none;
+			background: var(--color-surface-raised);
+			color: var(--color-text-bright);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			padding: 4px 8px;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			white-space: nowrap;
+			z-index: 2;
+		}
+		.ins-sub { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.85em; margin: -4px 0 8px; }
+		.ins-table summary { cursor: pointer; font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.85em; margin-top: 6px; }
+		@media (max-width: 520px) {
+			.profile { padding: 16px; }
+			.profile__head { flex-wrap: wrap; }
+			.opponents-table th, .games-table th, .opponents-table td, .games-table td { padding: 6px 5px; }
+		}
 	</style>
 </head>
 <body>
@@ -153,6 +274,7 @@
 							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI, 'profile__name--dev': user.isDeveloper }">
 								<span x-text="user.displayName"></span>
 								<template x-if="user.isDeveloper"><span class="profile__name-dev-badge">[dev]</span></template>
+								<span class="profile__online" x-show="online" x-cloak title="Online now"></span>
 							</div>
 							<div class="profile__stat-line">
 								<span x-text="user.gamesPlayed + ' games'"></span> &middot;
@@ -162,6 +284,8 @@
 									<span> &middot; <span x-text="winRatePercent + '% win rate'"></span></span>
 								</template>
 							</div>
+							<button class="report-link" type="button" data-testid="report-player" x-show="!user.isAI && viewerUid !== user.uid"
+								x-on:click="SigilReport.open({ target: user.uid, name: user.displayName })">Report this player</button>
 						</div>
 						<div style="text-align: right;">
 							<div class="profile__elo-label">Rating</div>
@@ -169,113 +293,287 @@
 						</div>
 					</div>
 
-					<h3>Rating History</h3>
-					<div class="chart-wrap">
-						<template x-if="ratingPoints.length === 0">
-							<p class="empty-msg" style="margin: 0;">No ranked games yet.</p>
+					<div class="profile__social" x-show="!user.isAI" x-cloak>
+						<span class="profile__followers" x-text="followerCount + (followerCount === 1 ? ' follower' : ' followers')"></span>
+						<template x-if="social.canAct">
+							<span style="display: contents;">
+								<a class="profile__btn profile__btn--primary profile__challenge" x-show="!social.blocked && !social.blockedMe" x-bind:href="'multiplayer.html?challenge=' + encodeURIComponent(user.uid)">Challenge</a>
+								<button type="button" class="profile__follow" x-show="!social.blocked && !social.blockedMe" x-bind:disabled="social.busy" x-on:click="toggleFollow()" x-text="social.following ? 'Unfollow' : 'Follow'"></button>
+								<button type="button" class="profile__block" x-bind:disabled="social.busy" x-on:click="toggleBlock()" x-text="social.blocked ? 'Unblock' : 'Block'"></button>
+							</span>
 						</template>
-						<template x-if="ratingPoints.length > 0">
-							<svg class="chart-svg" x-bind:viewBox="'0 0 ' + chartWidth + ' ' + chartHeight" preserveAspectRatio="none">
-								<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartWidth - chartPad" x-bind:y1="chartHeight - chartPad" x-bind:y2="chartHeight - chartPad"></line>
-								<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartPad" x-bind:y1="chartPad" x-bind:y2="chartHeight - chartPad"></line>
-								<polyline class="chart-line" x-bind:points="chartPolyPoints"></polyline>
-								<template x-for="(p, i) in chartDots" x-bind:key="i">
-									<circle class="chart-dot" x-bind:cx="p.x" x-bind:cy="p.y" r="2"></circle>
-								</template>
-								<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartPad + 4" text-anchor="end" x-text="chartMaxElo"></text>
-								<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartHeight - chartPad" text-anchor="end" x-text="chartMinElo"></text>
-							</svg>
+						<span class="profile__social-error" x-show="social.error" x-text="social.error"></span>
+					</div>
+
+					<div class="profile-tabs" role="tablist">
+						<template x-for="t in tabs" x-bind:key="t.id">
+							<button class="profile-tab" role="tab" x-bind:id="'tab-' + t.id" x-bind:aria-selected="tab === t.id" x-bind:class="{ 'is-active': tab === t.id }" x-on:click="setTab(t.id)" x-text="t.label"></button>
 						</template>
 					</div>
 
-					<h3>Most Frequent Opponents</h3>
-					<template x-if="topOpponents.length === 0">
-						<p class="empty-msg">No opponents yet.</p>
-					</template>
-					<template x-if="topOpponents.length > 0">
-						<table class="opponents-table">
-							<thead>
-								<tr>
-									<th>Opponent</th>
-									<th style="text-align:right;">Games</th>
-									<th style="text-align:right;">W&ndash;L</th>
-								</tr>
-							</thead>
-							<tbody>
-								<template x-for="opp in topOpponents" x-bind:key="opp.uid">
+					<!-- Games: search and the list -->
+					<section x-show="tab === 'games'" role="tabpanel" aria-labelledby="tab-games">
+						<div class="game-filters">
+							<label>Opponent
+								<input type="search" x-model="filters.opponent" x-on:input="page = 0" placeholder="Name" data-filter="opponent" />
+							</label>
+							<label>Result
+								<select x-model="filters.result" x-on:change="page = 0" data-filter="result">
+									<option value="all">All</option>
+									<option value="win">Wins</option>
+									<option value="loss">Losses</option>
+								</select>
+							</label>
+							<label>Rated
+								<select x-model="filters.rated" x-on:change="page = 0" data-filter="rated">
+									<option value="all">All</option>
+									<option value="rated">Rated</option>
+									<option value="unrated">Unrated</option>
+								</select>
+							</label>
+							<label>Spell on the board
+								<select x-model="filters.spell" x-on:change="page = 0" data-filter="spell">
+									<option value="">Any</option>
+									<template x-for="s in spellOptions" x-bind:key="s">
+										<option x-bind:value="s" x-text="s"></option>
+									</template>
+								</select>
+							</label>
+							<label>From
+								<input type="date" x-model="filters.from" x-on:change="page = 0" data-filter="from" />
+							</label>
+							<label>To
+								<input type="date" x-model="filters.to" x-on:change="page = 0" data-filter="to" />
+							</label>
+						</div>
+						<p class="filter-summary" x-show="games.length > 0">
+							<span class="filter-count" x-text="filteredGames.length + ' of ' + games.length + ' games'"></span>
+							<template x-if="filtersActive">
+								<span> &middot; <a href="#" class="review-link" x-on:click.prevent="clearFilters()">clear filters</a></span>
+							</template>
+							<template x-if="filters.spell && metaUncovered > 0">
+								<span x-text="' · spells known for the ' + metaCovered + ' most recent games'"></span>
+							</template>
+						</p>
+						<template x-if="games.length === 0">
+							<p class="empty-msg">No past games.</p>
+						</template>
+						<template x-if="games.length > 0 && filteredGames.length === 0">
+							<p class="empty-msg">No games match these filters.</p>
+						</template>
+						<template x-if="filteredGames.length > 0">
+							<div class="table-scroll">
+								<table class="games-table">
+									<thead>
+										<tr>
+											<th>When</th>
+											<th>Color</th>
+											<th>Opponent</th>
+											<th>Result</th>
+											<th style="text-align:right;">Rating</th>
+										</tr>
+									</thead>
+									<tbody>
+										<template x-for="g in pageGames" x-bind:key="g.id">
+											<tr x-bind:class="{ 'is-clickable': g.roomCode }" x-bind:data-game="g.id" x-on:click="g.roomCode && (window.location.href = 'multiplayer.html?id=' + g.roomCode)">
+												<td x-text="g.whenText" x-bind:title="g.dateText"></td>
+												<td x-text="g.color === 'red' ? 'Red' : 'Blue'"></td>
+												<td>
+													<template x-if="g.opponentUid">
+														<a x-bind:href="'profile.html?uid=' + g.opponentUid" x-bind:class="{ 'name--ai': g.opponentIsAI }" x-text="g.opponent" x-on:click.stop=""></a>
+													</template>
+													<template x-if="!g.opponentUid">
+														<span x-text="g.opponent"></span>
+													</template>
+												</td>
+												<td>
+													<span x-bind:class="g.result === 'win' ? 'result--win' : 'result--loss'" x-text="g.result === 'win' ? 'Win' : 'Loss'"></span>
+													<template x-if="g.roomCode">
+														<span> &middot; <a class="review-link" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-on:click.stop="">review</a></span>
+													</template>
+												</td>
+												<td style="text-align:right;">
+													<template x-if="g.rated">
+														<span>
+															<span x-text="g.eloAfter"></span>
+															<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
+														</span>
+													</template>
+													<template x-if="!g.rated">
+														<span class="elo-change--unrated" x-bind:title="g.unratedText">Unrated</span>
+													</template>
+												</td>
+											</tr>
+										</template>
+									</tbody>
+								</table>
+							</div>
+						</template>
+
+						<div class="pagination" x-show="totalPages > 1" x-cloak style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+							<button class="profile-btn" x-on:click="prevPage" x-bind:disabled="page === 0">&larr; Prev</button>
+							<span style="align-self:center; font-family:'Overlock',sans-serif; color:var(--color-text-dim); font-size:0.85em;" x-text="(page + 1) + ' / ' + totalPages"></span>
+							<button class="profile-btn" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1">Next &rarr;</button>
+						</div>
+
+						<div class="export-row" x-show="games.length > 0">
+							<button class="profile-btn" id="export-games" x-on:click="exportGames()" x-bind:disabled="exporting">Download all games (JSON lines)</button>
+							<span class="meta-note" x-show="exportStatus" x-text="exportStatus"></span>
+						</div>
+					</section>
+
+					<!-- Stats: per-mode tables, streaks, best win / worst loss, opponents -->
+					<section x-show="tab === 'stats'" x-cloak role="tabpanel" aria-labelledby="tab-stats">
+						<h3>Rating History</h3>
+						<div class="chart-wrap">
+							<template x-if="ratingPoints.length === 0">
+								<p class="empty-msg" style="margin: 0;">No ranked games yet.</p>
+							</template>
+							<template x-if="ratingPoints.length > 0">
+								<svg class="chart-svg" x-bind:viewBox="'0 0 ' + chartWidth + ' ' + chartHeight" preserveAspectRatio="none">
+									<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartWidth - chartPad" x-bind:y1="chartHeight - chartPad" x-bind:y2="chartHeight - chartPad"></line>
+									<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartPad" x-bind:y1="chartPad" x-bind:y2="chartHeight - chartPad"></line>
+									<polyline class="chart-line" x-bind:points="chartPolyPoints"></polyline>
+									<!-- A <template> inside <svg> is an SVG element without .content, so
+									     x-for cannot clone it: the dots are drawn as markup. -->
+									<g x-html="chartDotsSvg"></g>
+									<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartPad + 4" text-anchor="end" x-text="chartMaxElo"></text>
+									<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartHeight - chartPad" text-anchor="end" x-text="chartMinElo"></text>
+								</svg>
+							</template>
+						</div>
+
+						<template x-if="stats">
+							<div>
+								<h3>Streaks and records</h3>
+								<div class="stat-tiles">
+									<div class="stat-tile" data-stat="current-streak">
+										<div class="stat-tile__label">Current streak</div>
+										<div class="stat-tile__value" x-text="stats.streaks.current.n ? stats.streaks.current.n + (stats.streaks.current.result === 'win' ? ' W' : ' L') : '—'"></div>
+									</div>
+									<div class="stat-tile" data-stat="longest-win">
+										<div class="stat-tile__label">Longest winning streak</div>
+										<div class="stat-tile__value" x-text="stats.streaks.longestWin"></div>
+									</div>
+									<div class="stat-tile" data-stat="longest-loss">
+										<div class="stat-tile__label">Longest losing streak</div>
+										<div class="stat-tile__value" x-text="stats.streaks.longestLoss"></div>
+									</div>
+									<div class="stat-tile" data-stat="best-win">
+										<div class="stat-tile__label">Best win</div>
+										<div class="stat-tile__value" x-text="stats.bests.bestWin ? stats.bests.bestWin.oppElo : '—'"></div>
+										<template x-if="stats.bests.bestWin">
+											<div class="stat-tile__sub"><span x-text="'vs ' + stats.bests.bestWin.game.opponent + ', ' + stats.bests.bestWin.game.dateText"></span><template x-if="stats.bests.bestWin.game.roomCode"><span> &middot; <a x-bind:href="'multiplayer.html?id=' + stats.bests.bestWin.game.roomCode">review</a></span></template></div>
+										</template>
+									</div>
+									<div class="stat-tile" data-stat="worst-loss">
+										<div class="stat-tile__label">Worst loss</div>
+										<div class="stat-tile__value" x-text="stats.bests.worstLoss ? stats.bests.worstLoss.oppElo : '—'"></div>
+										<template x-if="stats.bests.worstLoss">
+											<div class="stat-tile__sub"><span x-text="'vs ' + stats.bests.worstLoss.game.opponent + ', ' + stats.bests.worstLoss.game.dateText"></span><template x-if="stats.bests.worstLoss.game.roomCode"><span> &middot; <a x-bind:href="'multiplayer.html?id=' + stats.bests.worstLoss.game.roomCode">review</a></span></template></div>
+										</template>
+									</div>
+								</div>
+								<p class="meta-note">Best win and worst loss: rated games against players, by the opponent's rating before the game (AI ratings at the time are not stored).</p>
+
+								<template x-for="sec in modeSections" x-bind:key="sec.key">
+									<div x-bind:data-mode="sec.key">
+										<h3 x-text="sec.title"></h3>
+										<template x-if="stats[sec.key].length === 0">
+											<p class="empty-msg" x-text="metaLoading ? 'Loading…' : 'No games yet.'"></p>
+										</template>
+										<template x-if="stats[sec.key].length > 0">
+											<div class="table-scroll">
+												<table class="opponents-table mode-table">
+													<thead>
+														<tr><th x-text="sec.head"></th><th class="num">Games</th><th class="num">W&ndash;L</th><th class="num">Win %</th><th class="num">Rating +/&minus;</th></tr>
+													</thead>
+													<tbody>
+														<template x-for="r in stats[sec.key]" x-bind:key="r.label">
+															<tr>
+																<td x-text="r.label"></td>
+																<td class="num" x-text="r.games"></td>
+																<td class="num" x-text="r.wins + '–' + r.losses"></td>
+																<td class="num" x-text="pct(r) + '%'"></td>
+																<td class="num" x-text="r.rated ? (r.net > 0 ? '+' : r.net < 0 ? '−' : '') + Math.abs(r.net) : '—'"></td>
+															</tr>
+														</template>
+													</tbody>
+												</table>
+											</div>
+										</template>
+									</div>
+								</template>
+								<p class="meta-note" x-show="metaNote" x-text="metaNote"></p>
+							</div>
+						</template>
+
+						<h3>Most Frequent Opponents</h3>
+						<template x-if="topOpponents.length === 0">
+							<p class="empty-msg">No opponents yet.</p>
+						</template>
+						<template x-if="topOpponents.length > 0">
+							<table class="opponents-table">
+								<thead>
 									<tr>
-										<td>
-											<template x-if="opp.uid">
-												<a x-bind:href="'profile.html?uid=' + opp.uid" x-bind:class="{ 'name--ai': opp.isAI, 'name--dev': opp.isDeveloper }" x-text="opp.displayName"></a><template x-if="opp.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
-											</template>
-											<template x-if="!opp.uid">
-												<span x-text="opp.displayName"></span>
-											</template>
-										</td>
-										<td style="text-align:right;" x-text="opp.games"></td>
-										<td style="text-align:right;"><span x-text="opp.wins"></span>&ndash;<span x-text="opp.losses"></span></td>
+										<th>Opponent</th>
+										<th style="text-align:right;">Games</th>
+										<th style="text-align:right;">W&ndash;L</th>
 									</tr>
-								</template>
-							</tbody>
-						</table>
-					</template>
+								</thead>
+								<tbody>
+									<template x-for="opp in topOpponents" x-bind:key="opp.uid || opp.displayName">
+										<tr>
+											<td>
+												<template x-if="opp.uid">
+													<a x-bind:href="'profile.html?uid=' + opp.uid" x-bind:class="{ 'name--ai': opp.isAI, 'name--dev': opp.isDeveloper }" x-text="opp.displayName"></a><template x-if="opp.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
+												</template>
+												<template x-if="!opp.uid">
+													<span x-text="opp.displayName"></span>
+												</template>
+											</td>
+											<td style="text-align:right;" x-text="opp.games"></td>
+											<td style="text-align:right;"><span x-text="opp.wins"></span>&ndash;<span x-text="opp.losses"></span></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+						</template>
+					</section>
 
-					<h3>Past Games</h3>
-					<template x-if="games.length === 0">
-						<p class="empty-msg">No past games.</p>
-					</template>
-					<template x-if="games.length > 0">
-						<table class="games-table">
-							<thead>
-								<tr>
-									<th>When</th>
-									<th>Color</th>
-									<th>Opponent</th>
-									<th>Result</th>
-									<th style="text-align:right;">Rating</th>
-								</tr>
-							</thead>
-							<tbody>
-								<template x-for="g in pageGames" x-bind:key="g.id">
-									<tr x-bind:class="{ 'is-clickable': g.roomCode }" x-on:click="g.roomCode && (window.location.href = 'multiplayer.html?id=' + g.roomCode)">
-										<td x-text="g.whenText"></td>
-										<td x-text="g.color === 'red' ? 'Red' : 'Blue'"></td>
-										<td>
-											<template x-if="g.opponentUid">
-												<a x-bind:href="'profile.html?uid=' + g.opponentUid" x-bind:class="{ 'name--ai': g.opponentIsAI }" x-text="g.opponent" x-on:click.stop=""></a>
-											</template>
-											<template x-if="!g.opponentUid">
-												<span x-text="g.opponent"></span>
-											</template>
-										</td>
-										<td>
-											<span x-bind:class="g.result === 'win' ? 'result--win' : 'result--loss'" x-text="g.result === 'win' ? 'Win' : 'Loss'"></span>
-											<template x-if="g.roomCode">
-												<span> &middot; <a class="review-link" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-on:click.stop="">review</a></span>
-											</template>
-										</td>
-										<td style="text-align:right;">
-											<template x-if="g.rated">
-												<span>
-													<span x-text="g.eloAfter"></span>
-													<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
-												</span>
-											</template>
-											<template x-if="!g.rated">
-												<span class="elo-change--unrated">Unrated</span>
-											</template>
-										</td>
-									</tr>
+					<!-- Insights: win rate by colour, game length and spell -->
+					<section x-show="tab === 'insights'" x-cloak role="tabpanel" aria-labelledby="tab-insights">
+						<template x-if="games.length === 0">
+							<p class="empty-msg">No games yet.</p>
+						</template>
+						<template x-for="c in insightCharts" x-bind:key="c.key">
+							<div x-show="games.length > 0" x-bind:data-insight="c.key">
+								<h3 x-text="c.title"></h3>
+								<p class="ins-sub" x-text="c.sub"></p>
+								<div class="chart-wrap ins-wrap" x-on:mousemove="chartTip($event)" x-on:mouseleave="tip.show = false">
+									<template x-if="insights && insights[c.key].length === 0">
+										<p class="empty-msg" style="margin: 0;" x-text="metaLoading ? 'Loading…' : 'No data for these games.'"></p>
+									</template>
+									<div class="ins-svg" x-html="chartSvg[c.key] || ''"></div>
+									<div class="ins-tip" x-show="tip.show && tip.key === c.key" x-bind:style="'left:' + tip.x + 'px; top:' + tip.y + 'px'" x-text="tip.text"></div>
+								</div>
+								<template x-if="insights && insights[c.key].length > 0">
+									<details class="ins-table">
+										<summary>Show as a table</summary>
+										<table class="opponents-table mode-table">
+											<thead><tr><th x-text="c.head"></th><th class="num">Games</th><th class="num">W&ndash;L</th><th class="num">Win %</th></tr></thead>
+											<tbody>
+												<template x-for="r in insights[c.key]" x-bind:key="r.label">
+													<tr><td x-text="r.label"></td><td class="num" x-text="r.games"></td><td class="num" x-text="r.wins + '–' + r.losses"></td><td class="num" x-text="pct(r) + '%'"></td></tr>
+												</template>
+											</tbody>
+										</table>
+									</details>
 								</template>
-							</tbody>
-						</table>
-					</template>
-
-					<div class="pagination" x-show="totalPages > 1" x-cloak style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
-						<button class="lobby-button" x-on:click="prevPage" x-bind:disabled="page === 0" style="width:auto; padding:6px 14px;">&larr; Prev</button>
-						<span style="align-self:center; font-family:'Overlock',sans-serif; color:var(--color-text-dim); font-size:0.85em;" x-text="(page + 1) + ' / ' + totalPages"></span>
-						<button class="lobby-button" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1" style="width:auto; padding:6px 14px;">Next &rarr;</button>
-					</div>
+							</div>
+						</template>
+						<p class="meta-note" x-show="metaNote" x-text="metaNote"></p>
+					</section>
 
 					<a class="back-link" href="leaderboard.html">&larr; Back to leaderboard</a>
 				</div>
@@ -298,17 +596,107 @@
 			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 		});
 	</script>
-	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/report-dialog.js?v=35"></script>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/engine/elo.js?v=35"></script>
+	<script src="static/scripts/profile-stats.js?v=35"></script>
 
 	<script>
+		// Room fields the Stats and Insights tabs need (rooms/{code} is public;
+		// completed_games is not readable by clients). Read field by field so a
+		// long game's turns are not downloaded until an export asks for them.
+		const PROFILE_META_FIELDS = ['spellNames', 'variant', 'timeControl', 'finalSfn', 'startSfn', 'setupSfn'];
+		// The most recent games whose rooms are read for the Stats/Insights tabs.
+		// (profile-stats-emulator-test.js lowers it through window.__PROFILE_META_CAP.)
+		const PROFILE_META_CAP = window.__PROFILE_META_CAP || 300;
+		// Games read at once (each is a handful of small reads).
+		const PROFILE_FETCH_BATCH = 20;
+		// Finished rooms do not change: their fields are kept in localStorage.
+		const PROFILE_META_CACHE_KEY = 'sigil_profile_meta_v1';
+		const PROFILE_META_CACHE_MAX = 2000;
+		// Opponent-rating reads at once (one number each).
+		const PROFILE_OPP_BATCH = 50;
+		const PROFILE_OPP_CACHE_KEY = 'sigil_profile_opp_elo_v1';
+		const PROFILE_OPP_CACHE_MAX = 5000;
+		// Spells shown in the spell chart (the table lists them all).
+		const PROFILE_SPELL_CHART_ROWS = 12;
+
+		function _profileMetaCacheRead() {
+			try { return JSON.parse(localStorage.getItem(PROFILE_META_CACHE_KEY) || '{}') || {}; } catch (e) { return {}; }
+		}
+		function _profileMetaCacheWrite(cache) {
+			try {
+				const keys = Object.keys(cache);
+				if (keys.length > PROFILE_META_CACHE_MAX) {
+					keys.sort((a, b) => (cache[a].at || 0) - (cache[b].at || 0));
+					for (const k of keys.slice(0, keys.length - PROFILE_META_CACHE_MAX)) delete cache[k];
+				}
+				localStorage.setItem(PROFILE_META_CACHE_KEY, JSON.stringify(cache));
+			} catch (e) { /* storage full or blocked: no cache */ }
+		}
+
+		function _profileOppEloCacheRead() {
+			try { return JSON.parse(localStorage.getItem(PROFILE_OPP_CACHE_KEY) || '{}') || {}; } catch (e) { return {}; }
+		}
+		function _profileOppEloCacheWrite(cache) {
+			try {
+				const keys = Object.keys(cache);
+				// Push ids sort by time: drop the oldest.
+				if (keys.length > PROFILE_OPP_CACHE_MAX) for (const k of keys.sort().slice(0, keys.length - PROFILE_OPP_CACHE_MAX)) delete cache[k];
+				localStorage.setItem(PROFILE_OPP_CACHE_KEY, JSON.stringify(cache));
+			} catch (e) { /* storage full or blocked: no cache */ }
+		}
+
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('profilePage', () => ({
 				loading: true,
 				isOffline: !navigator.onLine,
 				user: null,
+				// The signed-in viewer: no "Report" on one's own profile.
+				viewerUid: null,
 				games: [],
 				topOpponents: [],
 				ratingPoints: [],
+
+				// Follow / block / challenge (friends.js): only for a signed-in
+				// player looking at someone else's profile. Guests (anonymous)
+				// have no profile and can neither follow nor be challenged.
+				social: { canAct: false, following: false, blocked: false, blockedMe: false, busy: false, error: '' },
+				followerCount: 0,
+				online: false,
+
+				tabs: [{ id: 'games', label: 'Games' }, { id: 'stats', label: 'Stats' }, { id: 'insights', label: 'Insights' }],
+				tab: 'games',
+
+				// Search
+				filters: { opponent: '', result: 'all', rated: 'all', spell: '', from: '', to: '' },
+
+				// Room fields by game id (see PROFILE_META_FIELDS).
+				meta: {},
+				// A human opponent's rating before the game, by game id.
+				oppElo: {},
+				metaLoading: false,
+				metaCovered: 0,
+				stats: null,
+				insights: null,
+				chartSvg: {},
+				tip: { show: false, key: '', text: '', x: 0, y: 0 },
+				modeSections: [
+					{ key: 'byKind', title: 'By opponent', head: 'Opponent' },
+					{ key: 'byTc', title: 'By time control', head: 'Time control' },
+					{ key: 'byVariant', title: 'By variant', head: 'Variant' },
+				],
+				insightCharts: [
+					{ key: 'byColor', title: 'Results by colour', sub: 'Win rate playing Red and playing Blue.', head: 'Colour' },
+					{ key: 'byLength', title: 'Results by game length', sub: 'Win rate by turns played (both sides).', head: 'Length' },
+					{ key: 'bySpell', title: 'Results by spell', sub: 'Win rate in games with each spell on the board, most played first.', head: 'Spell' },
+				],
+
+				exporting: false,
+				exportStatus: '',
 
 				// Pagination for past games
 				page: 0,
@@ -322,19 +710,54 @@
 				chartMaxElo: 1000,
 				chartPolyPoints: '',
 				chartDots: [],
+				chartDotsSvg: '',
 
-				get totalPages() { return Math.max(1, Math.ceil(this.games.length / this.perPage)); },
-				get pageGames() { return this.games.slice(this.page * this.perPage, this.page * this.perPage + this.perPage); },
+				get filteredGames() { return ProfileStats.filterGames(this.games, this.filters, (g) => this.meta[g.id]); },
+				get filtersActive() {
+					const f = this.filters;
+					return !!(f.opponent || f.result !== 'all' || f.rated !== 'all' || f.spell || f.from || f.to);
+				},
+				get metaUncovered() { return this.games.length - this.metaCovered; },
+				get metaNote() {
+					if (this.metaLoading) return 'Loading game details… ' + this.metaCovered + ' of ' + Math.min(this.games.length, PROFILE_META_CAP);
+					if (this.games.length > PROFILE_META_CAP) return 'Time control, variant, length and spells are from the ' + PROFILE_META_CAP + ' most recent games.';
+					return '';
+				},
+				get spellOptions() {
+					const set = new Set();
+					for (const g of this.games) for (const s of ProfileStats.gameSpells(this.meta[g.id])) set.add(s);
+					return Array.from(set).sort();
+				},
+				get totalPages() { return Math.max(1, Math.ceil(this.filteredGames.length / this.perPage)); },
+				get pageGames() { return this.filteredGames.slice(this.page * this.perPage, this.page * this.perPage + this.perPage); },
 				get winRatePercent() { return this.user.gamesPlayed > 0 ? Math.round(100 * this.user.wins / this.user.gamesPlayed) : 0; },
 
+				pct(r) { return ProfileStats.pct(r); },
 				prevPage() { if (this.page > 0) this.page--; },
 				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
+				clearFilters() {
+					this.filters = { opponent: '', result: 'all', rated: 'all', spell: '', from: '', to: '' };
+					this.page = 0;
+				},
+				setTab(id) {
+					this.tab = id;
+					try { history.replaceState(null, '', id === 'games' ? location.pathname + location.search : '#' + id); } catch (e) { /* file: URLs */ }
+					if (id === 'insights') this.$nextTick(() => this.renderCharts());
+				},
 
 				async init() {
 					if (!this._netListenersAdded) {
 						this._netListenersAdded = true;
 						window.addEventListener('online', () => { this.isOffline = false; if (!this.user) this.init(); });
 						window.addEventListener('offline', () => { this.isOffline = true; this.loading = false; });
+						let t = null;
+						window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => this.tab === 'insights' && this.renderCharts(), 150); });
+						const h = location.hash.replace('#', '');
+						if (this.tabs.some((x) => x.id === h)) this.tab = h;
+					}
+					if (!this._authListener) {
+						this._authListener = true;
+						firebase.auth().onAuthStateChanged((u) => { this.viewerUid = u ? u.uid : null; });
 					}
 					if (this.isOffline) { this.loading = false; return; }
 					const uid = new URLSearchParams(window.location.search).get('uid');
@@ -358,8 +781,10 @@
 							isDeveloper: !!userData.isDeveloper,
 						};
 						const games = [];
+						this._raw = {};
 						gamesSnap.forEach((c) => {
 							const v = c.val();
+							this._raw[c.key] = v;
 							games.push({
 								id: c.key,
 								timestamp: v.timestamp || 0,
@@ -372,24 +797,241 @@
 								result: v.result || 'loss',
 								// Older entries predate `rated`: every one of them was rated.
 								rated: v.rated !== false,
+								unratedText: v.rated === false && typeof describeUnratedReason === 'function' ? describeUnratedReason(v.unratedReason) : '',
+								fromPosition: !!v.fromPosition,
 								eloBefore: v.eloBefore ?? 1000,
 								eloAfter: v.eloAfter ?? 1000,
 								eloChange: v.eloChange ?? 0,
+								// Stored by rateGame since round 2 (AI games too).
+								opponentEloBefore: typeof v.opponentEloBefore === 'number' ? v.opponentEloBefore : null,
 							});
 						});
 						// Sort newest-first for the table
 						games.sort((a, b) => b.timestamp - a.timestamp);
-						this.games = games.map((g) => Object.assign({}, g, { whenText: this._formatWhen(g.timestamp) }));
+						this.games = games.map((g) => Object.assign({}, g, {
+							whenText: this._formatWhen(g.timestamp),
+							dateText: g.timestamp ? new Date(g.timestamp).toLocaleDateString() : '',
+						}));
 
+						this._watchSocial(db, uid);
 						this._buildOpponentSummary();
 						// Chart wants chronological order (oldest -> newest left to right);
 						// the games array was just sorted newest-first for the table, so
 						// pass a reversed copy here.
 						this._buildRatingChart(games.slice().reverse());
+						this._recompute();
 					} catch (e) {
 						console.error('Failed to load profile:', e);
 					}
 					this.loading = false;
+					if (this.games.length) this._loadMeta(db);
+				},
+
+				/**
+				 * Room fields of the PROFILE_META_CAP most recent games,
+				 * PROFILE_FETCH_BATCH games at a time (the tabs refresh after each
+				 * batch), then the opponents' ratings.
+				 */
+				async _loadMeta(db) {
+					this.metaLoading = true;
+					const cache = _profileMetaCacheRead();
+					const recent = this.games.slice(0, PROFILE_META_CAP);
+					const meta = {};
+					const todo = [];
+					for (const g of recent) {
+						const c = cache[g.id];
+						if (c && c.code === g.roomCode) meta[g.id] = c;
+						else todo.push(g);
+					}
+					this.meta = Object.assign({}, meta);
+					this.metaCovered = recent.length - todo.length;
+					this._recompute();
+					const one = async (g) => {
+						const m = { code: g.roomCode, at: g.timestamp };
+						const reads = [];
+						if (g.roomCode) {
+							for (const f of PROFILE_META_FIELDS) {
+								reads.push(db.ref('rooms/' + g.roomCode + '/' + f).once('value').then((s) => { if (s.exists()) m[f] = s.val(); }));
+							}
+						}
+						await Promise.all(reads.map((r) => r.catch(() => {})));
+						return m;
+					};
+					for (let i = 0; i < todo.length; i += PROFILE_FETCH_BATCH) {
+						const batch = todo.slice(i, i + PROFILE_FETCH_BATCH);
+						const got = await Promise.all(batch.map(one));
+						batch.forEach((g, k) => {
+							meta[g.id] = got[k];
+							// Only a room that was there is worth keeping.
+							if (got[k].finalSfn || got[k].spellNames) cache[g.id] = got[k];
+						});
+						this.metaCovered += batch.length;
+						this.meta = Object.assign({}, meta);
+						this._recompute();
+					}
+					_profileMetaCacheWrite(cache);
+					await this._loadOppElo(db);
+					this.metaLoading = false;
+					this._recompute();
+				},
+
+				/**
+				 * Each human opponent's rating before every rated game (all games,
+				 * not just PROFILE_META_CAP: one small read each), for Best win /
+				 * Worst loss. It is in their own user_games entry for the game
+				 * (public, like this player's). Entries that store
+				 * opponentEloBefore (rateGame, since round 2) need no read. Older
+				 * AI games are left out: an AI has no user_games and its rating
+				 * moves, so it would show at today's rating.
+				 */
+				async _loadOppElo(db) {
+					const cache = _profileOppEloCacheRead();
+					const known = {};
+					const todo = [];
+					for (const g of this.games) {
+						if (!g.rated || typeof g.opponentEloBefore === 'number' || !g.opponentUid || g.opponentIsAI) continue;
+						if (typeof cache[g.id] === 'number') known[g.id] = cache[g.id];
+						else todo.push(g);
+					}
+					this.oppElo = Object.assign({}, known);
+					for (let i = 0; i < todo.length; i += PROFILE_OPP_BATCH) {
+						const batch = todo.slice(i, i + PROFILE_OPP_BATCH);
+						const got = await Promise.all(batch.map((g) => db.ref('user_games/' + g.opponentUid + '/' + g.id + '/eloBefore')
+							.once('value').then((s) => s.val(), () => null)));
+						batch.forEach((g, k) => {
+							if (typeof got[k] === 'number') known[g.id] = cache[g.id] = got[k];
+						});
+						this.oppElo = Object.assign({}, known);
+						this._recompute();
+					}
+					_profileOppEloCacheWrite(cache);
+				},
+
+				_recompute() {
+					const metaOf = (g) => this.meta[g.id];
+					this.stats = ProfileStats.summarize(this.games, metaOf, (g) => this.oppElo[g.id]);
+					this.insights = ProfileStats.insights(this.games, metaOf);
+					if (this.tab === 'insights') this.$nextTick(() => this.renderCharts());
+				},
+
+				renderCharts() {
+					if (!this.insights) return;
+					const out = {};
+					for (const c of this.insightCharts) {
+						const el = document.querySelector('[data-insight="' + c.key + '"] .ins-wrap');
+						const w = el ? el.clientWidth - 24 : 600;
+						let rows = this.insights[c.key];
+						if (c.key === 'bySpell') rows = rows.slice(0, PROFILE_SPELL_CHART_ROWS);
+						out[c.key] = rows.length ? ProfileStats.winRateBars(rows, w > 0 ? w : 600) : '';
+					}
+					this.chartSvg = out;
+				},
+
+				chartTip(ev) {
+					const row = ev.target.closest && ev.target.closest('[data-tip]');
+					const wrap = ev.currentTarget;
+					if (!row) { this.tip.show = false; return; }
+					const box = wrap.getBoundingClientRect();
+					const key = wrap.closest('[data-insight]').getAttribute('data-insight');
+					const x = Math.min(ev.clientX - box.left + 12, Math.max(0, box.width - 220));
+					this.tip = { show: true, key, text: row.getAttribute('data-tip'), x, y: ev.clientY - box.top + 14 };
+				},
+
+				/**
+				 * "Download all games": one JSON line per game, newest first: the
+				 * stored user_games entry plus the room's spells, variant, clock,
+				 * start / final SFN and transcript (and its SGN-T text), read
+				 * PROFILE_FETCH_BATCH rooms at a time.
+				 */
+				async exportGames() {
+					if (this.exporting) return;
+					this.exporting = true;
+					const db = firebase.database();
+					const lines = [];
+					try {
+						for (let i = 0; i < this.games.length; i += PROFILE_FETCH_BATCH) {
+							this.exportStatus = 'Reading games ' + (i + 1) + '–' + Math.min(this.games.length, i + PROFILE_FETCH_BATCH) + ' of ' + this.games.length + '…';
+							const batch = this.games.slice(i, i + PROFILE_FETCH_BATCH);
+							const rooms = await Promise.all(batch.map((g) => (g.roomCode
+								? db.ref('rooms/' + g.roomCode).once('value').then((s) => s.val(), () => null)
+								: Promise.resolve(null))));
+							batch.forEach((g, k) => {
+								lines.push(JSON.stringify(ProfileStats.exportRecord(g.id, this._raw[g.id] || {}, rooms[k], this.user.displayName)));
+							});
+						}
+						const text = lines.join('\n') + (lines.length ? '\n' : '');
+						const blob = new Blob([text], { type: 'application/x-ndjson' });
+						const a = document.createElement('a');
+						const safe = String(this.user.displayName).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 30) || 'player';
+						a.href = URL.createObjectURL(blob);
+						a.download = 'sigil-games-' + safe + '-' + new Date().toISOString().slice(0, 10) + '.jsonl';
+						document.body.appendChild(a);
+						a.click();
+						a.remove();
+						setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+						this.exportStatus = lines.length + (lines.length === 1 ? ' game' : ' games') + ' downloaded.';
+					} catch (e) {
+						console.error('Export failed:', e);
+						this.exportStatus = 'Export failed: ' + (e && e.message ? e.message : e);
+					}
+					this.exporting = false;
+				},
+
+				_watchSocial(db, uid) {
+					db.ref('followers/' + uid).on('value', (s) => { this.followerCount = s.numChildren(); }, () => {});
+					db.ref('presence/' + uid).on('value', (s) => { this.online = s.exists(); }, () => {});
+					firebase.auth().onAuthStateChanged(async (me) => {
+						this.social = { canAct: false, following: false, blocked: false, blockedMe: false, busy: false, error: '' };
+						if (!me || me.isAnonymous || me.uid === uid || this.user.isAI) return;
+						try {
+							const [f, b, bm] = await Promise.all([
+								db.ref('follows/' + me.uid + '/' + uid).once('value'),
+								db.ref('blocks/' + me.uid + '/' + uid).once('value'),
+								db.ref('blocks/' + uid + '/' + me.uid).once('value'),
+							]);
+							this.social = { canAct: true, following: f.val() === true, blocked: b.val() === true, blockedMe: bm.val() === true, busy: false, error: '' };
+						} catch (e) { /* offline: no buttons */ }
+					});
+				},
+
+				/** friends.js is loaded by auth-status.js; wait for it. */
+				async _friendsApi() {
+					for (let i = 0; i < 50 && !window.SigilFriends; i++) await new Promise((r) => setTimeout(r, 100));
+					return window.SigilFriends || null;
+				},
+
+				async toggleFollow() {
+					const api = await this._friendsApi();
+					if (!api || !api.uid) return;
+					this.social.busy = true;
+					this.social.error = '';
+					try {
+						if (this.social.following) await api.unfollow(this.user.uid);
+						else await api.follow(this.user.uid);
+						this.social.following = !this.social.following;
+					} catch (e) {
+						this.social.error = 'Could not update: ' + (e.message || e);
+					}
+					this.social.busy = false;
+				},
+
+				async toggleBlock() {
+					const api = await this._friendsApi();
+					if (!api || !api.uid) return;
+					if (!this.social.blocked && !confirm('Block ' + this.user.displayName + '? They will not be able to challenge you or join your games, and you stop following them.')) return;
+					this.social.busy = true;
+					this.social.error = '';
+					try {
+						if (this.social.blocked) await api.unblock(this.user.uid);
+						else {
+							await api.block(this.user.uid);
+							this.social.following = false;
+						}
+						this.social.blocked = !this.social.blocked;
+					} catch (e) {
+						this.social.error = 'Could not update: ' + (e.message || e);
+					}
+					this.social.busy = false;
 				},
 
 				_buildOpponentSummary() {
@@ -433,6 +1075,7 @@
 						polyParts.push(x + ',' + y);
 					}
 					this.chartDots = dots;
+					this.chartDotsSvg = dots.map((d) => '<circle class="chart-dot" cx="' + d.x + '" cy="' + d.y + '" r="2"></circle>').join('');
 					this.chartPolyPoints = polyParts.join(' ');
 				},
 

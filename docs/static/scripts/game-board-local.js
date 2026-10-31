@@ -1,7 +1,10 @@
 document.addEventListener('alpine:init', () => {
 	const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-	let warnBeforeUnload = !isSafari;
-	window.onbeforeunload = () => (warnBeforeUnload ? true : null);
+	// A game is live until it ends, or the page turns out to be a review,
+	// puzzle, tutorial or analysis board. Leaving asks first: the browser's
+	// beforeunload prompt (not on Safari) and guardLeavingGame for links.
+	let gameLive = true;
+	window.onbeforeunload = () => (gameLive && !isSafari ? true : null);
 
 	Alpine.data(
 		'gameBoard',
@@ -177,7 +180,7 @@ document.addEventListener('alpine:init', () => {
 						this._loadReviewFromPayload({
 							spellNames,
 							winner: h.Result && h.Result !== '*' ? h.Result : '',
-							redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+							redName: h.Red || 'Red', blueName: h.Blue || 'Blue', variant,
 							sfns: [h.FinalSfn], turnLabels: ['Final position'],
 							annotations: _sgnHeaderToAnnotations(h.Annotations),
 						});
@@ -202,7 +205,7 @@ document.addEventListener('alpine:init', () => {
 				this._loadReviewFromPayload({
 					spellNames,
 					winner: h.Result && h.Result !== '*' ? h.Result : '',
-					redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+					redName: h.Red || 'Red', blueName: h.Blue || 'Blue', variant,
 					sfns, turnLabels: labels,
 					annotations: _sgnHeaderToAnnotations(h.Annotations),
 				});
@@ -231,6 +234,13 @@ document.addEventListener('alpine:init', () => {
 				this.spellDict = dict;
 				this.spells.images = images;
 				this.spells.text = text;
+				// An imported review never sends spellsetup: publish its rules for
+				// the help popover here (variant from the payload, else the SFN).
+				if (typeof sigilPublishGameRules === 'function') {
+					let variant = payload.variant || null;
+					if (!variant) { try { variant = sfnToDict(payload.sfns[0]).variant; } catch (e) { variant = null; } }
+					sigilPublishGameRules(variant || 'standard', spellNames);
+				}
 				this.reviewSfns = payload.sfns.slice();
 				this.reviewTurnLabels = (payload.turnLabels || []).slice();
 				// A legacy v1 export carries its per-turn log (`gameLog`): keep it so
@@ -447,6 +457,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			showSpellTooltip(spell) {
+				if (this.spellTooltip && this.spellTooltip.destroy) this.spellTooltip.destroy();
 				this.activeSpell = spell;
 
 				const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
@@ -485,7 +496,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			playAgain() {
-				warnBeforeUnload = false;
+				gameLive = false;
 				const params = new URLSearchParams(window.location.search);
 				params.delete('sfn');
 				params.delete('review');
@@ -564,7 +575,7 @@ document.addEventListener('alpine:init', () => {
 						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
-				warnBeforeUnload = false;
+				gameLive = false;
 				const params = new URLSearchParams(window.location.search);
 				params.delete('review');
 				// A new game: mint a fresh persistence id (see playAgain).
@@ -617,7 +628,7 @@ document.addEventListener('alpine:init', () => {
 						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
-				warnBeforeUnload = false;
+				gameLive = false;
 				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
 			},
 
@@ -839,17 +850,70 @@ document.addEventListener('alpine:init', () => {
 
 			handleSpellMouseOut() {
 				if (!this.hasTouchScreen) {
-					this.activeSpell = '';
-					if (this.spellTooltip.destroy) {
-						this.spellTooltip.destroy();
-					}
+					// A short grace lets the pointer reach the tooltip's
+					// "More about this spell" link (holdSpellTooltip).
+					clearTimeout(this._spellTooltipTimer);
+					this._spellTooltipTimer = setTimeout(() => {
+						this.activeSpell = '';
+						if (this.spellTooltip.destroy) {
+							this.spellTooltip.destroy();
+						}
+					}, 250);
 				}
 			},
 
 			handleSpellMouseOver(spell) {
 				if (!this.hasTouchScreen) {
+					clearTimeout(this._spellTooltipTimer);
 					this.showSpellTooltip(spell);
 				}
+			},
+
+			holdSpellTooltip() {
+				clearTimeout(this._spellTooltipTimer);
+			},
+
+			// Keyboard route to the tooltip's "More about this spell" link: the
+			// tooltip sits after the board in the DOM, so Tab from a spell never
+			// reaches it. "I" (info) on a focused spell opens its tooltip and
+			// focuses the link; Escape there returns to the spell. ("?" is the
+			// shortcut list, settings-panel.js.)
+			handleSpellKey(e, slot) {
+				if ((e.key !== 'i' && e.key !== 'I') || e.ctrlKey || e.metaKey || e.altKey) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn = e.target;
+				if (this.activeSpell !== slot) this.showSpellTooltip(slot);
+				// The link renders with the tooltip (x-show): a key pressed right as the
+				// spell took focus can come before it is shown, so try for a few frames.
+				const focusLink = (tries) => {
+					const a = this.$refs.spellTooltip && this.$refs.spellTooltip.querySelector('.tooltip__more');
+					if (a) a.focus();
+					if ((!a || document.activeElement !== a) && tries > 0 && this.activeSpell === slot) requestAnimationFrame(() => focusLink(tries - 1));
+				};
+				this.$nextTick(() => focusLink(10));
+			},
+			handleTooltipKey(e) {
+				if (e.key !== 'Escape' || !this._spellTooltipReturn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn.focus();
+			},
+
+			// Keyboard: the tooltip stays open while focus moves from the spell
+			// into it (its "More about this spell" link), and closes when focus
+			// leaves both. A mouse press on the link moves focus there too, so
+			// the tooltip is still open when the click lands.
+			handleSpellBlur(e) {
+				const tip = this.$refs.spellTooltip;
+				if (e && e.relatedTarget && tip && tip.contains(e.relatedTarget)) return;
+				this.closeSpellTooltip();
+			},
+			handleTooltipFocusOut(e) {
+				const to = e && e.relatedTarget;
+				const tip = this.$refs.spellTooltip;
+				if (to && ((tip && tip.contains(to)) || (to.closest && to.closest('img.spell')))) return;
+				this.closeSpellTooltip();
 			},
 
 			handleReset() {
@@ -918,14 +982,14 @@ document.addEventListener('alpine:init', () => {
 						try {
 							const payload = JSON.parse(raw);
 							if (payload && payload.type === 'sigil-game') {
-								warnBeforeUnload = false;
+								gameLive = false;
 								_this._loadReviewFromPayload(payload);
 								_this.sendEvent = function() {};
 								return;
 							}
 						} catch (e) { /* not JSON — try SGN-T below */ }
 						if (typeof isSgnText === 'function' && isSgnText(raw)) {
-							warnBeforeUnload = false;
+							gameLive = false;
 							_this._loadSgnForReview(raw);
 							_this.sendEvent = function() {};
 							return;
@@ -974,7 +1038,7 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* bad SFN: the engine reports it */ }
 				}
 				let _engineRef = null;
-				if (scripted || analysis) warnBeforeUnload = false;
+				if (scripted || analysis) gameLive = false;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
 				// so a reload returns to the same game. If a save exists for
@@ -994,6 +1058,7 @@ document.addEventListener('alpine:init', () => {
 				let _saveLoadedSfn = null;
 				let _savedHumanColor = null;
 				let _savedGameLog = null;
+				let _savedAiTelemetry = null;
 				// First turn's pre-turn SFN — persisted so slim saved logs of
 				// games that began from an imported position can be replayed.
 				let _savedSetupSfn = null;
@@ -1047,6 +1112,9 @@ document.addEventListener('alpine:init', () => {
 							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
+							}
+							if (_save.aiTelemetry && typeof _save.aiTelemetry === 'object') {
+								_savedAiTelemetry = _save.aiTelemetry;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -1186,7 +1254,11 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (puzzle) {
 						options.aiColor = _aiColor;
+						// The previous attempt's opponent may still be judging a
+						// turn: its verdict must not land on this attempt.
+						if (_this._puzzleOpponent) _this._puzzleOpponent.retired = true;
 						options.ai = new PuzzleOpponent(puzzle, _this, { timeMs: 6000 });
+						_this._puzzleOpponent = options.ai;
 						if (typeof RustAI !== 'undefined' && RustAI.preload) RustAI.preload();
 					}
 
@@ -1468,6 +1540,32 @@ document.addEventListener('alpine:init', () => {
 				// stay in sync. Legacy fat saved entries pass through as-is.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 				let _setupSfn = _savedSetupSfn;
+				let _aiTelemetryByPly = (_savedAiTelemetry && _savedAiTelemetry.byPly) ? Object.assign({}, _savedAiTelemetry.byPly) : {};
+				let _lastAiMeta = _savedAiTelemetry || null;
+
+				function _recordAiTelemetry(payload) {
+					if (!payload) return;
+					_lastAiMeta = payload;
+					const ply = (payload.turnNumber !== undefined) ? payload.turnNumber : (payload.turnCounter !== undefined ? payload.turnCounter : (_engineRef && _engineRef.board ? (_engineRef.board.turnCounter !== undefined ? _engineRef.board.turnCounter : _engineRef.board.turnNumber) : null));
+					if (ply === null || ply === undefined) return;
+					const row = {};
+					const addNum = (k, v) => { if (typeof v === 'number' && Number.isFinite(v)) row[k] = v; };
+					addNum('d', payload.depth);
+					addNum('sd', payload.seldepth);
+					addNum('od', payload.overflowDepth);
+					addNum('n', payload.nodes);
+					addNum('exp', payload.expanded);
+					addNum('s', payload.scoreCentistones !== undefined ? payload.scoreCentistones : payload.score);
+					addNum('m', payload.mateIn);
+					if (typeof payload.mateProven === 'boolean') row.mp = payload.mateProven;
+					addNum('ms', payload.timeMs);
+					addNum('bms', payload.budgetMs);
+					addNum('cms', payload.clockMs);
+					addNum('pd', payload.ponderDepth);
+					addNum('pn', payload.ponderNodes);
+					addNum('tt', payload.ttPermille);
+					_aiTelemetryByPly[String(ply)] = row;
+				}
 
 				// Don't persist a game until the human has actually played a
 				// turn — otherwise merely opening a match (or letting the AI
@@ -1496,6 +1594,15 @@ document.addEventListener('alpine:init', () => {
 						startPos: _startPos,
 						tookBack: _tookBack,
 						startSfn: _startSfnForUndo,
+						aiTelemetry: (difficulty && Object.keys(_aiTelemetryByPly).length > 0) ? {
+							v: 1,
+							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
+							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_mt256'),
+							threads: (_lastAiMeta && typeof _lastAiMeta.threads === 'number') ? _lastAiMeta.threads : 1,
+							threadsWanted: (_lastAiMeta && typeof _lastAiMeta.threadsWanted === 'number') ? _lastAiMeta.threadsWanted : 1,
+							mtError: (_lastAiMeta && typeof _lastAiMeta.mtError === 'string') ? _lastAiMeta.mtError : false,
+							byPly: Object.assign({}, _aiTelemetryByPly),
+						} : null,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
@@ -1550,8 +1657,11 @@ document.addEventListener('alpine:init', () => {
 					_tookBack = !!aiMode;
 					_humanHasMoved = true;
 					_persistedGameLog = slimGameLog(log.slice(0, h));
+					for (const k of Object.keys(_aiTelemetryByPly)) {
+						if (Number(k) >= h) delete _aiTelemetryByPly[k];
+					}
 					_persistCurrentGame(sfn);
-					warnBeforeUnload = false;
+					gameLive = false;
 					window.location.reload();
 				};
 
@@ -1733,6 +1843,25 @@ document.addEventListener('alpine:init', () => {
 
 				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
 				bindGameKeys(_this);
+				// typeof: a stale cached game-keys.js must not break the game.
+				if (typeof guardLeavingGame === 'function') guardLeavingGame(
+					() => gameLive && !_this.winner && !_this.reviewMode && !_this.sideOffer,
+					() => 'The game is still in progress.' + (_humanHasMoved && _gameId ? ' It stays saved in this browser under "In progress" on the main menu.' : ''));
+
+				// Arrows and circles (board-marks.js), local only. Play keeps
+				// one set, cleared at the end of each turn; review keeps one
+				// per move, analysis one per tree node.
+				const _marksStones = _this.$el.querySelector('.stone-nodes');
+				_this.boardMarks = (typeof attachBoardMarks === 'function' && _marksStones)
+					? attachBoardMarks(_marksStones.parentElement) : null;
+				if (_this.boardMarks) {
+					const marksKey = () => analysis
+						? (_this.anaMode === 'edit' ? 'edit' : 'node:' + _this.anaCur)
+						: (_this.reviewMode ? 'review:' + _this.reviewIndex : 'play');
+					const follow = () => _this.boardMarks.setKey(marksKey());
+					for (const prop of analysis ? ['anaCur', 'anaMode'] : ['reviewMode', 'reviewIndex']) _this.$watch(prop, follow);
+					follow();
+				}
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
@@ -1784,6 +1913,7 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'turn_complete') {
 						drawPushArrows(_this.$refs.pushArrows, []);
+						if (_this.boardMarks && !analysis && !_this.reviewMode) _this.boardMarks.clear();
 						const t = rest.turn;
 						if (puzzle && t) _puzzleOnTurn(t);
 						if (tutorial && t) _tutorialOnTurn(t);
@@ -1864,6 +1994,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'ai_think_report') {
+						_recordAiTelemetry(rest);
 						handleAiThinkReportEvent(rest);
 						return;
 					}
@@ -1942,7 +2073,10 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'solved';
 					_this.puzzleMessage = msg || 'Solved!';
-					try {
+					// A mistake from the player's own game (puzzles.html?learn=) is
+					// not one of the puzzle set's, and Puzzle Storm runs are
+					// unrated practice: both leave the solved list alone.
+					if (!puzzle.learn && !window.SIGIL_PUZZLE_STORM) try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
@@ -2099,8 +2233,24 @@ document.addEventListener('alpine:init', () => {
 					_this.currentSfn = '';
 					_this.whoseTurn = '';
 					_turnCount = 0;
+					if (_this.boardMarks) _this.boardMarks.clearAll();
 					initEngine();
 				};
+
+				// Puzzle Storm (puzzles.html?tab=storm): switch this board to the
+				// next puzzle in place, without reloading the page or the engine.
+				_this.puzzleLoad = function (next) {
+					puzzle = next;
+					_this.puzzle = next;
+					_humanColor = next.mover;
+					_aiColor = _humanColor === 'red' ? 'blue' : 'red';
+					_this.myColor = _humanColor;
+					gameVariant = normalizeVariant(next.variant || 'standard');
+					_this.applyBoardLayout(variantBoardLayout(gameVariant));
+					_this.puzzleDiagnostic = '';
+					_this.puzzleRetry();
+				};
+				if (puzzle) window.SIGIL_PUZZLE_BOARD = _this;
 
 				_this.puzzleShowSolution = function () {
 					if (_this.puzzleStatus === 'solved') return;
@@ -2293,6 +2443,7 @@ document.addEventListener('alpine:init', () => {
 					_this.currentSfn = '';
 					_this.whoseTurn = '';
 					_turnCount = 0;
+					if (_this.boardMarks) _this.boardMarks.clearAll();
 					_tutorialShowStep();
 					initEngine();
 				}
@@ -2447,6 +2598,8 @@ document.addEventListener('alpine:init', () => {
 
 				function handleSpellSetupEvent(payload) {
 					_this.spellDict = payload;
+					// The help popover's "This game's rules" (help.js).
+					if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(_this.gameVariant, Object.values(payload));
 
 					Object.entries(_this.spellDict).forEach(([key, value]) => {
 						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;
@@ -2623,7 +2776,7 @@ document.addEventListener('alpine:init', () => {
 					);
 					_this.showReset = false;
 					_this.winner = payload.winner;
-					warnBeforeUnload = false;
+					gameLive = false;
 
 					// Cache the spell list for "Play Again (Same Layout)" regardless of
 					// whether a game log was produced.
@@ -2807,6 +2960,20 @@ document.addEventListener('alpine:init', () => {
 						}
 						if (_this.evalAnnotations && Object.keys(_this.evalAnnotations).length > 0) {
 							gameRecord.eval_annotations = Object.assign({}, _this.evalAnnotations);
+						}
+
+						if (difficulty && Object.keys(_aiTelemetryByPly).length > 0) {
+							const meta = _lastAiMeta || {};
+							const engVer = (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (meta.engineVersion || null);
+							gameRecord.aiTelemetry = {
+								v: 1,
+								engineVersion: engVer,
+								eval: String(meta.eval || 'nnue_mt256'),
+								threads: (typeof meta.threads === 'number' && Number.isFinite(meta.threads)) ? meta.threads : 1,
+								threadsWanted: (typeof meta.threadsWanted === 'number' && Number.isFinite(meta.threadsWanted)) ? meta.threadsWanted : 1,
+								mtError: (typeof meta.mtError === 'string') ? meta.mtError : false,
+								byPly: Object.assign({}, _aiTelemetryByPly),
+							};
 						}
 
 						// Persist the game to localStorage first so a crash or close
@@ -3115,7 +3282,7 @@ class PuzzleOpponent {
 		this.lastMeta = { depth: res.depth, nodes: res.nodes, score: res.score_ui,
 			stones: (typeof res.stones === 'number') ? res.stones : null, timeMs: Date.now() - t0 };
 		if (onProgress) onProgress(this.lastMeta);
-		if (judging) {
+		if (judging && !this.retired) {
 			comp._puzzleJudgePending = false;
 			const how = res.exhaustive ? 'exhaustively' : ('at depth ' + res.depth);
 			// The judge reports plies from ITS root (the opponent to move);
@@ -3172,7 +3339,7 @@ class PuzzleOpponent {
 		this.lastMeta = { depth: res.depth, stones: (typeof res.stones === 'number') ? res.stones : null,
 			mateIn: res.mate_in, mateProven: res.mate_proven, timeMs: Date.now() - t0 };
 		if (onProgress) onProgress(this.lastMeta);
-		if (judging) {
+		if (judging && !this.retired) {
 			comp._puzzleJudgePending = false;
 			const sign = sfn.split(' ')[1] === 'r' ? 1 : -1;      // searcher's POV -> red's
 			const info = {

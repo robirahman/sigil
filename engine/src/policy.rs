@@ -295,7 +295,7 @@ pub fn policy_weights_override() -> Option<Vec<f32>> {
 /// whose width budget is at least 96 (+94 Elo at 10 s over the shipped stream on
 /// `tfit`, +118 on `tfit_spell_v2`; engine/reports/2026-10-step4.md). The wasm
 /// `configure` and `serve.py` read this, never a literal.
-pub const SHIPPED_POLICY: (bool, usize) = (true, 96);
+pub const SHIPPED_POLICY: (bool, usize) = (true, 32);
 
 /// The site's exploration tail since engine v28: round 3 preset 3 (casts and
 /// dashes, every keep and 64 resolutions per cast, 128 dash branches with 8 pairs
@@ -1287,6 +1287,15 @@ pub fn policy_diag(board: &Board, c: Color, target: &Turn, window: usize, keep_w
         out.push(format!("[{},{},{},{},{}]", l.level, l.opts.len(), l.target, lp, best));
     }
     let mut extra = String::new();
+    let mut in_explore_tail = false;
+    let broken_stage = match broken {
+        None => "null",
+        Some(x) if x == L_M => "\"M\"",
+        Some(x) if x == L_D => "\"D\"",
+        Some(x) if x == L_S || x == L_S2 || x == L_S3 => "\"S\"",
+        Some(x) if x == L_C => "\"C\"",
+        Some(_) => "\"other\"",
+    };
     let acts: Vec<Action> = target.slice().iter().copied().filter(|a| !matches!(a, Action::Pass)).collect();
     if broken.is_some() && !acts.is_empty() {
         let rest_start = if matches!(acts.get(1), Some(Action::Place { .. })) { 2 } else { 1 };
@@ -1302,6 +1311,9 @@ pub fn policy_diag(board: &Board, c: Color, target: &Turn, window: usize, keep_w
             let (mode, gw, per) = crate::turn_iter::dash_gen();
             let all = bm.dash_branches_by_landing(c, 100_000, 64);
             let hit = |t: &Turn, bd: &Board| t.slice()[0] == ta || Some(*bd) == tbd;
+            let tail = bm.dash_branches_by_landing_tried(
+                c, SHIPPED_EXPLORE.dash_limit, SHIPPED_EXPLORE.dash_per, SHIPPED_EXPLORE.dash_tried);
+            in_explore_tail = tail.iter().any(|(t, bd)| hit(t, bd));
             let r_exact = all.iter().position(|(t, bd)| hit(t, bd));
             let Action::Dash { node, push_to, .. } = ta else { unreachable!() };
             let mut landings: Vec<(u8, Option<u8>)> = Vec::new();
@@ -1334,6 +1346,9 @@ pub fn policy_diag(board: &Board, c: Color, target: &Turn, window: usize, keep_w
                 let tb = cast_board(&cur, &rest[i], c).map(|x| x.state_key());
                 let r = wide.iter().position(|o| o.act == rest[i]
                     || cast_board(&cur, &o.act, c).map(|x| x.state_key()) == tb);
+                let tail = cast_opts(&cur, c, pos as usize, kind, SHIPPED_EXPLORE.cast_window, MAX_KEEP_WINDOW, &mut wd);
+                in_explore_tail = tail.iter().any(|o| o.act == rest[i]
+                    || cast_board(&cur, &o.act, c).map(|x| x.state_key()) == tb);
                 let (kis, _) = cur.keep_indices_ordered(pos as usize, c, MAX_KEEP_WINDOW);
                 let kr = kis.iter().position(|&k| k == keep as usize).map(|x| x as i64).unwrap_or(-1);
                 extra = format!(",\"cast\":{{\"spell\":{},\"wide_rank\":{},\"n_wide\":{},\"keep\":{},\"keep_rank\":{},\"n_keeps\":{},\"kind\":{}}}",
@@ -1341,7 +1356,8 @@ pub fn policy_diag(board: &Board, c: Color, target: &Turn, window: usize, keep_w
             }
         }
     }
-    format!("{{\"levels\":[{}],\"logp\":{},\"broken\":{}{}}}", out.join(","),
+    format!("{{\"levels\":[{}],\"logp\":{},\"broken\":{},\"broken_stage\":{},\"in_explore_tail\":{}{}}}", out.join(","),
             if broken.is_some() { "null".to_string() } else { total.to_string() },
-            broken.map(|x| x.to_string()).unwrap_or_else(|| "null".into()), extra)
+            broken.map(|x| x.to_string()).unwrap_or_else(|| "null".into()),
+            broken_stage, in_explore_tail, extra)
 }

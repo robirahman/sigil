@@ -158,6 +158,26 @@ def cmd_extract(a):
                 print(f'{k + 1}/{len(paths)} files, {sum(len(x["z"]) for x in parts)} examples, '
                       f'{time.time() - t0:.0f}s', flush=True)
     out = _concat(parts)
+    # Fail-fast check on primary-window drop rate
+    tg = out['target']
+    lv = out['level']
+    xb_per_level = out['xb'][out['lex']]
+    prim_mask = (xb_per_level == 0)
+    if prim_mask.any():
+        prim_drops = int((tg[prim_mask] == -1).sum())
+        prim_total = int(prim_mask.sum())
+        drop_rate = prim_drops / prim_total
+        names = {0: 'L_M', 1: 'L_P', 2: 'L_S', 3: 'L_D', 4: 'L_P2', 5: 'L_S2', 6: 'L_C', 7: 'L_Z', 8: 'L_S3'}
+        breakdown = {}
+        for lvl, name in names.items():
+            lvl_mask = prim_mask & (lv == lvl)
+            if lvl_mask.any():
+                n_drops = int((tg[lvl_mask] == -1).sum())
+                n_tot = int(lvl_mask.sum())
+                breakdown[name] = f"{n_drops}/{n_tot} ({n_drops / n_tot:.2%})"
+        print(f"Primary window target == -1 drops: {prim_drops}/{prim_total} ({drop_rate:.2%}), by slice: {breakdown}")
+        if drop_rate > 0.01:
+            raise SystemExit(f"ABORT: primary window drop rate {drop_rate:.2%} exceeds 1% threshold")
     tmp = a.out + '.tmp.npz'
     np.savez_compressed(tmp, **out)
     os.replace(tmp, a.out)

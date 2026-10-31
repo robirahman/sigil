@@ -318,6 +318,27 @@ let wasm_bindgen = (function(exports) {
     exports.nn_eval_raw = nn_eval_raw;
 
     /**
+     * @param {string} name
+     * @param {Uint8Array} spells
+     * @param {bigint} mine
+     * @param {bigint} theirs
+     * @param {bigint} walls
+     * @param {number} my_bank
+     * @param {number} their_bank
+     * @param {boolean} red
+     * @returns {number}
+     */
+    function nn_eval_raw_full(name, spells, mine, theirs, walls, my_bank, their_bank, red) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(spells, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.nn_eval_raw_full(ptr0, len0, ptr1, len1, mine, theirs, walls, my_bank, their_bank, red);
+        return ret;
+    }
+    exports.nn_eval_raw_full = nn_eval_raw_full;
+
+    /**
      * `nn_eval_raw` for any baked network by preset name (i32::MIN if unknown), for
      * `tools/nn-wasm-parity.js NET GOLDEN`.
      * @param {string} name

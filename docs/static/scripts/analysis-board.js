@@ -326,6 +326,8 @@ function analysisMixin() {
 				try { n.winner = analysisDecidedWinner(n.sfn); } catch (e) { n.winner = null; }
 			}
 			this.anaTree = tree;
+			// A new tree reuses node ids: drop the old tree's arrows.
+			if (this.boardMarks) this.boardMarks.clearAll();
 			this.anaGoto(Math.max(0, Math.min(at || 0, tree.length - 1)));
 		},
 
@@ -388,6 +390,8 @@ function analysisMixin() {
 			this.spellDict = dict;
 			this.spells.images = images;
 			this.spells.text = text;
+			// The help popover's "This game's rules" (help.js): this position's.
+			if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(b.variant, b.spellNames);
 			this.redLock = b.lock.red || '';
 			this.blueLock = b.lock.blue || '';
 			this.redSpellCounter = b.spellCounter.red || 0;
@@ -623,6 +627,7 @@ function analysisMixin() {
 			// position itself is one occurrence (as RustAI sends it).
 			const history = this._anaPath(node.id).map(i => positionTurnSfn(this.anaTree[i].sfn)).slice(-64);
 			const t0 = Date.now();
+			this._anaShowStoredEval(gen, searchSfn, mover, history.slice(0, -1), node.sfn);
 			for (let k = 0; k < ANALYSIS_EVAL_STEPS_MS.length; k++) {
 				this._anaSearching = true;
 				let res;
@@ -669,6 +674,38 @@ function analysisMixin() {
 				this.anaEval.status = this.anaEval.text ? 'done' : 'error';
 				if (!this.anaEval.text) this.anaEval.note = 'The engine completed no depth.';
 			}
+		},
+
+		/**
+		 * The server's stored Quick search of the position (position_evals,
+		 * written by functions/analysis.js), shown until the live search
+		 * reports its first depth. Only for a position the line has not
+		 * visited before: the stored search had no history.
+		 */
+		_anaShowStoredEval(gen, searchSfn, mover, earlier, sfn) {
+			if (typeof loadPositionEvals !== 'function' || typeof firebase === 'undefined'
+				|| !firebase.apps || !firebase.apps.length || positionRepeats(searchSfn, earlier)) return;
+			loadPositionEvals(firebase.database(), [searchSfn]).then((stored) => {
+				const res = stored.get(searchSfn);
+				if (!res || gen !== this._anaGen || this.anaEval.text || this.anaEval.status !== 'searching') return;
+				const sign = mover === 'red' ? 1 : -1;
+				const info = {
+					depth: res.depth || 0,
+					stones: typeof res.stones === 'number' ? res.stones * sign : null,
+					mateIn: (typeof res.mate_in === 'number' && res.mate_in !== 0) ? res.mate_in * sign : null,
+					proven: res.mate_in == null ? true : !!res.mate_proven,
+				};
+				Object.assign(this.anaEval, {
+					text: describePositionEval(info),
+					depth: info.depth,
+					best: Array.isArray(res.actions) && res.actions.length ? res.actions : null,
+					bestText: Array.isArray(res.actions) ? describePuzzleActions(res.actions) : '',
+					expected: res.expected_sfn || '',
+					mover,
+					note: 'Stored evaluation (depth ' + info.depth + '); searching deeper…',
+					sfn,
+				});
+			}).catch(() => { /* no stored evaluation */ });
 		},
 
 		/** "depth 9, 8.4 s" or the live depth while a slice runs. */
@@ -817,6 +854,8 @@ function analysisMixin() {
 			// A new board layout: fresh spells and the start stones on it.
 			if (ed.layout !== BOARD.id) {
 				this.applyBoardLayout(ed.layout);
+				// The editor's arrows belong to the old board's nodes.
+				if (this.boardMarks) this.boardMarks.clear();
 				ed.spells = generateSpellList(['core']);
 				const stones = {};
 				for (const n of NODE_ORDER) stones[n] = null;

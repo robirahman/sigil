@@ -58,16 +58,19 @@ impl NnSpec {
 }
 
 /// `nets/nnue_spell.bin`, written by `nn_eval.py train` (see engine/reports/2026-10-step5.md).
+#[cfg(not(target_arch = "wasm32"))]
 pub static NNUE_SPELL: NnSpec = NnSpec::new("nnue_spell", include_bytes!("../nets/nnue_spell.bin"));
 /// Round 2 (engine/reports/2026-10-r2-nn.md): residual on `tfit_spell_v2`, cap 256,
 /// lambda 0.5, quantisation-aware last 2 epochs; v26's shipped eval. Its lambda 0.25
 /// sibling `nnue_spell2` measured +1.9 Elo and was dropped from the build in v26 (its
 /// net stays in nets/ for reference) to keep the wasm small.
+#[cfg(not(target_arch = "wasm32"))]
 pub static NNUE_SPELL3: NnSpec = NnSpec::new("nnue_spell3", include_bytes!("../nets/nnue_spell3.bin"));
 /// Round 4 (2026-10-11): same recipe as `nnue_spell3` (residual on `tfit_spell_v2`,
 /// cap 256, lambda 0.5, quantisation-aware last 2 epochs) on the v27 data minus every
 /// Rock Slide game (old pile-up rule) plus 635,169 engine-v29 games whose spell draws
 /// bring all 45 official spells to 252,845 games each.
+#[cfg(not(target_arch = "wasm32"))]
 pub static NNUE_SPELL4: NnSpec = NnSpec::new("nnue_spell4", include_bytes!("../nets/nnue_spell4.bin"));
 /// The engine-v32 network (2026-10-20): nnue_spell4's recipe and data (plus the round-5
 /// human positions and v31 self-play) on the material + tempo base, cap 256 cs.
@@ -76,8 +79,11 @@ pub static NNUE_MT256: NnSpec = NnSpec::new("nnue_mt256", include_bytes!("../net
 /// A network by preset name (wasm parity export, tests).
 pub fn by_name(name: &str) -> Option<&'static NnSpec> {
     match name {
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell" => Some(&NNUE_SPELL),
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell3" => Some(&NNUE_SPELL3),
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell4" => Some(&NNUE_SPELL4),
         "nnue_mt256" => Some(&NNUE_MT256),
         _ => None,
@@ -93,6 +99,8 @@ pub struct Net {
     e: Vec<i16>,      // [1 + NSP*NPLACE*2][h], row 0 = node on no sigil (zero)
     g: Vec<i16>,      // [NSP*9][h]
     pov: Vec<i16>,    // [2][h], 0 = red POV
+    pub wall_rows: Option<Vec<i16>>, // [39][h]
+    pub bank_rows: Option<Vec<i16>>, // [2][4][h]
     w2: Vec<i8>,      // [l2][h]
     b2: Vec<i32>,
     w3: Vec<i8>,      // [l3][l2]
@@ -125,7 +133,9 @@ impl<'a> Rd<'a> {
 impl Net {
     pub fn parse(b: &[u8]) -> Result<Net, String> {
         let mut r = Rd { b, o: 0 };
-        if r.take(4)? != b"SNN1" { return Err("bad magic".into()); }
+        let magic = r.take(4)?;
+        let is_snn2 = magic == b"SNN2";
+        if magic != b"SNN1" && !is_snn2 { return Err("bad magic".into()); }
         let h = r.i32()? as usize;
         let l2 = r.i32()? as usize;
         let l3 = r.i32()? as usize;
@@ -136,13 +146,26 @@ impl Net {
         if ne != 1 + NSP * NPLACE * 2 || ng != NSP * 9 {
             return Err(format!("spell tables sized for another spell list ({ne}, {ng})"));
         }
+        let base = r.i16s(2 * N_NODES * h)?;
+        let e = r.i16s(ne * h)?;
+        let g = r.i16s(ng * h)?;
+        let pov = r.i16s(2 * h)?;
+        let w2 = r.i8s(l2 * h)?;
+        let b2 = r.i32s(l2)?;
+        let w3 = r.i8s(l3 * l2)?;
+        let b3 = r.i32s(l3)?;
+        let w4 = r.i16s(l3)?;
+        let b4 = r.i32()?;
+        let (wall_rows, bank_rows) = if is_snn2 {
+            (Some(r.i16s(N_NODES * h)?), Some(r.i16s(8 * h)?))
+        } else {
+            (None, None)
+        };
         let net = Net {
             h, l2, l3, cap,
-            base: r.i16s(2 * N_NODES * h)?, e: r.i16s(ne * h)?, g: r.i16s(ng * h)?,
-            pov: r.i16s(2 * h)?,
-            w2: r.i8s(l2 * h)?, b2: r.i32s(l2)?,
-            w3: r.i8s(l3 * l2)?, b3: r.i32s(l3)?,
-            w4: r.i16s(l3)?, b4: r.i32()?,
+            base, e, g, pov,
+            wall_rows, bank_rows,
+            w2, b2, w3, b3, w4, b4,
         };
         if r.o != b.len() { return Err(format!("{} trailing bytes", b.len() - r.o)); }
         Ok(net)
@@ -189,11 +212,11 @@ impl Net {
                 for (d, &w) in v.iter_mut().zip(&self.g[gr..gr + h]) { *d += w as i32; }
             }
         }
-        Folded { key: (self as *const Net as usize, *spells, use_rel), rows, gb }
+        Folded { rows, gb }
     }
 
     /// The network's output, in centistones, for side `c` (its own POV).
-    fn forward(&self, f: &Folded, mine: u64, theirs: u64, c: Color) -> i32 {
+    fn forward(&self, f: &Folded, mine: u64, theirs: u64, walls: u64, my_bank: u8, their_bank: u8, c: Color) -> i32 {
         let h = self.h;
         let mut acc = [0i32; MAX_H];
         let acc = &mut acc[..h];
@@ -206,6 +229,23 @@ impl Net {
                 let r = &f.rows[(2 * n + rel) * h..(2 * n + rel + 1) * h];
                 for (a, &w) in acc.iter_mut().zip(r) { *a += w; }
             }
+        }
+        if let Some(ref wall) = self.wall_rows {
+            let mut m = walls;
+            while m != 0 {
+                let n = m.trailing_zeros() as usize;
+                m &= m - 1;
+                let r = &wall[n * h..(n + 1) * h];
+                for (a, &w) in acc.iter_mut().zip(r) { *a += w as i32; }
+            }
+        }
+        if let Some(ref bank) = self.bank_rows {
+            let b_my = (my_bank as usize).min(3);
+            let b_their = (their_bank as usize).min(3);
+            let r_my = &bank[b_my * h..(b_my + 1) * h];
+            for (a, &w) in acc.iter_mut().zip(r_my) { *a += w as i32; }
+            let r_their = &bank[(4 + b_their) * h..(4 + b_their + 1) * h];
+            for (a, &w) in acc.iter_mut().zip(r_their) { *a += w as i32; }
         }
         for a in acc.iter_mut() { *a = (*a).clamp(0, Q); }
         let mut h2 = [0i32; MAX_L];
@@ -227,18 +267,41 @@ impl Net {
 
     /// Stateless entry point (folds every call): for tests and one-off callers.
     pub fn eval_raw(&self, spells: &[u8; 9], mine: u64, theirs: u64, c: Color) -> i32 {
-        self.forward(&self.fold(spells), mine, theirs, c)
+        self.forward(&self.fold(spells), mine, theirs, 0, 0, 0, c)
+    }
+
+    /// Stateless entry point with SNN2 features (walls, bank).
+    pub fn eval_raw_full(&self, spells: &[u8; 9], mine: u64, theirs: u64,
+                         walls: u64, my_bank: u8, their_bank: u8, c: Color) -> i32 {
+        self.forward(&self.fold(spells), mine, theirs, walls, my_bank, their_bank, c)
     }
 }
 
 struct Folded {
-    key: (usize, [u8; 9], [u16; 2]),
     rows: Vec<i32>,
     gb: [Vec<i32>; 2],
 }
 
+const FOLD_RING_SIZE: usize = 8;
+
+struct FoldSlot {
+    key: (usize, [u8; 9], [u16; 2]),
+    folded: Folded,
+}
+
+struct FoldRing {
+    slots: Vec<FoldSlot>,
+    next: usize,
+}
+
+impl FoldRing {
+    const fn new() -> Self {
+        FoldRing { slots: Vec::new(), next: 0 }
+    }
+}
+
 thread_local! {
-    static FOLD: RefCell<Option<Folded>> = const { RefCell::new(None) };
+    static FOLD_RING: RefCell<FoldRing> = RefCell::new(FoldRing::new());
 }
 
 /// The network term of `Board::evaluate` for side `c`.
@@ -251,11 +314,22 @@ pub fn eval(spec: &'static NnSpec, b: &Board, c: Color) -> i32 {
     let live = !b.dead_slots();
     let use_rel = [b.access[c.idx()] & live, b.access[c.other().idx()] & live];
     let key = (net as *const Net as usize, b.spells, use_rel);
-    FOLD.with(|cell| {
-        let mut slot = cell.borrow_mut();
-        if slot.as_ref().map_or(true, |f| f.key != key) {
-            *slot = Some(net.fold_masked(&b.spells, use_rel));
-        }
-        net.forward(slot.as_ref().unwrap(), b.mine(c), b.theirs(c), c)
+    FOLD_RING.with(|cell| {
+        let mut ring = cell.borrow_mut();
+        let idx = if let Some(i) = ring.slots.iter().position(|s| s.key == key) {
+            i
+        } else {
+            let folded = net.fold_masked(&b.spells, use_rel);
+            if ring.slots.len() < FOLD_RING_SIZE {
+                ring.slots.push(FoldSlot { key, folded });
+                ring.slots.len() - 1
+            } else {
+                let i = ring.next;
+                ring.next = (ring.next + 1) % FOLD_RING_SIZE;
+                ring.slots[i] = FoldSlot { key, folded };
+                i
+            }
+        };
+        net.forward(&ring.slots[idx].folded, b.mine(c), b.theirs(c), b.walls, b.bank[c.idx()], b.bank[c.other().idx()], c)
     })
 }

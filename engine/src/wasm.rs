@@ -43,7 +43,9 @@ fn report_json(rep: Option<crate::search::Report>) -> String {
 fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
              st: &crate::search::SearchStats, dt: f64,
              rep: Option<crate::search::Report>,
-             opening: Option<crate::opening::OpeningPick>) -> String {
+             opening: Option<crate::opening::OpeningPick>,
+             eval_name: &str, tt_permille: u32,
+             ponder_depth: i32, ponder_nodes: u64) -> String {
     let c = b.to_move;
     let turn = match best {
         Some(t) => t,
@@ -74,10 +76,13 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
     format!(
         "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\"seldepth\":{},\
           \"overflow_depth\":{},\"overflow_ms\":{:.0},\
-          \"nodes\":{},\"all_nodes\":{},\"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
+          \"nodes\":{},\"all_nodes\":{},\"expanded\":{},\"tt_permille\":{},\
+          \"ponder_depth\":{},\"ponder_nodes\":{},\"eval\":{:?},\
+          \"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
         crate::actions::acts_to_json(&acts), after.to_sfn(),
         st.depth_completed, st.max_ply_seen, st.overflow_depth, st.overflow_ms, st.nodes,
-        st.smp_nodes.max(st.nodes), score,
+        st.smp_nodes.max(st.nodes), st.expanded, tt_permille,
+        ponder_depth, ponder_nodes, eval_name, score,
         crate::search::ui_score(score), report_json(rep), opening_json, dt)
 }
 
@@ -177,7 +182,9 @@ impl Engine {
         let dt = (crate::search::now_ms() - t0) / 1000.0;
         let rep = (st.depth_completed > 0)
             .then(|| crate::search::report(score, &st, b.to_move, &self.s.weights));
-        move_json(&b, best, score, &st, dt, rep, self.s.opening_pick())
+        let tt_permille = ((self.s.tt_filled() as u64 * 1000) / (self.s.tt_len().max(1) as u64)) as u32;
+        move_json(&b, best, score, &st, dt, rep, self.s.opening_pick(),
+                  eval_name, tt_permille, self.ponder_depth, self.ponder_nodes)
     }
 
     /// Begin pondering `sfn` (the position the OPPONENT is thinking about).
@@ -423,7 +430,7 @@ pub fn move_budget_ms(remaining_ms: u32, inc_ms: u32, my_moves_played: u32) -> u
 pub fn nn_eval_raw(spells: Vec<u8>, mine: u64, theirs: u64, red: bool) -> i32 {
     let sp: [u8; 9] = match spells.try_into() { Ok(a) => a, Err(_) => return i32::MIN };
     let c = if red { crate::board::Color::Red } else { crate::board::Color::Blue };
-    crate::nn::NNUE_SPELL.net().eval_raw(&sp, mine, theirs, c)
+    crate::nn::NNUE_MT256.net().eval_raw(&sp, mine, theirs, c)
 }
 
 /// `nn_eval_raw` for any baked network by preset name (i32::MIN if unknown), for
@@ -434,6 +441,15 @@ pub fn nn_eval_raw_net(name: &str, spells: Vec<u8>, mine: u64, theirs: u64, red:
     let sp: [u8; 9] = match spells.try_into() { Ok(a) => a, Err(_) => return i32::MIN };
     let c = if red { crate::board::Color::Red } else { crate::board::Color::Blue };
     spec.net().eval_raw(&sp, mine, theirs, c)
+}
+
+#[wasm_bindgen]
+pub fn nn_eval_raw_full(name: &str, spells: Vec<u8>, mine: u64, theirs: u64,
+                        walls: u64, my_bank: u8, their_bank: u8, red: bool) -> i32 {
+    let Some(spec) = crate::nn::by_name(name) else { return i32::MIN };
+    let sp: [u8; 9] = match spells.try_into() { Ok(a) => a, Err(_) => return i32::MIN };
+    let c = if red { crate::board::Color::Red } else { crate::board::Color::Blue };
+    spec.net().eval_raw_full(&sp, mine, theirs, walls, my_bank, their_bank, c)
 }
 
 #[wasm_bindgen]

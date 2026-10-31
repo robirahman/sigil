@@ -100,15 +100,18 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 			await new Promise(r => setTimeout(r, 1500));
 			return page;
 		};
+		// A result waits up to 4 s for the puzzle's live rating (puzzles.html
+		// puzzleLive), which a sandbox without the live database never gets.
+		const settle = () => new Promise(r => setTimeout(r, 4500));
 		let page = await open('?p=0');
 		let line = await page.$eval('#puzzle-rating-status', el => el.textContent);
 		check(/Your puzzle rating: 1500 \(this device/.test(line), `rating line (${line.trim()})`);
 		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'solved'));
-		await new Promise(r => setTimeout(r, 500));
+		await settle();
 		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(stored && stored.rating > 1500 && stored.plays === 1, `a solve raises the device rating (${JSON.stringify(stored && { rating: stored.rating, plays: stored.plays })})`);
 		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'));
-		await new Promise(r => setTimeout(r, 500));
+		await settle();
 		const again = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(again.rating === stored.rating && again.plays === 1, 'a second result on the same puzzle changes nothing');
 		await page.close();
@@ -118,17 +121,17 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 		const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating') || '{"rating":1500,"plays":0}'));
 		const before = await read();
 		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'));
-		await new Promise(r => setTimeout(r, 500));
+		await settle();
 		const pend = await read();
 		check(kind === 'mate' && pend.plays === before.plays, `a mate failure is not recorded while it can still be corrected (plays ${before.plays} -> ${pend.plays})`);
 		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'solved'));
-		await new Promise(r => setTimeout(r, 500));
+		await settle();
 		const corr = await read();
 		check(corr.plays === before.plays + 1 && corr.rating > before.rating, `a corrected failure records the solve (${before.rating} -> ${corr.rating})`);
 		await page.close();
 		page = await open('?p=2');
 		await page.evaluate(() => { window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'); window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed-final'); });
-		await new Promise(r => setTimeout(r, 500));
+		await settle();
 		const fin = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
 		check(fin && fin.attempts && fin.attempts[await page.evaluate(() => window.SIGIL_PUZZLE.id)] === 0, 'a final failure is recorded as a loss');
 		await page.close();
@@ -147,7 +150,7 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 				c._puzzleOnGameOver({ winner: window.SIGIL_PUZZLE.mover });
 				return { seen, status: c.puzzleStatus };
 			}, reveal);
-			await new Promise(r => setTimeout(r, 800));
+			await settle();
 			const id = await pg.evaluate(() => window.SIGIL_PUZZLE.id);
 			const st = await pg.evaluate(() => [JSON.parse(localStorage.getItem('sigil_puzzle_rating')), JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}')]);
 			await pg.close();

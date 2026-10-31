@@ -19,7 +19,7 @@
 use std::collections::{HashMap, VecDeque};
 use crate::board::{Board, Color, Outcome};
 use crate::spells_meta::{GUST, SEAL_OF_DESTRUCTION, SEAL_OF_WIND};
-use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES};
+use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP};
 use crate::turn::{Action, Turn, OUTCOME_CAP};
 
 /// How many outcomes of a single cast to surface. Gust's placements are
@@ -309,8 +309,6 @@ pub struct TurnIter<'a> {
     /// Ordered castable spells for the current move's post-move board.
     casts: Vec<usize>,
     ci: usize,
-    /// Dash branches for the current move, precomputed lazily per move.
-    dashes: VecDeque<(Turn, Board)>,
     pending: VecDeque<Turn>,
     /// Set if any stage dropped options because of `window`.
     pub windowed: bool,
@@ -341,7 +339,7 @@ impl<'a> TurnIter<'a> {
             v.sort_by_cached_key(|&(n, p, _)| -board.move_score_goal(n, p, c, goal));
             let mut it = TurnIter {
                 board, c, window, stage: Stage::Done, moves: Vec::new(), mi: 0,
-                casts: Vec::new(), ci: 0, dashes: VecDeque::new(),
+                casts: Vec::new(), ci: 0,
                 pending: VecDeque::new(), windowed: false, yielded: 0,
                 key: Vec::new(), ki: 0, reasons: 0, keep_window,
             };
@@ -355,7 +353,7 @@ impl<'a> TurnIter<'a> {
             board, c, window,
             stage: if moves.is_empty() { Stage::Done } else { Stage::Moves },
             moves, mi: 0, casts: Vec::new(), ci: 0,
-            dashes: VecDeque::new(), pending: VecDeque::new(),
+            pending: VecDeque::new(),
             windowed: false, yielded: 0,
             key: Vec::new(), ki: 0, reasons, keep_window,
         };
@@ -489,7 +487,7 @@ impl<'a> TurnIter<'a> {
             }
             Stage::MoveCast => {
                 if self.mi >= self.moves.len() {
-                    self.mi = 0; self.stage = Stage::Dash; return true;
+                    self.mi = 0; self.stage = Stage::DashCast; return true;
                 }
                 let b = self.post_move_board(self.mi);
                 if self.casts.is_empty() && self.ci == 0 {
@@ -589,7 +587,7 @@ impl<'a> TurnIter<'a> {
             }
             Stage::Dash => {
                 if self.mi >= self.moves.len() {
-                    self.mi = 0; self.stage = Stage::DashCast; return true;
+                    self.mi = 0; self.stage = Stage::Done; return true;
                 }
                 let b = self.post_move_board(self.mi);
                 let a = self.first_prefix(self.mi);
@@ -603,7 +601,7 @@ impl<'a> TurnIter<'a> {
                 true
             }
             Stage::DashCast => {
-                if self.mi >= self.moves.len() { self.stage = Stage::Done; return true; }
+                if self.mi >= self.moves.len() { self.mi = 0; self.stage = Stage::Dash; return true; }
                 let b = self.post_move_board(self.mi);
                 let a = self.first_prefix(self.mi);
                 for (t, bd) in b.ordered_dash_branches(self.c, self.window) {
@@ -964,9 +962,33 @@ impl Board {
             // escapes for the enemy stone, so a pair that turns the crush into a
             // push is not paying for THIS landing: skip it and keep looking.
             let pre_crush = theirs & bit != 0 && self.push_options(node, c).1 == 0;
+            let mut chargeable_mask = 0u16;
+            for p in 0..9 {
+                let sig = crate::topology::SIGIL[p];
+                if ((mine | bit) & sig) == sig && self.can_use(c, p) {
+                    chargeable_mask |= 1u16 << p;
+                }
+            }
+            let mut seen_charged = 0u16;
             let mut found = 0usize;
             let mut tried = 0usize;
             for (ci, &(sacs, n_sacs, _)) in combos.iter().enumerate() {
+                let mut sacs_mask = 0u64;
+                for &s in &sacs[..n_sacs as usize] { sacs_mask |= 1u64 << s; }
+                let mut combo_charged = 0u16;
+                if chargeable_mask != 0 {
+                    for p in 0..9 {
+                        if chargeable_mask & (1u16 << p) != 0
+                            && (sacs_mask & crate::topology::SIGIL[p]) == 0
+                        {
+                            combo_charged |= 1u16 << p;
+                        }
+                    }
+                }
+                if found >= per_target {
+                    if (chargeable_mask & !seen_charged) == 0 { break; }
+                    if (combo_charged & !seen_charged) == 0 { continue; }
+                }
                 if tried >= max_tried { break; }
                 tried += 1;
                 if boards[ci].is_none() {
@@ -986,8 +1008,8 @@ impl Board {
                     out.push((Turn::single(Action::Dash { sacs, n_sacs, node: nd, push_to: p }), b2));
                     if out.len() >= limit { return out; }
                 }
+                seen_charged |= combo_charged;
                 found += 1;
-                if found >= per_target { break; }
             }
         }
         out

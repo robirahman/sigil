@@ -111,7 +111,9 @@ function engineFor(ttBits) {
 // Threaded engine: the thread count a search or ponder asked for, at most the
 // pool's (a request without one gets a single thread).
 function applyThreads(eng, want) {
-	if (_threads > 1) eng.set_threads(Math.max(1, Math.min(_threads, (want | 0) || 1)));
+	const effective = _threads > 1 ? Math.max(1, Math.min(_threads, (want | 0) || 1)) : 1;
+	if (_threads > 1 && typeof eng.set_threads === 'function') eng.set_threads(effective);
+	return effective;
 }
 
 // Pondering state. `active` is cleared by a search or a ponder_stop; the loop
@@ -204,7 +206,7 @@ self.onmessage = async (e) => {
 				self.postMessage({ type: 'progress', id, depth, score, nodes });
 			};
 			const eng = engineFor(msg.ttBits);
-			applyThreads(eng, msg.threads);
+			const effectiveThreads = applyThreads(eng, msg.threads);
 			// Step 6 option A (prototype): `split: [part, parts]` searches one part
 			// of the root; absent = the whole root, as before. An older wasm without
 			// the method searches the whole root and the coordinator still works.
@@ -216,7 +218,11 @@ self.onmessage = async (e) => {
 				msg.sfn, msg.timeMs >>> 0, (msg.widthScale || 4) >>> 0,
 				msg.historySfns || [], msg.evalName || 'nnue_mt256',
 				a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth);
-			self.postMessage({ type: 'result', id, res: JSON.parse(raw) });
+			const res = JSON.parse(raw);
+			res.threads = effectiveThreads;
+			res.threads_wanted = (typeof msg.threads === 'number') ? msg.threads : _wantThreads;
+			if (_mtError) res.mt_error = _mtError;
+			self.postMessage({ type: 'result', id, res });
 		} finally {
 			_busy = false;
 		}

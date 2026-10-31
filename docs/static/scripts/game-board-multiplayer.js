@@ -50,6 +50,12 @@ document.addEventListener('alpine:init', () => {
 			redTimer: 0,
 			blueTimer: 0,
 			timerType: 'none',
+			// How many more +15 s gifts this seat may give (room-clock.js ROOM_GIFT_MAX).
+			giftsLeft: 0,
+			// Our claim of the opponent's flag is under way (timer_tick).
+			claimingFlag: false,
+			// Each side's vacation end (correspondence), from timer_tick.
+			pausedUntil: { red: null, blue: null },
 			isSpectator: false,
 			// Rated / Casual badge, and why a casual room is unrated.
 			ranked: false,
@@ -253,6 +259,112 @@ document.addEventListener('alpine:init', () => {
 			handleTakebackAccept() { this.sendEvent('takeback_accept'); },
 			handleTakebackDecline() { this.sendEvent('takeback_decline'); },
 			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
+			// "On vacation until …" for each side on vacation (its clock is
+			// stopped: room-clock.js pauses).
+			get vacationText() {
+				if (this.timerType !== 'correspondence' || this.winner || this.gameAborted) return '';
+				const lines = [];
+				for (const c of ['red', 'blue']) {
+					const until = this.pausedUntil && this.pausedUntil[c];
+					if (!until) continue;
+					const d = new Date(until);
+					const when = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+					const who = !this.isSpectator && c === this.myColor ? 'You are'
+						: ((c === 'red' ? this.redName : this.blueName) || (c === 'red' ? 'Red' : 'Blue')) + ' is';
+					lines.push(who + ' on vacation until ' + when + '.');
+				}
+				return lines.join(' ');
+			},
+			// Give the opponent 15 s (live timed games).
+			get canGiveTime() {
+				return !this.isSpectator && this.timerType === 'realtime' && !this.winner && !this.gameAborted
+					&& !this.reviewMode && !!this.whoseTurn && this.giftsLeft > 0 && !this.claimingFlag
+					// Not once the opponent's clock reads zero (a gift then would
+					// only spoil our own claim).
+					&& (this.myColor === 'red' ? this.blueTimer : this.redTimer) > 0;
+			},
+			handleGiveTime() { if (this.canGiveTime) this.sendEvent('give_time'); },
+
+			// Preset emotes (SIGIL_EMOTES in firebase-sync.js): a picker beside
+			// the clocks for the seated players, a bubble under the sender's
+			// name for SIGIL_EMOTE_BUBBLE_MS, and a polite live-region line.
+			// "Mute emotes" (settings panel) hides them all, picker included.
+			emoteList: typeof SIGIL_EMOTES !== 'undefined' ? SIGIL_EMOTES : [],
+			emotesMuted: typeof SigilSettings !== 'undefined' && !!SigilSettings.get('muteEmotes'),
+			emoteMenuOpen: false,
+			emoteCooling: false,
+			emoteBubble: { red: '', blue: '' },
+			emoteAnnounce: '',
+			// After the game: "Well played" / "Thanks" for a while (the rules allow a minute).
+			emoteAfterOpen: false,
+			_emoteTimers: {},
+			// Set once the game's controller exists (_engine is not declared
+			// data, so a getter reading it would not update).
+			emoteReady: false,
+			get canEmote() {
+				if (this.isSpectator || this.emotesMuted || this.reviewMode || this.gameAborted || !this.emoteReady) return false;
+				if (this.myColor !== 'red' && this.myColor !== 'blue') return false;
+				return !this.winner || this.emoteAfterOpen;
+			},
+			get availableEmotes() {
+				return this.winner ? this.emoteList.filter((em) => em.after) : this.emoteList;
+			},
+			async sendEmote(id) {
+				this.emoteMenuOpen = false;
+				// The sync object as the lobby built it: through Alpine's proxy
+				// (this._engine.sync) the SDK's references misbehave.
+				const sync = window._multiplayerState && window._multiplayerState.sync;
+				if (!this.canEmote || this.emoteCooling || !sync || typeof sync.sendEmote !== 'function') return;
+				// The rules hold each seat to one emote per SIGIL_EMOTE_GAP_MS.
+				this.emoteCooling = true;
+				setTimeout(() => { this.emoteCooling = false; }, SIGIL_EMOTE_GAP_MS + 200);
+				await sync.sendEmote(this.myColor, id);
+			},
+			_showEmote(v) {
+				if (this.emotesMuted || !v || (v.color !== 'red' && v.color !== 'blue')) return;
+				const em = this.emoteList.find((x) => x.id === v.e);
+				if (!em) return;
+				this.emoteBubble[v.color] = em.text;
+				const side = v.color === 'red' ? 'Red' : 'Blue';
+				const name = v.color === 'red' ? this.redName : this.blueName;
+				const who = v.color === this.myColor ? 'You' : (name ? name + ' (' + side + ')' : side);
+				// Empty the live region first, so a repeat of the same line is
+				// still a change and is read out again.
+				const line = who + ': ' + em.text;
+				this.emoteAnnounce = '';
+				setTimeout(() => { if (!this.emotesMuted) this.emoteAnnounce = line; }, 100);
+				clearTimeout(this._emoteTimers[v.color]);
+				this._emoteTimers[v.color] = setTimeout(() => {
+					this.emoteBubble[v.color] = '';
+					if (this.emoteAnnounce === line) this.emoteAnnounce = '';
+				}, SIGIL_EMOTE_BUBBLE_MS);
+			},
+			// The rules take "Well played" / "Thanks" until a minute after the
+			// room's closedAt (server time): offer them for what is left of
+			// that, less a margin, however late this page heard of the end.
+			async _openAfterGameEmotes() {
+				const sync = window._multiplayerState && window._multiplayerState.sync;
+				if (!sync || !sync.roomRef || this.isSpectator) return;
+				let closedAt = null;
+				for (let i = 0; i < 10 && typeof closedAt !== 'number'; i++) {
+					try { closedAt = (await sync.roomRef.child('closedAt').once('value')).val(); } catch (e) { return; }
+					if (typeof closedAt !== 'number') await new Promise((r) => setTimeout(r, 1000));
+				}
+				if (typeof closedAt !== 'number') return;
+				const left = closedAt + SIGIL_EMOTE_AFTER_MS - 5000 - sync.serverNow();
+				if (left <= 0) return;
+				this.emoteAfterOpen = true;
+				clearTimeout(this._emoteAfterTimer);
+				this._emoteAfterTimer = setTimeout(() => { this.emoteAfterOpen = false; this.emoteMenuOpen = false; }, left);
+			},
+			setEmotesMuted(on) {
+				this.emotesMuted = !!on;
+				if (!on) return;
+				this.emoteMenuOpen = false;
+				this.emoteBubble.red = '';
+				this.emoteBubble.blue = '';
+				this.emoteAnnounce = '';
+			},
 
 			// Review: open an online room from the reviewed position. The new
 			// room is offered to the opponent through this room's rematch node.
@@ -610,6 +722,7 @@ document.addEventListener('alpine:init', () => {
 
 			closeSpellTooltip() { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); },
 			showSpellTooltip(spell) {
+				if (this.spellTooltip && this.spellTooltip.destroy) this.spellTooltip.destroy();
 				this.activeSpell = spell;
 				const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
 				const tooltip = this.$refs.spellTooltip;
@@ -658,8 +771,53 @@ document.addEventListener('alpine:init', () => {
 					if (this.hasTouchScreen) this.showSpellTooltip(spell); else this.sendEvent(sn);
 				} else { this.activeSpellIsCastable = false; if (this.hasTouchScreen) this.showSpellTooltip(spell); }
 			},
-			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
-			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
+			// A short grace lets the pointer reach the tooltip's "More about this spell" link (holdSpellTooltip).
+			handleSpellMouseOut() { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this._spellTooltipTimer = setTimeout(() => { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); }, 250); } },
+			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this.showSpellTooltip(spell); } },
+			holdSpellTooltip() { clearTimeout(this._spellTooltipTimer); },
+
+			// Keyboard route to the tooltip's "More about this spell" link: the
+			// tooltip sits after the board in the DOM, so Tab from a spell never
+			// reaches it. "I" (info) on a focused spell opens its tooltip and
+			// focuses the link; Escape there returns to the spell. ("?" is the
+			// shortcut list, settings-panel.js.)
+			handleSpellKey(e, slot) {
+				if ((e.key !== 'i' && e.key !== 'I') || e.ctrlKey || e.metaKey || e.altKey) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn = e.target;
+				if (this.activeSpell !== slot) this.showSpellTooltip(slot);
+				// The link renders with the tooltip (x-show): a key pressed right as the
+				// spell took focus can come before it is shown, so try for a few frames.
+				const focusLink = (tries) => {
+					const a = this.$refs.spellTooltip && this.$refs.spellTooltip.querySelector('.tooltip__more');
+					if (a) a.focus();
+					if ((!a || document.activeElement !== a) && tries > 0 && this.activeSpell === slot) requestAnimationFrame(() => focusLink(tries - 1));
+				};
+				this.$nextTick(() => focusLink(10));
+			},
+			handleTooltipKey(e) {
+				if (e.key !== 'Escape' || !this._spellTooltipReturn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn.focus();
+			},
+
+			// Keyboard: the tooltip stays open while focus moves from the spell
+			// into it (its "More about this spell" link), and closes when focus
+			// leaves both. A mouse press on the link moves focus there too, so
+			// the tooltip is still open when the click lands.
+			handleSpellBlur(e) {
+				const tip = this.$refs.spellTooltip;
+				if (e && e.relatedTarget && tip && tip.contains(e.relatedTarget)) return;
+				this.closeSpellTooltip();
+			},
+			handleTooltipFocusOut(e) {
+				const to = e && e.relatedTarget;
+				const tip = this.$refs.spellTooltip;
+				if (to && ((tip && tip.contains(to)) || (to.closest && to.closest('img.spell')))) return;
+				this.closeSpellTooltip();
+			},
 			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
@@ -709,6 +867,8 @@ document.addEventListener('alpine:init', () => {
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 					_this._rematchVariant = normalizeVariant(variant);
+					// The help popover's "This game's rules" (help.js).
+					if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(variant, spellNames);
 				_this.isDeathmatch = variantHasDeathmatch(variant);
 					// The room's variant names its board layout; switch before
 					// the engine or the review draws anything.
@@ -751,6 +911,8 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					_this._engine = engine;
+					if (sync && typeof sync.listenForEmotes === 'function') sync.listenForEmotes((v) => _this._showEmote(v));
+					_this.emoteReady = true;
 					if (!isSpectator && sync) sync.listenToSpectators((n) => { _this.spectatorCount = n; });
 					// A spectator who arrives before the first move of a room
 					// from a position replays from its start.
@@ -759,6 +921,27 @@ document.addEventListener('alpine:init', () => {
 
 				// Keyboard shortcuts (game-keys.js, shared with game.html)
 				bindGameKeys(_this, { disabled: () => _this.isSpectator });
+				// Leaving a live game asks first (game-keys.js). Correspondence
+				// games are left between moves by design, so they don't ask.
+				// typeof: a stale cached game-keys.js must not break the game.
+				if (typeof guardLeavingGame === 'function') guardLeavingGame(
+					() => !_this.isSpectator && !_this.winner && !_this.gameAborted && !_this.reviewMode
+						&& !!_this.whoseTurn && _this.timerType !== 'correspondence',
+					() => 'The game goes on without you: ' + (_this.timerType === 'none' ? '' : 'your clock keeps running, and ')
+						+ 'after ' + Math.round(ABANDON_GRACE_MS / 1000) + ' s away your opponent can claim the win.');
+
+				// Arrows and circles (board-marks.js), never sent to the
+				// opponent. Play keeps one set, cleared at the end of each
+				// turn; review keeps one per move. Spectators draw too.
+				const _marksStones = _this.$el.querySelector('.stone-nodes');
+				_this.boardMarks = (typeof attachBoardMarks === 'function' && _marksStones)
+					? attachBoardMarks(_marksStones.parentElement) : null;
+				if (_this.boardMarks) {
+					const follow = () => _this.boardMarks.setKey(_this.reviewMode ? 'review:' + _this.reviewIndex : 'play');
+					_this.$watch('reviewMode', follow);
+					_this.$watch('reviewIndex', follow);
+					follow();
+				}
 
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller
@@ -871,6 +1054,7 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'turn_complete') {
 						drawPushArrows(_this.$refs.pushArrows, []);
+						if (_this.boardMarks && !_this.reviewMode) _this.boardMarks.clear();
 						// Track the most recent opponent turn for annotation eligibility.
 						const t = rest.turn;
 						if (t && t.color && t.color !== _this.myColor) {
@@ -889,7 +1073,14 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'push_arrows') { drawPushArrows(_this.$refs.pushArrows, rest.arrows); }
 					else if (type === 'pushingoptions') { const { sourceNode, ...targets } = rest; _this.pushSourceNode = sourceNode || ''; _this.validMoves = targets; }
-					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
+					else if (type === 'timer_tick') {
+						_this.redTimer = rest.red; _this.blueTimer = rest.blue;
+						if (typeof rest.giftsLeft === 'number') _this.giftsLeft = rest.giftsLeft;
+						_this.claimingFlag = !!rest.claiming;
+						const p = rest.paused || {};
+						if (p.red !== _this.pausedUntil.red || p.blue !== _this.pausedUntil.blue) _this.pausedUntil = { red: p.red || null, blue: p.blue || null };
+					}
+					else if (type === 'time_gift') { _this.messageHistory.push(rest.mine ? 'You gave your opponent 15 seconds.' : 'Your opponent gave you 15 seconds.'); }
 					else if (type === 'rematch_state_changed') {
 						const r = rest.rematch || {};
 						const myColor = _this.myColor;
@@ -956,6 +1147,7 @@ document.addEventListener('alpine:init', () => {
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);
 						_this.showReset = false;
 						_this.winner = rest.winner;
+						_this._openAfterGameEmotes();
 						if (rest.gameLog && rest.gameLog.length > 0) {
 							const sfns = [rest.gameLog[0].sfnBefore];
 							const labels = ['Start'];

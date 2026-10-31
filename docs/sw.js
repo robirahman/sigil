@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v87';
+const CACHE_VERSION = 'v89';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -42,42 +42,35 @@ const SAME_ORIGIN_PRECACHE = [
 	'./analysis.html',
 	'./annotate.html',
 	'./spells.html',
+	'./spell.html',
+	'./variants.html',
 	'./spells/index.html',
 	'./packs/index.html',
 	'./strategy-guide.html',
+	'./admin.html',
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
+	// spell.html's Try-it positions and game statistics.
+	'./static/data/spell-examples.json',
+	'./strategy/data/spell_position_winrates.json',
+	'./strategy/data/spell_stats2.json',
 	// The puzzle set (the page fetches it no-cache; this makes it work offline
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
-	'./static/scripts/puzzle-rating.js',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',
 	'./static/css/layout.css',
-	'./static/css/styles.css',
 	'./static/css/compendium.css',
-	'./static/css/help.css',
 	'./static/css/ladder.css',
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
-	'./static/scripts/auth-status.js',
-	'./static/scripts/turn-notify.js',
-	'./static/scripts/engine/room-clock.js',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
-	'./static/scripts/settings-panel.js',
-	'./static/scripts/game-keys.js',
 	'./static/scripts/board-geometry.js',
-	'./static/scripts/analysis-board.js',
-	'./static/scripts/game-board-local.js',
 	'./static/scripts/tutorial-lessons.js',
-	'./static/scripts/game-board-local.js?v=34',
-	'./static/scripts/engine/rust-ai.js?v=34',
-	'./static/scripts/game-board-multiplayer.js',
-	'./static/scripts/game-board-multiplayer.js?v=34',
-	'./static/scripts/help.js',
+	'./static/scripts/engine/rust-ai.js?v=35',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
 	'./static/scripts/engine/constants.js',
@@ -105,22 +98,16 @@ const SAME_ORIGIN_PRECACHE = [
 	// dev/enumeration-gaps.html),
 	// so an old worker's cached copies are never served to a fresh page: bump those
 	// script tags as well.
-	'./static/scripts/engine/rust-worker.js?v=34',
-	'./static/wasm/sigil_engine.js?v=34',
-	'./static/wasm/sigil_engine_bg.wasm?v=34',
+	// A script or stylesheet changed between engine builds takes the next
+	// site version (?v=35, see styles.css above), for the same reason.
+	'./static/scripts/engine/rust-worker.js?v=35',
+	'./static/wasm/sigil_engine.js?v=35',
+	'./static/wasm/sigil_engine_bg.wasm?v=35',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
-	'./static/scripts/engine/game-review.js?v=34',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/elo.js',
-	'./static/scripts/engine/elo.js?v=34',
-	'./static/scripts/engine/position-rating.js?v=34',
-	'./static/scripts/engine/firebase-sync.js',
-	'./static/scripts/engine/firebase-sync.js?v=34',
-	'./static/scripts/engine/multiplayer-controller.js',
-	'./static/scripts/engine/multiplayer-controller.js?v=34',
-	'./static/scripts/engine/spectator-controller.js',
+	'./static/scripts/engine/position-rating.js?v=35',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',
@@ -167,6 +154,38 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/themes/stones/forest-blue.png',
 	'./static/images/themes/stones/volcanic-red.png',
 	'./static/images/themes/stones/volcanic-blue.png',
+	// ?v=N: every page loads a script or stylesheet changed in a release under
+	// a URL an old worker never cached, so a fresh page can't run on stale
+	// copies (stale-while-revalidate checks each file on its own); e.g. the
+	// firebase-sync.js that writes rooms/{id}/last, which the rules require.
+	// v=35: every file round 2 (and #44) changed. engine/constants.js stays
+	// unversioned: its SIGIL_ASSET_EPOCH is what the pages' stale-asset guards
+	// read from a possibly stale cache.
+	'./static/css/help.css?v=35',
+	'./static/css/rules.css?v=35',
+	'./static/css/styles.css?v=35',
+	'./static/scripts/analysis-board.js?v=35',
+	'./static/scripts/auth-status.js?v=35',
+	'./static/scripts/board-marks.js?v=35',
+	'./static/scripts/engine/elo.js?v=35',
+	'./static/scripts/engine/firebase-sync.js?v=35',
+	'./static/scripts/engine/game-review.js?v=35',
+	'./static/scripts/engine/multiplayer-controller.js?v=35',
+	'./static/scripts/engine/room-clock.js?v=35',
+	'./static/scripts/engine/spectator-controller.js?v=35',
+	'./static/scripts/engine/vacation-bank.js?v=35',
+	'./static/scripts/game-board-local.js?v=35',
+	'./static/scripts/game-board-multiplayer.js?v=35',
+	'./static/scripts/game-keys.js?v=35',
+	'./static/scripts/help.js?v=35',
+	'./static/scripts/profile-stats.js?v=35',
+	'./static/scripts/puzzle-progress.js?v=35',
+	'./static/scripts/puzzle-rating.js?v=35',
+	'./static/scripts/report-dialog.js?v=35',
+	'./static/scripts/rules-reference.js?v=35',
+	'./static/scripts/settings-panel.js?v=35',
+	'./static/scripts/turn-notify.js?v=35',
+	'./static/scripts/friends.js?v=35',
 	// Spell art is added by spellArtUrls() below.
 ];
 

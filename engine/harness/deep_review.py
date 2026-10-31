@@ -78,7 +78,7 @@ from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from eval_games import load_rows, position_key, EVAL_NAME  # noqa: E402
+from eval_games import load_rows, position_key, EVAL_NAME, engine_eval  # noqa: E402
 from surprise_audit import MATE_V, rust_color, value_red, value_of_report, turn_kind  # noqa: E402
 
 TT_BITS = 22
@@ -111,7 +111,8 @@ def final_value_red(g):
         return None
     try:
         import sigil_engine as se
-        if se.analyze(g['positions'][-1], EVAL_NAME, max_depth=1, tt_bits=10)['over']:
+        ev = engine_eval(se)
+        if se.analyze(g['positions'][-1], ev, max_depth=1, tt_bits=10)['over']:
             return MATE_V if w == 'red' else -MATE_V
     except (ImportError, ValueError):
         pass
@@ -149,6 +150,9 @@ def cmd_flag(a):
             if drop > a.threshold:
                 stats[side + ' falls'] += 1
                 r = rows[(gid, i)]
+                telem_obj = g.get('aiTelemetry') or {}
+                telem = telem_obj.get('byPly', {})
+                t_i = telem.get(str(i)) or telem.get(str(g['turnNumbers'][i] if g.get('turnNumbers') else i))
                 cases.append({'g': gid, 'i': i, 'ai': ai, 'side': side,
                               'v_i': sign * v_i, 'v_j': sign * v_j, 'drop': round(drop, 3),
                               'terminal': i + 1 == n, 'scan_probe': r.get('probe'),
@@ -157,7 +161,9 @@ def cmd_flag(a):
                               'turn': g['turnNumbers'][i] if g.get('turnNumbers') else None,
                               'room': g.get('roomCode'), 'ts': g.get('timestamp'), 'winner': g.get('winner'),
                               'opp_uid': g.get('blueUid') if ai == 'red' else g.get('redUid'),
-                              'ai_uid': g.get('redUid') if ai == 'red' else g.get('blueUid')})
+                              'ai_uid': g.get('redUid') if ai == 'red' else g.get('blueUid'),
+                              'engine_version': telem_obj.get('engineVersion'),
+                              'telemetry': t_i})
     print(dict(stats))
     for side in ('own', 'opp'):
         cs = [c for c in cases if c['side'] == side]
@@ -190,17 +196,18 @@ def run_task(t):
     p, ai = t['p'], t['ai']
     out = {'g': t['g'], 'p': p, 'kind': t['kind']}
     t0 = time.time()
+    ev_name = engine_eval(se)
     try:
         if t['kind'] in ('D', 'S'):
             probe = pos[p + 1] if p + 1 < len(pos) else None
-            r = se.analyze(pos[p], EVAL_NAME, history_sfns=pos[:p], probe_sfn=probe,
+            r = se.analyze(pos[p], ev_name, history_sfns=pos[:p], probe_sfn=probe,
                            **_kw(se, t['depth'], t['time_ms']))
             out.update(_summ(r, time.time() - t0, ai))
             out['played'] = (probe is not None and r.get('expected_sfn') is not None
                              and position_key(r['expected_sfn']) == position_key(probe))
         elif t['kind'] in ('alt', 'salt'):
             # the alternative's own position (opponent to move), its history = the game to p
-            r = se.analyze(t['sfn'], EVAL_NAME, history_sfns=pos[:p + 1], **_kw(se, t['depth'], t['time_ms']))
+            r = se.analyze(t['sfn'], ev_name, history_sfns=pos[:p + 1], **_kw(se, t['depth'], t['time_ms']))
             out.update(_summ(r, time.time() - t0, ai))
         elif t['kind'] in ('ref', 'gap'):
             target = t['sfn']
