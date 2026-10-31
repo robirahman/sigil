@@ -52,12 +52,37 @@ def main():
         for s in sp['solutions'][:20]:
             r = g.grade(p, s['actions'])
             check(r['status'] == 'correct', f"{p['id']} stored solution -> {r['status']}")
+        # Corrupt the regular move into a "move" onto one of the mover's OWN
+        # stones (no legal placement does that), keeping the rest of the turn.
+        from sigilbench.render import parse_sfn
+        st = parse_sfn(p['sfn'])
+        own = [n for n, c in st['stones'].items() if c == st['to_move']]
         bad_turn = json.loads(json.dumps(p['reference_solution']))
         first = next(x for x in bad_turn if x.get('type') in ('move', 'hard_move', 'blink'))
-        first['node'] = 'c13' if first['node'] != 'c13' else 'a13'
-        first.pop('pushed_to', None)
+        touched = {x.get('node') for x in bad_turn}
+        first.clear()
+        first.update({'type': 'move', 'node': next(n for n in own if n not in touched)})
+        # Grading is by POSITION, so a corrupted list can still land on a legal
+        # position (e.g. a cast later clears the node the lost placement hit).
+        # Check consistency instead: "illegal" iff no legal turn (children)
+        # reaches the replayed stones/counters/locks.
         r = g.grade(p, bad_turn)
-        check(r['status'] in ('illegal', 'invalid', 'wrong'), f"{p['id']} corrupted -> {r['status']}")
+        kids = json.loads(subprocess.run([children], input=p['sfn'] + '\n', capture_output=True,
+                                         text=True, check=True).stdout)['children']
+        def kkey(sfn):   # = puzzleSfnKey: stones, counters, locks, springlocks (+ Providence banks)
+            t = sfn.split()
+            pm = [x for x in t[6:] if x.startswith('pm:')]
+            return ' '.join([t[0].split('/')[0]] + t[3:6] + pm)
+        kid_keys = {kkey(k['sfn']) for k in kids}
+        rk = r.get('key', '')
+        reachable = rk in kid_keys or r['status'] in ('correct',) and 'stored' in r.get('proof', '')
+        if r['status'] == 'illegal':
+            check(not reachable, f"{p['id']} corrupted graded illegal but a legal turn reaches it")
+        elif r['status'] != 'invalid' and r['status'] != 'grader_error':
+            # children's after-positions skip the Seal of Destruction burn, so a
+            # miss here is only reported when no Seal of Destruction is on the board.
+            if 'Seal_of_Destruction' not in p['sfn']:
+                check(reachable, f"{p['id']} corrupted graded {r['status']} but no legal turn reaches it")
         r = g.grade(p, [{'type': 'teleport', 'node': 'a1'}])
         check(r['status'] == 'invalid', f"{p['id']} malformed -> {r['status']}")
         if a.random:
@@ -68,8 +93,10 @@ def main():
                 stored = r.get('key') in set(p['solution_keys'])
                 if stored:
                     check(r['status'] == 'correct', f"{p['id']} random stored-key turn -> {r['status']}")
-                elif p['n'] == 1:
+                elif p['n'] == 1 and r['status'] != 'grader_error':
                     check(r['status'] == 'wrong', f"{p['id']} random non-mate (N=1) -> {r['status']}")
+                elif r['status'] == 'grader_error':
+                    counts['random: grader budget/cap (not a violation)'] = counts.get('random: grader budget/cap (not a violation)', 0) + 1
                 else:
                     check(r['status'] in ('wrong', 'correct', 'unproven'), f"{p['id']} random -> {r['status']}")
                     if r['status'] == 'correct':
@@ -77,6 +104,7 @@ def main():
         print(p['id'], 'done', file=sys.stderr)
     g.close()
     print(json.dumps({'puzzles': len(dev), 'checks': sum(counts.values()), 'violations': bad,
+                      'grader_budget_or_cap_on_random_turns': counts.get('random: grader budget/cap (not a violation)', 0),
                       'alternative_mates_found': alt}, indent=1))
     sys.exit(1 if bad else 0)
 

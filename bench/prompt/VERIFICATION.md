@@ -35,6 +35,8 @@ expectation, apart from the four discrepancies listed in the next section.
 
 ## Discrepancies found
 
+**Resolved 2026-10-31:** the Rust enumerator now has a rules-complete mode (`cast_enum::set_full_rules`, on in `bench_grade` and `children`). Re-run with it, all four discrepancy cases below grade **legal**.
+
 ### A. Browser JS allows it, the grader (Rust) rejects it
 
 The grader will mark these JS-legal turns as illegal. `rules.md` and `spells.json`

@@ -119,6 +119,7 @@ match the rules.
   - **done when:** the two produce identical *sets of resulting positions* (by `sfn_key`) on every
     sampled position, and any mismatch is fixed in the engine and re-run.
   - *Finding 2026-10-31 (bench/prompt/VERIFICATION.md):* the Rust enumerator is NARROWER than the JS rules for **Rock Slide** (only best-net push assignments), **Corrupt** (only the largest conversion set; JS allows "up to 3", including 0), **Comet** (never sacrifices the stone it just blinked) and probably **Erupt** (fixed spell order). Consequences: a legal answer can be graded illegal, and a mate proof can miss a defender's escape. Until the enumerator is widened, the dev set excludes puzzles with these spells on the board.
+  - *Fixed 2026-10-31:* `cast_enum::set_full_rules(true)` makes all four resolvers rules-complete (every Rock Slide assignment, every Corrupt set of 0-3, Comet may sacrifice the blinked stone, Erupt moves in any order). Off by default, so the shipped strength engine is unchanged; `bench_grade`, `children` and Python `set_full_rules` turn it on, and the test-set generator must too. The four discrepancy cases now grade legal, and `bench/tools/full_rules_superset.py` checks the full enumeration contains the narrow one. The dev set keeps its exclusion so runs already in progress stay comparable; the test set will include these spells.
 - [ ] **Targeted fuzzing of the special mechanics:**
   - cast keep-choice, dash sacrifices, Rock Slide, Fissure walls;
   - the Seal burn (stored puzzle lines are post-burn, `endOfTurn` mode);

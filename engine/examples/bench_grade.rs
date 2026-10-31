@@ -25,6 +25,9 @@ fn err(e: MateError) -> String {
 }
 
 fn main() {
+    // Grade under the full browser rules (see cast_enum::set_full_rules);
+    // SIGIL_NARROW_RULES=1 restores the strength engine's enumeration.
+    sigil_engine::cast_enum::set_full_rules(std::env::var("SIGIL_NARROW_RULES").is_err());
     let budget: u64 = std::env::var("BENCH_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(400_000_000);
     let time_ms: u64 = std::env::var("BENCH_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(300_000);
     let stdout = std::io::stdout();
