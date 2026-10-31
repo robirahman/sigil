@@ -1542,7 +1542,7 @@ document.addEventListener('alpine:init', () => {
 				function _recordAiTelemetry(payload) {
 					if (!payload) return;
 					_lastAiMeta = payload;
-					const ply = (payload.turnNumber !== undefined) ? payload.turnNumber : (_engineRef && _engineRef.board ? _engineRef.board.turnNumber : null);
+					const ply = (payload.turnNumber !== undefined) ? payload.turnNumber : (payload.turnCounter !== undefined ? payload.turnCounter : (_engineRef && _engineRef.board ? (_engineRef.board.turnCounter !== undefined ? _engineRef.board.turnCounter : _engineRef.board.turnNumber) : null));
 					if (ply === null || ply === undefined) return;
 					const row = {};
 					const addNum = (k, v) => { if (typeof v === 'number' && Number.isFinite(v)) row[k] = v; };
@@ -2948,8 +2948,10 @@ document.addEventListener('alpine:init', () => {
 
 						if (difficulty && Object.keys(_aiTelemetryByPly).length > 0) {
 							const meta = _lastAiMeta || {};
+							const engVer = (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (meta.engineVersion || null);
 							gameRecord.aiTelemetry = {
 								v: 1,
+								engineVersion: engVer,
 								eval: String(meta.eval || 'nnue_mt256'),
 								threads: (typeof meta.threads === 'number' && Number.isFinite(meta.threads)) ? meta.threads : 1,
 								threadsWanted: (typeof meta.threadsWanted === 'number' && Number.isFinite(meta.threadsWanted)) ? meta.threadsWanted : 1,

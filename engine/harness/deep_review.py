@@ -150,7 +150,8 @@ def cmd_flag(a):
             if drop > a.threshold:
                 stats[side + ' falls'] += 1
                 r = rows[(gid, i)]
-                telem = (g.get('aiTelemetry') or {}).get('byPly', {})
+                telem_obj = g.get('aiTelemetry') or {}
+                telem = telem_obj.get('byPly', {})
                 t_i = telem.get(str(i)) or telem.get(str(g['turnNumbers'][i] if g.get('turnNumbers') else i))
                 cases.append({'g': gid, 'i': i, 'ai': ai, 'side': side,
                               'v_i': sign * v_i, 'v_j': sign * v_j, 'drop': round(drop, 3),
@@ -161,6 +162,7 @@ def cmd_flag(a):
                               'room': g.get('roomCode'), 'ts': g.get('timestamp'), 'winner': g.get('winner'),
                               'opp_uid': g.get('blueUid') if ai == 'red' else g.get('redUid'),
                               'ai_uid': g.get('redUid') if ai == 'red' else g.get('blueUid'),
+                              'engine_version': telem_obj.get('engineVersion'),
                               'telemetry': t_i})
     print(dict(stats))
     for side in ('own', 'opp'):

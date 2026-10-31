@@ -318,7 +318,7 @@
         ".write": "(auth !== null && (newData.child('redUid').val() === auth.uid || newData.child('blueUid').val() === auth.uid) && (newData.child('redUid').val() === newData.child('blueUid').val() || newData.child('redUid').val().matches(/^__ai_[a-z0-9_]+__$/) || newData.child('blueUid').val().matches(/^__ai_[a-z0-9_]+__$/)) && (!data.exists() || !data.child('eloProcessed').exists())) || (newData.child('guest').val() === true && newData.child('ranked').val() === false && (!data.exists() || data.child('guest').val() === true))",
         ".validate": "newData.hasChildren(['winner', 'timestamp'])",
         "aiTelemetry": {
-          ".validate": "newData.hasChildren(['v', 'eval', 'threads', 'byPly'])"
+          ".validate": "newData.hasChildren(['v', 'engineVersion', 'eval', 'threads', 'byPly'])"
         },
         "annotations": {
           "$turnNumber": {

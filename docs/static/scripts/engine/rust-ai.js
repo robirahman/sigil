@@ -511,6 +511,7 @@ class RustAI {
 			budgetMs: this.lastBudgetMs,
 			clockMs: this.clockMs,
 			clock: this.clock,
+			engineVersion: RUST_ENGINE_VERSION,
 			expanded: (typeof res.expanded === 'number') ? res.expanded : null,
 			ttPermille: (typeof res.tt_permille === 'number') ? res.tt_permille : null,
 			ponderDepth: (typeof res.ponder_depth === 'number') ? res.ponder_depth : null,
