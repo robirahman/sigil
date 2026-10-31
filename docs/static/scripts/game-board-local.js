@@ -1058,6 +1058,7 @@ document.addEventListener('alpine:init', () => {
 				let _saveLoadedSfn = null;
 				let _savedHumanColor = null;
 				let _savedGameLog = null;
+				let _savedAiTelemetry = null;
 				// First turn's pre-turn SFN — persisted so slim saved logs of
 				// games that began from an imported position can be replayed.
 				let _savedSetupSfn = null;
@@ -1111,6 +1112,9 @@ document.addEventListener('alpine:init', () => {
 							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
+							}
+							if (_save.aiTelemetry && typeof _save.aiTelemetry === 'object') {
+								_savedAiTelemetry = _save.aiTelemetry;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -1536,6 +1540,32 @@ document.addEventListener('alpine:init', () => {
 				// stay in sync. Legacy fat saved entries pass through as-is.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 				let _setupSfn = _savedSetupSfn;
+				let _aiTelemetryByPly = (_savedAiTelemetry && _savedAiTelemetry.byPly) ? Object.assign({}, _savedAiTelemetry.byPly) : {};
+				let _lastAiMeta = _savedAiTelemetry || null;
+
+				function _recordAiTelemetry(payload) {
+					if (!payload) return;
+					_lastAiMeta = payload;
+					const ply = (payload.turnNumber !== undefined) ? payload.turnNumber : (payload.turnCounter !== undefined ? payload.turnCounter : (_engineRef && _engineRef.board ? (_engineRef.board.turnCounter !== undefined ? _engineRef.board.turnCounter : _engineRef.board.turnNumber) : null));
+					if (ply === null || ply === undefined) return;
+					const row = {};
+					const addNum = (k, v) => { if (typeof v === 'number' && Number.isFinite(v)) row[k] = v; };
+					addNum('d', payload.depth);
+					addNum('sd', payload.seldepth);
+					addNum('od', payload.overflowDepth);
+					addNum('n', payload.nodes);
+					addNum('exp', payload.expanded);
+					addNum('s', payload.scoreCentistones !== undefined ? payload.scoreCentistones : payload.score);
+					addNum('m', payload.mateIn);
+					if (typeof payload.mateProven === 'boolean') row.mp = payload.mateProven;
+					addNum('ms', payload.timeMs);
+					addNum('bms', payload.budgetMs);
+					addNum('cms', payload.clockMs);
+					addNum('pd', payload.ponderDepth);
+					addNum('pn', payload.ponderNodes);
+					addNum('tt', payload.ttPermille);
+					_aiTelemetryByPly[String(ply)] = row;
+				}
 
 				// Don't persist a game until the human has actually played a
 				// turn — otherwise merely opening a match (or letting the AI
@@ -1564,6 +1594,15 @@ document.addEventListener('alpine:init', () => {
 						startPos: _startPos,
 						tookBack: _tookBack,
 						startSfn: _startSfnForUndo,
+						aiTelemetry: (difficulty && Object.keys(_aiTelemetryByPly).length > 0) ? {
+							v: 1,
+							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
+							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_mt256'),
+							threads: (_lastAiMeta && typeof _lastAiMeta.threads === 'number') ? _lastAiMeta.threads : 1,
+							threadsWanted: (_lastAiMeta && typeof _lastAiMeta.threadsWanted === 'number') ? _lastAiMeta.threadsWanted : 1,
+							mtError: (_lastAiMeta && typeof _lastAiMeta.mtError === 'string') ? _lastAiMeta.mtError : false,
+							byPly: Object.assign({}, _aiTelemetryByPly),
+						} : null,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
@@ -1618,6 +1657,9 @@ document.addEventListener('alpine:init', () => {
 					_tookBack = !!aiMode;
 					_humanHasMoved = true;
 					_persistedGameLog = slimGameLog(log.slice(0, h));
+					for (const k of Object.keys(_aiTelemetryByPly)) {
+						if (Number(k) >= h) delete _aiTelemetryByPly[k];
+					}
 					_persistCurrentGame(sfn);
 					gameLive = false;
 					window.location.reload();
@@ -1952,6 +1994,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'ai_think_report') {
+						_recordAiTelemetry(rest);
 						handleAiThinkReportEvent(rest);
 						return;
 					}
@@ -2917,6 +2960,20 @@ document.addEventListener('alpine:init', () => {
 						}
 						if (_this.evalAnnotations && Object.keys(_this.evalAnnotations).length > 0) {
 							gameRecord.eval_annotations = Object.assign({}, _this.evalAnnotations);
+						}
+
+						if (difficulty && Object.keys(_aiTelemetryByPly).length > 0) {
+							const meta = _lastAiMeta || {};
+							const engVer = (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (meta.engineVersion || null);
+							gameRecord.aiTelemetry = {
+								v: 1,
+								engineVersion: engVer,
+								eval: String(meta.eval || 'nnue_mt256'),
+								threads: (typeof meta.threads === 'number' && Number.isFinite(meta.threads)) ? meta.threads : 1,
+								threadsWanted: (typeof meta.threadsWanted === 'number' && Number.isFinite(meta.threadsWanted)) ? meta.threadsWanted : 1,
+								mtError: (typeof meta.mtError === 'string') ? meta.mtError : false,
+								byPly: Object.assign({}, _aiTelemetryByPly),
+							};
 						}
 
 						// Persist the game to localStorage first so a crash or close

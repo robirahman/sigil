@@ -3073,7 +3073,7 @@ fn lead_prepass_finds_recorded_mates_and_every_turn_it_returns_wins() {
 
 #[test]
 fn lead_prepass_is_what_lets_a_depth_one_search_see_the_mate() {
-    for sfn in LEAD_CASES {
+    for (i, sfn) in LEAD_CASES.iter().enumerate() {
         let b = Board::from_sfn(sfn).expect("sfn");
         let c = b.to_move;
         crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
@@ -3082,7 +3082,12 @@ fn lead_prepass_is_what_lets_a_depth_one_search_see_the_mate() {
         let (_, sc0, _) = s0.go(&b, c, 1, 0);
         crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
         crate::turn_iter::set_swing_prepass(true);
-        assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the recorded blindness without the pre-pass, got {sc0} in {sfn}");
+        // Cases 0-2 (move+cast) remain blind without the decisive lead pre-pass.
+        // Case 3 (move+dash+Meteor) was historically blind when bare dashes preceded DashCast;
+        // with Stage::DashCast prioritized over bare dashes, the generator naturally surfaces it.
+        if i < 3 {
+            assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the recorded blindness without the pre-pass, got {sc0} in {sfn}");
+        }
         let mut s = shipped_search();
         let (best, sc, _) = s.go(&b, c, 1, 0);
         assert!(sc >= crate::search::UNPROVEN_MATE, "depth-1 search still blind with the pre-pass: {sc} in {sfn}");
@@ -4632,9 +4637,19 @@ fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
             let f: Vec<&str> = line.split(' ').collect();
             let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
             let spells: [u8; 9] = sp.try_into().unwrap();
-            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
-            assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
-                       f[4].parse::<i32>().unwrap(), "{name} {line}");
+            let (got, want) = if f.len() == 8 {
+                let walls: u64 = f[3].parse().unwrap();
+                let my_bank: u8 = f[4].parse().unwrap();
+                let their_bank: u8 = f[5].parse().unwrap();
+                let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+                (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), walls, my_bank, their_bank, c),
+                 f[7].parse::<i32>().unwrap())
+            } else {
+                let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+                (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+                 f[4].parse::<i32>().unwrap())
+            };
+            assert_eq!(got, want, "{name} {line}");
             n += 1;
         }
         assert!(n >= 200, "{name}: only {n} golden vectors");
@@ -4772,9 +4787,19 @@ fn mt_network_matches_python_and_sits_on_material_tempo() {
         let f: Vec<&str> = line.split(' ').collect();
         let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
         let spells: [u8; 9] = sp.try_into().unwrap();
-        let c = if f[3] == "1" { Color::Red } else { Color::Blue };
-        assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
-                   f[4].parse::<i32>().unwrap(), "nnue_mt256 {line}");
+        let (got, want) = if f.len() == 8 {
+            let walls: u64 = f[3].parse().unwrap();
+            let my_bank: u8 = f[4].parse().unwrap();
+            let their_bank: u8 = f[5].parse().unwrap();
+            let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), walls, my_bank, their_bank, c),
+             f[7].parse::<i32>().unwrap())
+        } else {
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+             f[4].parse::<i32>().unwrap())
+        };
+        assert_eq!(got, want, "nnue_mt256 {line}");
         n += 1;
     }
     assert!(n >= 200, "only {n} golden vectors");
@@ -4796,3 +4821,121 @@ fn mt_network_matches_python_and_sits_on_material_tempo() {
         }
     }
 }
+
+#[test]
+fn test_bank_step_deduplication_and_capping() {
+    let mut b = Board::new(Board::legal_draw(0), Variant::Competitive);
+    b.bank[Color::Red.idx()] = 1;
+    b.stones[0] = 0b11111111;
+    b.stones[1] = 0b11111111 << 16;
+    b.update();
+    let steps = b.ordered_first_steps_scored(Color::Red);
+    assert!(steps.len() <= 60, "total steps {} exceeded cap of 60", steps.len());
+    let mut seen = std::collections::HashSet::new();
+    for &((n, p, _blink, place), _) in &steps {
+        if let Some((pn, pp)) = place {
+            let mut b2 = b;
+            b2.do_move_with_pub(n, p, Color::Red);
+            b2.do_placement(pn, pp, Color::Red);
+            let state = (b2.stones, b2.mana, b2.charged);
+            assert!(seen.insert(state), "duplicate post-step state found in bank placement steps: {:?}", state);
+        }
+    }
+}
+
+#[test]
+fn test_fold_ring_multi_entry_cache() {
+    let mut b1 = Board::new(Board::legal_draw(0), Variant::Standard);
+    b1.stones[0] = 0b111;
+    b1.stones[1] = 0b111 << 10;
+    b1.update();
+
+    let mut b2 = b1;
+    b2.walls = 0b111 << 20;
+    b2.update();
+
+    let spec = crate::nn::by_name("nnue_mt256").unwrap();
+    let ev1 = crate::nn::eval(spec, &b1, Color::Red);
+    let ev2 = crate::nn::eval(spec, &b2, Color::Red);
+    let ev1_again = crate::nn::eval(spec, &b1, Color::Red);
+    assert_eq!(ev1, ev1_again);
+    assert_ne!(ev1, ev2);
+}
+
+#[test]
+fn test_gwsmf5_spell_preserving_dash() {
+    let sfn = "...........b.brrrrbx...br.r.rbr..b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 27 3:1 Fury:Flourish -:- b1 competitive";
+    let b = Board::from_sfn(sfn).expect("valid sfn");
+    let dash_branches = b.dash_branches_by_landing(Color::Red, 24, 1);
+    let flourish_id = crate::spells_meta::FLOURISH;
+    let flourish_pos = b.position_of(flourish_id).expect("Flourish on board");
+    let flourish_mask = crate::topology::SIGIL[flourish_pos];
+
+    let mut found_flourish_dash = false;
+    for (t, _after) in &dash_branches {
+        if let Action::Dash { sacs, .. } = t.slice()[0] {
+            let sac_mask = (1u64 << sacs[0]) | (1u64 << sacs[1]);
+            if sac_mask & flourish_mask == 0 {
+                found_flourish_dash = true;
+                break;
+            }
+        }
+    }
+    assert!(found_flourish_dash, "dash_branches_by_landing must include a spell-preserving sacrifice pair");
+
+    let flourish_in_turn_iter = b.turns_ordered(Color::Red).take(200).position(|t| {
+        t.slice().iter().any(|a| matches!(*a, Action::Cast { pos, .. } if pos as usize == flourish_pos))
+    });
+    println!("Flourish cast index in TurnIter: {:?}", flourish_in_turn_iter);
+
+    let mut s = crate::search::Search::new(16);
+    let search_turns = s.ordered_turns(&b, Color::Red, 0, None, 32);
+    let flourish_in_search = search_turns.iter().position(|t| {
+        t.slice().iter().any(|a| matches!(*a, Action::Cast { pos, .. } if pos as usize == flourish_pos))
+    });
+    println!("Flourish cast index in search width 32: {:?}", flourish_in_search);
+    println!("Total turns in search width 32: {}", search_turns.len());
+
+    assert!(flourish_in_turn_iter.is_some(), "TurnIter must reach Flourish cast");
+    assert!(flourish_in_search.is_some() || flourish_in_turn_iter.unwrap() < 64, "Flourish cast must be reachable in candidates");
+}
+
+#[test]
+fn test_qjlgqr_threefold_repetition_mate() {
+    let sfn_target = "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 25 0:0 -:- -:- b1 competitive";
+    let target = Board::from_sfn(sfn_target).expect("valid sfn");
+    let target_key = crate::zobrist::ZOBRIST.key_js(&target);
+
+    // Turn 26 (Blue to move): with target position in history twice, Blue has an immediate 1-ply threefold repetition win.
+    let sfn_t26 = "rrr.rr....rr...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 26 0:0 -:- -:- tied competitive";
+    let b26 = Board::from_sfn(sfn_t26).expect("valid sfn");
+    let mut s = crate::search::Search::new(16);
+    s.add_history(target_key);
+    s.add_history(target_key);
+    assert!(s.has_twofold_target(), "search must detect twofold repetition target");
+
+    let (best26, score26, _st26) = s.go(&b26, Color::Blue, 1, 0);
+    println!("best26: {:?}, score26: {}", best26, score26);
+    assert!(score26 >= crate::search::UNPROVEN_MATE || score26 >= crate::search::WIN - crate::search::MAX_PLY as i32, "Blue must find immediate 1-ply mate");
+    assert_eq!(_st26.mate_plies, 1, "Blue must report mate in 1 ply");
+    let mut after26 = b26;
+    after26.apply_turn(&best26.unwrap(), Color::Blue);
+    after26.turn_counter += 1;
+    after26.to_move = Color::Red;
+    assert_eq!(crate::zobrist::ZOBRIST.key_js(&after26), target_key, "Blue's move must hit the threefold repetition key");
+
+    // Turn 25 (Red to move): with target position in history twice, Red must avoid walking into Blue's repetition mate.
+    let sfn_t25 = "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 25 0:0 -:- -:- b1 competitive";
+    let b25 = Board::from_sfn(sfn_t25).expect("valid sfn");
+    let mut s25 = crate::search::Search::new(16);
+    s25.add_history(target_key);
+    s25.add_history(target_key);
+    let (best25, score25, _st25) = s25.go(&b25, Color::Red, 2, 0);
+    println!("best25: {:?}, score25: {}", best25, score25);
+    assert!(best25.is_some());
+    let mut after25 = b25;
+    after25.apply_turn(&best25.unwrap(), Color::Red);
+    assert_ne!(after25.stones, b26.stones, "Red must not play the blundered repetition line");
+    assert!(score25 > -2000, "Red must not evaluate the position as getting mated; score was {}", score25);
+}
+

@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v88';
+const CACHE_VERSION = 'v89';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -70,7 +70,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/tutorial-lessons.js',
-	'./static/scripts/engine/rust-ai.js?v=34',
+	'./static/scripts/engine/rust-ai.js?v=35',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
 	'./static/scripts/engine/constants.js',
@@ -100,14 +100,14 @@ const SAME_ORIGIN_PRECACHE = [
 	// script tags as well.
 	// A script or stylesheet changed between engine builds takes the next
 	// site version (?v=35, see styles.css above), for the same reason.
-	'./static/scripts/engine/rust-worker.js?v=34',
-	'./static/wasm/sigil_engine.js?v=34',
-	'./static/wasm/sigil_engine_bg.wasm?v=34',
+	'./static/scripts/engine/rust-worker.js?v=35',
+	'./static/wasm/sigil_engine.js?v=35',
+	'./static/wasm/sigil_engine_bg.wasm?v=35',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/position-rating.js?v=34',
+	'./static/scripts/engine/position-rating.js?v=35',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',

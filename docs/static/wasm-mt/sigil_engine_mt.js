@@ -335,6 +335,26 @@ export function nn_eval_raw(spells, mine, theirs, red) {
 }
 
 /**
+ * @param {string} name
+ * @param {Uint8Array} spells
+ * @param {bigint} mine
+ * @param {bigint} theirs
+ * @param {bigint} walls
+ * @param {number} my_bank
+ * @param {number} their_bank
+ * @param {boolean} red
+ * @returns {number}
+ */
+export function nn_eval_raw_full(name, spells, mine, theirs, walls, my_bank, their_bank, red) {
+    const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(spells, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.nn_eval_raw_full(ptr0, len0, ptr1, len1, mine, theirs, walls, my_bank, their_bank, red);
+    return ret;
+}
+
+/**
  * `nn_eval_raw` for any baked network by preset name (i32::MIN if unknown), for
  * `tools/nn-wasm-parity.js NET GOLDEN`.
  * @param {string} name
@@ -521,7 +541,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:34,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:22,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,

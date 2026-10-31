@@ -284,17 +284,40 @@ impl Board {
             return moves.into_iter()
                 .map(|((n, p), s)| ((n, p, self.is_blink_pub(n, c), None), s)).collect();
         }
-        let mut v: Vec<(i32, usize, (u8, Option<u8>, bool, Option<(u8, Option<u8>)>))> = Vec::new();
+        const PER_MOVE_PLACE_CAP: usize = 4;
+        const TOTAL_STEP_CAP: usize = 60;
+        let mut bare: Vec<(i32, usize, (u8, Option<u8>, bool, Option<(u8, Option<u8>)>))> =
+            Vec::with_capacity(moves.len());
+        let mut placed: Vec<(i32, usize, (u8, Option<u8>, bool, Option<(u8, Option<u8>)>), ([u64; 2], [u32; 2], [u16; 2]))> =
+            Vec::new();
         for (i, ((n, p), s0)) in moves.into_iter().enumerate() {
             let blink = self.is_blink_pub(n, c);
-            v.push((s0, i, (n, p, blink, None)));
+            bare.push((s0, i, (n, p, blink, None)));
             let mut b = *self;
             b.do_move_with_pub(n, p, c);
             let g2 = b.placement_goal(c);
-            for (pn, pp) in b.placement_variants(c) {
-                let s1 = b.move_score_goal(pn, pp, c, g2);
-                v.push((s0 + s1, i, (n, p, blink, Some((pn, pp)))));
+            let mut p_cands: Vec<(i32, (u8, Option<u8>))> = b.placement_variants(c)
+                .into_iter()
+                .map(|(pn, pp)| (b.move_score_goal(pn, pp, c, g2), (pn, pp)))
+                .collect();
+            p_cands.sort_by_key(|&(s1, (pn, pp))| (-s1, pn, pp.unwrap_or(255)));
+            for (rank, (s1, (pn, pp))) in p_cands.into_iter().enumerate() {
+                if rank >= PER_MOVE_PLACE_CAP && s1 < 2_000 { continue; }
+                let mut b2 = b;
+                b2.do_placement(pn, pp, c);
+                let state = (b2.stones, b2.mana, b2.charged);
+                placed.push((s0 + s1, i, (n, p, blink, Some((pn, pp))), state));
             }
+        }
+        placed.sort_by_key(|&(s, i, _, _)| (-s, i));
+        let max_placed = TOTAL_STEP_CAP.saturating_sub(bare.len());
+        let mut seen_states: Vec<([u64; 2], [u32; 2], [u16; 2])> = Vec::with_capacity(max_placed);
+        let mut v = bare;
+        for (s, i, step, state) in placed {
+            if seen_states.len() >= max_placed { break; }
+            if seen_states.contains(&state) { continue; }
+            seen_states.push(state);
+            v.push((s, i, step));
         }
         // Stable on the original move order for equal scores.
         v.sort_by_key(|&(s, i, _)| (-s, i));

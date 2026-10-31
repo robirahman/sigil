@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 34;
+const RUST_ENGINE_VERSION = 35;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -511,6 +511,15 @@ class RustAI {
 			budgetMs: this.lastBudgetMs,
 			clockMs: this.clockMs,
 			clock: this.clock,
+			engineVersion: RUST_ENGINE_VERSION,
+			expanded: (typeof res.expanded === 'number') ? res.expanded : null,
+			ttPermille: (typeof res.tt_permille === 'number') ? res.tt_permille : null,
+			ponderDepth: (typeof res.ponder_depth === 'number') ? res.ponder_depth : null,
+			ponderNodes: (typeof res.ponder_nodes === 'number') ? res.ponder_nodes : null,
+			eval: res.eval || this.evalName || null,
+			threads: (typeof res.threads === 'number') ? res.threads : (this.threads || 1),
+			threadsWanted: (typeof res.threads_wanted === 'number') ? res.threads_wanted : (this.workers || 1),
+			mtError: res.mt_error || null,
 		};
 		if (onProgress) onProgress(this.lastMeta);
 		this._historySfns.push(sfn);
