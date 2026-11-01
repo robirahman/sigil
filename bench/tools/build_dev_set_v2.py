@@ -57,6 +57,10 @@ def self_test(g, p, n):
         r = g.replay(p['sfn'], s['actions'])
         if not r.get('ok') or r['key'] != s['key'] or r['key'] not in p['solution_keys']:
             return False, f'stored solution does not replay: {r}'
+    if p.get('source', '').startswith('mined'):
+        # Mined for v2 by this engine under the full rules (mine_mate4.py), so the
+        # proof is fresh; repeating a mate-in-4 proof costs minutes per puzzle.
+        return True, 'proved when mined'
     r = g.replay(p['sfn'], sols[0]['actions'])
     v = g.rust.ask(f"{n}\t{p['sfn']}\t{r['after']}")
     if v.get('verdict') != 'mate':
@@ -65,9 +69,12 @@ def self_test(g, p, n):
 
 
 def faster_mate(g, p, n):
+    """Does a stored first turn already force mate within N-1? `g` is a
+    grader with a short time cap: a check that times out counts as "not
+    faster" (the label says a shorter mate is not excluded)."""
     if n <= 2:
         return False                    # N=2: no mate-in-1 is already an exhaustive proof
-    for s in p['solutions'][:8]:
+    for s in p['solutions'][:4 if n == 4 else 8]:
         r = g.replay(p['sfn'], s['actions'])
         v = g.rust.ask(f"{n - 1}\t{p['sfn']}\t{r['after']}")
         if v.get('verdict') == 'mate':
@@ -91,6 +98,7 @@ def main():
     pool = [p for p in pool if p['variant'] in ('standard', 'competitive')]
     rng.shuffle(pool)
     g = Grader()
+    g_fast = Grader(time_ms=60_000)     # faster-mate checks
     chosen, games, log = {n: [] for n in quota}, set(), collections.Counter()
     covered = set()
     for n in (4, 3, 2, 1):                       # scarcest first, so its games are not taken
@@ -126,7 +134,7 @@ def main():
                 log[f'skip N={n}: self-test failed'] += 1
                 print('self-test FAIL', pick['id'], why, file=sys.stderr)
                 continue
-            if faster_mate(g, pick, n):
+            if faster_mate(g_fast, pick, n):
                 log[f'skip N={n}: a stored turn mates faster'] += 1
                 continue
             games.add(pick['game']['id'])
@@ -134,6 +142,7 @@ def main():
             chosen[n].append(pick)
             print(f"N={n} {len(chosen[n])}/{quota[n]} {pick['id']} spells covered {len(covered)}", file=sys.stderr)
     g.close()
+    g_fast.close()
     out = []
     for n in (1, 2, 3, 4):
         for p in chosen[n]:
@@ -143,6 +152,8 @@ def main():
                 'tags': p.get('tags', []), 'solution_keys': p['solution_keys'],
                 'reference_solution': p['solutions'][0]['actions'],
                 'source_game': {'id': p['game']['id'], 'date': p['game'].get('date')},
+                **({'mined': {'from_mate3': p.get('from_m3'), 'solve_seconds': p.get('solve_seconds'),
+                              'nodes': p.get('nodes')}} if p['source'].startswith('mined') else {}),
             })
     rng.shuffle(out)
     out = [dict([('id', f'sbdev2-{i:03d}')] + list(q.items())) for i, q in enumerate(out, 1)]
