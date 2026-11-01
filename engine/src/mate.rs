@@ -478,6 +478,13 @@ impl Solver {
     }
 }
 
+/// At an OR node, a candidate whose subtree hits an enumeration cap simply
+/// fails to prove (the search moves on to the next candidate); budget and
+/// time errors still abort.
+fn or_ok(r: Result<bool, MateError>) -> Result<bool, MateError> {
+    match r { Err(MateError::Incomplete(..)) => Ok(false), other => other }
+}
+
 /// Time the nominating search gets when looking for a mate-in-3 at an inner
 /// node of a mate-in-4 proof.
 pub const INNER_NOMINATE3_MS: u64 = 1_500;
@@ -501,6 +508,7 @@ impl Solver {
     // `true` is a proof; `false` is "not found".
 
     fn remember_mkiller(&mut self, k: u8, t: Turn) {
+        // (see `or_ok` below for how OR nodes treat incomplete subtrees)
         let v = &mut self.mkillers[k as usize];
         if v.iter().any(|x| x.slice() == t.slice()) { return; }
         v.insert(0, t);
@@ -542,12 +550,12 @@ impl Solver {
         if self.has_mate_in_1(b, c)? { return Ok(true); }
         if k <= 1 { return Ok(false); }
         if let Some(&v) = self.le_memo.get(&(key(b), k, false)) { if v { return Ok(true); } }
-        let root = self.successors(b, c)?;
+        let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
         let killers = self.mkillers[k as usize].clone();
         for kt in &killers {
             if let Some((_, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
                 let n = *n;
-                if self.prove_forced(&n, c, k - 1, false, true)? { return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, true))? { return Ok(true); }
             }
         }
         Ok(false)
@@ -566,14 +574,16 @@ impl Solver {
     }
 
     fn prove_le_inner(&mut self, b: &Board, c: Color, k: u8, deep: bool) -> Result<bool, MateError> {
-        let root = self.successors(b, c)?;
+        // An OR node too wide to enumerate cannot be searched, but that is only
+        // "not found" here (an AND node above decides what it means).
+        let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
         let mut tried: HashSet<Key> = HashSet::new();
         // 1. Mover killers.
         let killers = self.mkillers[k as usize].clone();
         for kt in &killers {
             if let Some(&(t, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
                 if !tried.insert(key(&n)) { continue; }
-                if self.prove_forced(&n, c, k - 1, false, false)? { self.remember_mkiller(k, t); return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
             }
         }
         // 2. Nominations (a short and a longer search).
@@ -588,7 +598,7 @@ impl Solver {
             for &(t, n) in &root {
                 let kn = key(&n);
                 if n.outcome != Outcome::Ongoing || !cands.contains(&kn) || !tried.insert(kn) { continue; }
-                if self.prove_forced(&n, c, k - 1, false, false)? { self.remember_mkiller(k, t); return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
             }
         }
         if !deep || k < 3 { return Ok(false); }
@@ -611,7 +621,7 @@ impl Solver {
         let threads = RESOLVE_THREADS.load(AtomicOrdering::Relaxed).min(cands.len()).max(1);
         if threads <= 1 {
             for &(t, n) in cands {
-                if self.prove_forced(&n, c, k - 1, false, cheap)? { return Ok(Some(t)); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, cheap))? { return Ok(Some(t)); }
             }
             return Ok(None);
         }
@@ -630,7 +640,7 @@ impl Solver {
                         let i = next.fetch_add(1, AtomicOrdering::Relaxed);
                         if i >= cands.len() { break Ok(()); }
                         let (t, n) = cands[i];
-                        match w.prove_forced(&n, c, k - 1, false, cheap) {
+                        match or_ok(w.prove_forced(&n, c, k - 1, false, cheap)) {
                             Ok(true) => { *found.lock().unwrap() = Some(t); stop.store(true, AtomicOrdering::Relaxed); break Ok(()); }
                             Ok(false) => {}
                             Err(e) => break Err(e),
@@ -966,9 +976,11 @@ impl Solver {
             // then -- resolver mode -- the deep search on what is left.
             let mut hard: Vec<Board> = Vec::new();
             for rb in &need_m2 {
-                if !self.prove_le(rb, c, 3, false)? { hard.push(*rb); }
+                if !self.prove_le(rb, c, 3, false)? {
+                    if !exhaustive { return Ok(TurnVerdict::Unproven); }   // first-pass grading: stop at the first miss
+                    hard.push(*rb);
+                }
             }
-            if !hard.is_empty() && !exhaustive { return Ok(TurnVerdict::Unproven); }
             for rb in &hard {
                 if !self.prove_le(rb, c, 3, true)? { return Ok(TurnVerdict::Unproven); }
             }
