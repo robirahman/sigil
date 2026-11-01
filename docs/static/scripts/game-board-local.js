@@ -3306,6 +3306,11 @@ class PuzzleOpponent {
 			} else if (res.verdict === 'mate_slow') {
 				comp.puzzleJudge = 'Engine: a forced win exists but needs ' + (turns ? turnsText(turns) : res.mate_in + ' plies') + ', more than the puzzle allows (' + how + ').';
 				comp._puzzleFail('That wins eventually, but not within ' + this.puzzle.mate + ' turns. The engine replies ' + describePuzzleActions(res.actions) + '. Play on, or Retry.');
+			} else if (this.puzzle.mate >= 4 && !res.exhaustive) {
+				// Mate in 4 (SigilBench dev set v2): a bounded search that finds no
+				// forced win has not refuted one, so the attempt is not failed.
+				comp.puzzleJudge = 'Engine: found no forced win (' + how + '), but at mate in 4 its search is not a proof either way.';
+				comp.puzzleMessage = 'Not a stored solution, and the engine could not prove it wins — unproven. Play on, or Retry.';
 			} else {
 				const evalStones = (typeof res.stones === 'number') ? res.stones : res.score_ui * 39;
 				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + evalStones.toFixed(1) + ' stones for it).';

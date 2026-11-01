@@ -698,7 +698,7 @@
 					else if (verdict === 'likely_mate') record('likely', 'the engine sees a forced win but could not prove it in time');
 					// At mate in 4 the browser search is no refutation: a turn it cannot prove stays unproven.
 					// mate_slow is a proven win that takes too long: wrong at any N.
-					else if (bp.n >= 4 && verdict !== 'mate_slow') record('unproven', 'not a stored solution, and the in-browser engine could not prove a forced win');
+					else if (bp.n >= 4 && verdict !== 'mate_slow' && !/escapes the mate/.test(text || '')) record('unproven', 'not a stored solution, and the in-browser engine could not prove a forced win');
 					else record('wrong', (text || 'the engine finds an escape').replace(/^Engine: /, 'engine: '));
 				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
