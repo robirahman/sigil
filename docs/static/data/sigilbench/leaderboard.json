@@ -8,6 +8,8 @@
   "rules_oracle": "docs/static/scripts/engine (applyAITurn replay)"
  },
  "split": "dev",
+ "set_id": "dev_v1",
+ "set_label": "Dev set v1",
  "split_counts": {
   "1": 34,
   "2": 33,
@@ -403,6 +405,81 @@
    "median_seconds": 291.4
   },
   {
+   "id": "engine_vh_v1",
+   "kind": "baseline",
+   "label": "Sigil engine (SigilNet NNUE)",
+   "config": "Very Hard settings, 60 s per puzzle",
+   "provider": "engine",
+   "model": "very_hard",
+   "settings": {
+    "tier": "very_hard",
+    "ms": 60000,
+    "tt_bits": 21,
+    "eval": "nnue_mt256",
+    "width": 4,
+    "adaptive": [
+     0.1,
+     2,
+     6
+    ]
+   },
+   "date": "2026-11-01",
+   "git_commit": "6bcf545",
+   "approved_no_training": false,
+   "overall": {
+    "correct": 69,
+    "total": 100,
+    "accuracy": 0.69,
+    "ci95": [
+     0.5937,
+     0.7722
+    ]
+   },
+   "by_n": {
+    "1": {
+     "correct": 23,
+     "total": 34,
+     "accuracy": 0.6765,
+     "ci95": [
+      0.5084,
+      0.8087
+     ]
+    },
+    "2": {
+     "correct": 22,
+     "total": 33,
+     "accuracy": 0.6667,
+     "ci95": [
+      0.4961,
+      0.8025
+     ]
+    },
+    "3": {
+     "correct": 24,
+     "total": 33,
+     "accuracy": 0.7273,
+     "ci95": [
+      0.5578,
+      0.8493
+     ]
+    }
+   },
+   "status_counts": {
+    "correct": 69,
+    "wrong": 22,
+    "unproven": 6,
+    "grader_error": 3
+   },
+   "tokens": {
+    "input_per_puzzle": 0,
+    "output_per_puzzle": 0,
+    "estimated": false
+   },
+   "resolved": 0,
+   "with_reminder": null,
+   "median_seconds": 60.0
+  },
+  {
    "id": "random",
    "kind": "baseline",
    "label": "Random legal turn",
@@ -452,13 +529,6 @@
     "unproven": 28,
     "grader_error": 3
    }
-  },
-  {
-   "id": "engine",
-   "kind": "baseline",
-   "label": "Sigil NNUE engine",
-   "config": "pending",
-   "pending": true
   },
   {
    "id": "humans",
