@@ -685,7 +685,13 @@
 			setTimeout(() => { msg.textContent = ''; }, 2500);
 		}));
 		$('ai-download').addEventListener('click', () => {
-			const blob = new Blob([JSON.stringify(dev, null, 1)], { type: 'application/json' });
+			// Model inputs only: no solution keys or reference solutions.
+			const prompts = {
+				canary: dev.canary, benchmark: dev.benchmark, name: dev.name,
+				system_prompt: dev.system_prompt, no_tool_note: dev.no_tool_note, tool: dev.tool,
+				puzzles: dev.puzzles.map((p) => ({ id: p.id, n: p.n, mover: p.mover, sfn: p.sfn, user_prompt: p.user_prompt })),
+			};
+			const blob = new Blob([JSON.stringify(prompts, null, 1)], { type: 'application/json' });
 			const a = document.createElement('a');
 			a.href = URL.createObjectURL(blob);
 			a.download = 'sigilbench-dev-prompts.json';
@@ -694,6 +700,17 @@
 			setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 		});
 		$('ai-reference').addEventListener('click', () => {
+			// Shown before this model's answer is graded, the puzzle counts as not solved for it.
+			const p = cur(), who = label();
+			const all = store.get(AI_KEY, {});
+			const prior = (all[who] || {})[p.id];
+			if (!prior || prior.pending) {
+				if (!confirm('Showing a solution records ' + p.id + ' as not solved for "' + who + '". Show it?')) return;
+				all[who] = all[who] || {};
+				all[who][p.id] = { status: 'revealed', how: 'reference solution shown before grading', n: p.n, at: Date.now() };
+				store.set(AI_KEY, all);
+				drawAi();
+			}
 			$('ai-verdict').innerHTML = '<div class="verdict"><strong>One proven solution</strong><small>Other turns may also win.</small><pre>'
 				+ esc(JSON.stringify(cur().reference_solution, null, 1)) + '</pre></div>';
 		});
