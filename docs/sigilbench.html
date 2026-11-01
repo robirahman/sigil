@@ -642,9 +642,12 @@
 			$('try-err').textContent = '';
 			try {
 				if (!window.crypto || !crypto.subtle || typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decrypt the dev set.');
-				const enc = await fetch(ENC_URL, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
-				let d;
-				try { d = await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); }
+				const get = (mode) => fetch(ENC_URL, { cache: mode }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+				const open = async (enc) => { try { return await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); } };
+				let d = await open(await get('no-cache'));
+				// An older service worker can still hand out the previous set's file.
+				if (d.set !== SET_ID) d = await open(await get('reload'));
+				if (d.set !== SET_ID) throw new Error('This browser still has an older copy of the dev set. Reload the page and try again.');
 				opened(d);
 			} catch (e) {
 				$('try-err').textContent = e.message || String(e);
@@ -810,10 +813,11 @@
 			if (res.verdict === 'mate') return { status: 'correct', how: 'The engine proves it forces the win (' + how + ').' + caveat };
 			if (res.verdict === 'likely_mate') return { status: 'likely', how: 'The engine sees a forced win but could not prove it in time (' + how + ').' + caveat };
 			const reply = typeof describePuzzleActions === 'function' ? describePuzzleActions(res.actions) : 'a defence';   // eslint-disable-line no-undef
+			// A proven mate that needs more turns than allowed is a refutation at any N.
+			if (res.verdict === 'mate_slow') return { status: 'wrong', how: 'It wins, but not within ' + p.n + ' turns: the engine replies ' + reply + ' (' + how + ').' };
 			// Mate in 4: the browser search cannot settle a forced mate in 3 after every reply, so
 			// "no win found" is not a refutation (the harness's grader decides those).
 			if (p.n >= 4) return { status: 'unproven', how: 'Not a stored solution, and the in-browser engine found no forced win (' + how + '). At mate in 4 this search is not a proof either way; run the harness grader for a verdict.' };
-			if (res.verdict === 'mate_slow') return { status: 'wrong', how: 'It wins, but not within ' + p.n + ' turns: the engine replies ' + reply + ' (' + how + ').' };
 			return { status: 'wrong', how: 'The opponent escapes with ' + reply + ' (' + how + ').' };
 		}
 
