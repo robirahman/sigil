@@ -2163,8 +2163,10 @@ document.addEventListener('alpine:init', () => {
 							_puzzleExpectGameOver = true;
 							return;
 						}
-						_this.puzzleMessage = step === 0 && puzzle.mate === 3
-							? 'Correct! Two more to go.' : 'Correct! Now find the finishing move.';
+						// Turns still to play after this one (mate in 4: three, then two).
+						const rem = puzzle.mate - (step + 1);
+						_this.puzzleMessage = rem >= 2
+							? 'Correct! ' + ({ 2: 'Two', 3: 'Three' }[rem] || rem) + ' more to go.' : 'Correct! Now find the finishing move.';
 						return;
 					}
 					// Final solver turn: the game must be over now -- or about to be:

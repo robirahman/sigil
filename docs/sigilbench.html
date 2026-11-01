@@ -185,14 +185,14 @@
 		.try summary { cursor: pointer; color: var(--color-text-warm); }
 		.verdict { border-left: 4px solid var(--color-border); padding: 8px 12px; margin: 10px 0; background: var(--color-surface); border-radius: 6px; }
 		.verdict--correct { border-left-color: #4caf7a; }
-		.verdict--likely { border-left-color: #d9b44a; }
+		.verdict--likely, .verdict--unproven { border-left-color: #d9b44a; }
 		.verdict--wrong, .verdict--invalid { border-left-color: #e06c6c; }
 		.verdict small { display: block; color: var(--color-text-muted); margin-top: 4px; word-break: break-word; }
 		table.try-list { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 		table.try-list th, table.try-list td { padding: 5px 8px; border-bottom: 1px solid var(--color-bg-mid); text-align: left; }
 		table.try-list th { font-family: 'Arvo', serif; color: var(--color-text-dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em; }
 		.st-correct { color: #4caf7a; }
-		.st-likely { color: #d9b44a; }
+		.st-likely, .st-unproven { color: #d9b44a; }
 		.st-wrong, .st-revealed { color: #e06c6c; }
 		.try-list-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--color-border); border-radius: 6px; }
 		.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -266,8 +266,8 @@
 			<p class="footnote" id="table-note"></p>
 
 			<h3 id="try">Try the dev set</h3>
-			<p>Play the 100 dev-set puzzles yourself under benchmark conditions, or give them to an AI model and grade
-				its answers here. The dev set is password-protected. Results stay in this browser.</p>
+			<p>Play the 100 puzzles of dev set v2 (25 each of mate in 1, 2, 3 and 4, every spell) yourself under
+				benchmark conditions, or give them to an AI model and grade its answers here. The dev set is password-protected. Results stay in this browser.</p>
 			<form class="try-lock" id="try-lock" autocomplete="off">
 				<label class="visually-hidden" for="try-password">Password</label>
 				<input type="password" id="try-password" placeholder="Password" autocomplete="current-password" />
@@ -595,6 +595,7 @@
 	(function () {
 		'use strict';
 		const ENC_URL = 'static/data/sigilbench/devset.enc.json';
+		const SET_ID = 'dev_v2';                        // must match build_try_devset.py SET_ID
 		const DATA_KEY = 'sigilbench_dev_payload';      // sessionStorage: read by puzzles.html?bench=
 		const HUMAN_KEY = 'sigilbench_try_human';       // localStorage: {id: {status, how, n, at}}
 		const AI_KEY = 'sigilbench_try_ai';             // localStorage: {label: {id: {status, how, n, at}}}
@@ -605,7 +606,7 @@
 			get(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } },
 			set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* blocked */ } },
 		};
-		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first', invalid: 'Invalid answer' };
+		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first', invalid: 'Invalid answer' };
 		let dev = null;
 
 		const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -809,6 +810,9 @@
 			if (res.verdict === 'mate') return { status: 'correct', how: 'The engine proves it forces the win (' + how + ').' + caveat };
 			if (res.verdict === 'likely_mate') return { status: 'likely', how: 'The engine sees a forced win but could not prove it in time (' + how + ').' + caveat };
 			const reply = typeof describePuzzleActions === 'function' ? describePuzzleActions(res.actions) : 'a defence';   // eslint-disable-line no-undef
+			// Mate in 4: the browser search cannot settle a forced mate in 3 after every reply, so
+			// "no win found" is not a refutation (the harness's grader decides those).
+			if (p.n >= 4) return { status: 'unproven', how: 'Not a stored solution, and the in-browser engine found no forced win (' + how + '). At mate in 4 this search is not a proof either way; run the harness grader for a verdict.' };
 			if (res.verdict === 'mate_slow') return { status: 'wrong', how: 'It wins, but not within ' + p.n + ' turns: the engine replies ' + reply + ' (' + how + ').' };
 			return { status: 'wrong', how: 'The opponent escapes with ' + reply + ' (' + how + ').' };
 		}
@@ -859,7 +863,7 @@
 		// Already unlocked in this tab (coming back from a puzzle).
 		try {
 			const d = JSON.parse(sessionStorage.getItem(DATA_KEY) || 'null');
-			if (d && Array.isArray(d.puzzles)) opened(d);
+			if (d && Array.isArray(d.puzzles) && d.set === SET_ID) opened(d);
 		} catch (e) { /* locked */ }
 	})();
 	</script>
