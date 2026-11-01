@@ -1,5 +1,8 @@
 # SigilBench changelog
 
+## Unreleased
+- Site: SigilBench in the main menu, and a password-protected "Try the dev set" panel: people play the dev puzzles on the board with the first turn graded (`puzzles.html?bench=<id>`); for AIs it copies the harness's exact prompts and grades a pasted answer in the browser (stored proven solutions, wins on the spot, otherwise the in-browser engine's search, which does not check legality).
+
 ## 0.1.1-dev (2026-11-01)
 - One response per puzzle: the reminder after a response without an answer is removed (it gave models that hit the output cap a second full budget). The Anthropic adapter's output cap defaults to 128k. `bench/tools/rescore_no_reminder.py` re-scores older runs from their transcripts.
 - Exhaustive resolver for answers the first pass leaves unproven (`sigilbench/resolve.py`, `BENCH_EXHAUSTIVE=1` / `mate::judge_turn_exhaustive`, multi-threaded); `run.py` runs it at the end of every run.
