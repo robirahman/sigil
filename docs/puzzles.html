@@ -242,7 +242,7 @@
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.next" x-show="window.SIGIL_PUZZLE_NAV.next">Next &rarr;</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" x-show="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random" x-show="window.SIGIL_PUZZLE_NAV.random">Random</a>
-									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back">Back to the game</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back" x-text="window.SIGIL_PUZZLE_NAV.backLabel || 'Back to the game'">Back to the game</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
@@ -447,7 +447,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
-		<script src="static/scripts/game-board-local.js?v=36"></script>
+		<script src="static/scripts/game-board-local.js?v=37"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->
@@ -615,6 +615,90 @@
 				window.SIGIL_PUZZLE_TAGS = '';
 				window.SIGIL_PUZZLE_PROGRESS = 'Your mistakes from this game, from its engine review.';
 				window.SIGIL_PUZZLE_FILTER_HTML = '';
+				return true;
+			}
+
+			/**
+			 * SigilBench dev set (?bench=<dev id>): a dev puzzle under benchmark
+			 * conditions. The dev set is unlocked with its password on
+			 * sigilbench.html, which leaves the decrypted set in sessionStorage.
+			 * The board is the published puzzle the dev puzzle was taken from
+			 * (same position, same proven lines), without its tags or source
+			 * game, and no rating or progress is written. As in the benchmark,
+			 * only the FIRST turn is graded: a stored (proven) solution or a win
+			 * on the spot is correct; any other turn is judged by the engine.
+			 * Results stay on this device (localStorage).
+			 */
+			const BENCH_DATA_KEY = 'sigilbench_dev_payload';
+			const BENCH_RESULTS_KEY = 'sigilbench_try_human';
+			function bootBench(params, all) {
+				const loading = document.getElementById('puzzle-loading');
+				let dev = null;
+				try { dev = JSON.parse(sessionStorage.getItem(BENCH_DATA_KEY) || 'null'); } catch (e) { dev = null; }
+				if (!dev || !Array.isArray(dev.puzzles)) {
+					loading.innerHTML = 'The SigilBench dev set is password-protected. <a href="sigilbench.html#try">Unlock it on the SigilBench page</a>, then open a puzzle from there.';
+					return;
+				}
+				document.getElementById('puzzle-tabs').style.display = 'none';
+				const list = dev.puzzles;
+				const k = Math.max(0, list.findIndex(p => p.id === params.get('bench')));
+				const bp = list[k];
+				const src = all.find(p => p.id === bp.source_puzzle_id);
+				if (!src || src.sfn !== bp.sfn) {
+					loading.textContent = 'Could not find this dev puzzle on the board (' + bp.id + ').';
+					return;
+				}
+				const puzzle = Object.assign({}, src, { bench: bp.id, tags: [] });
+				const readResults = () => { try { return JSON.parse(localStorage.getItem(BENCH_RESULTS_KEY) || '{}') || {}; } catch (e) { return {}; } };
+				const results = readResults();
+				const prior = results[bp.id];
+				let recorded = !!prior;
+				const record = (status, how) => {
+					if (recorded) return;
+					recorded = true;
+					const r = readResults();
+					r[bp.id] = { status, how, n: bp.n, at: Date.now() };
+					try { localStorage.setItem(BENCH_RESULTS_KEY, JSON.stringify(r)); } catch (e) { /* storage blocked */ }
+					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first (not solved)' }[status];
+					const el = document.getElementById('bench-result');
+					if (el) el.textContent = 'Recorded: ' + label + (how ? ' — ' + how : '') + '. Only your first turn counts; play on or retry for practice.';
+				};
+				const keys = bp.solution_keys || [];
+				window.SIGIL_BENCH_FIRST_TURN = ({ key, won }) => {
+					if (keys.indexOf(key) >= 0) record('correct', 'a proven solution');
+					else if (won) record('correct', 'wins on the spot');
+					else if (bp.n === 1) record('wrong', 'the turn does not win the game');
+					// Otherwise the engine judges it before replying (SIGIL_BENCH_JUDGE).
+				};
+				window.SIGIL_BENCH_JUDGE = (verdict, text) => {
+					if (verdict === 'mate') record('correct', 'not a stored line; the engine proves it still forces the win');
+					else if (verdict === 'likely_mate') record('likely', 'the engine sees a forced win but could not prove it in time');
+					else record('wrong', (text || 'the engine finds an escape').replace(/^Engine: /, 'engine: '));
+				};
+				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
+					if (p.bench !== bp.id) return;
+					if (status === 'revealed') record('revealed', '');
+					else if (status === 'failed' || status === 'failed-final') record('wrong', '');
+				};
+				window.SIGIL_PUZZLE = puzzle;
+				const link = (j) => 'puzzles.html?bench=' + encodeURIComponent(list[j].id);
+				window.SIGIL_PUZZLE_NAV = {
+					prev: k > 0 ? link(k - 1) : '',
+					next: k < list.length - 1 ? link(k + 1) : '',
+					random: '', rated: '',
+					back: 'sigilbench.html#try',
+					backLabel: 'Back to SigilBench',
+				};
+				const side = bp.mover === 'red' ? 'Red' : 'Blue';
+				window.SIGIL_PUZZLE_TITLE = 'SigilBench ' + bp.id + ' — Mate in ' + bp.n + ', ' + side + ' to move';
+				window.SIGIL_PUZZLE_SOURCE = 'Benchmark conditions: your first turn is graded, as a model\'s one submitted turn is. '
+					+ (prior ? 'Already attempted (' + prior.status + '); this attempt is practice.' : 'Think it through before you play.');
+				window.SIGIL_PUZZLE_TAGS = '';
+				const done = Object.values(results).filter(r => r && r.status);
+				window.SIGIL_PUZZLE_PROGRESS = (k + 1) + ' of ' + list.length + ' dev puzzles · ' + done.length + ' attempted, '
+					+ done.filter(r => r.status === 'correct').length + ' correct (this device)';
+				window.SIGIL_PUZZLE_FILTER_HTML = '<span id="bench-result"></span>';
+				startPuzzleBoard();
 				return true;
 			}
 
@@ -925,6 +1009,7 @@
 					return;
 				}
 				const all = data.puzzles || [];
+				if (params.has('bench')) return bootBench(params, all);
 				if (tab === 'dashboard') return bootDashboard(all);
 				if (tab === 'storm') return bootStorm(all);
 				const legacyMate = ['1', '2', '3'].includes(params.get('mate')) ? 'm' + params.get('mate') : null;

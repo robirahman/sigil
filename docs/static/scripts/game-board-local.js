@@ -2076,7 +2076,7 @@ document.addEventListener('alpine:init', () => {
 					// A mistake from the player's own game (puzzles.html?learn=) is
 					// not one of the puzzle set's, and Puzzle Storm runs are
 					// unrated practice: both leave the solved list alone.
-					if (!puzzle.learn && !window.SIGIL_PUZZLE_STORM) try {
+					if (!puzzle.learn && !puzzle.bench && !window.SIGIL_PUZZLE_STORM) try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
@@ -2109,6 +2109,11 @@ document.addEventListener('alpine:init', () => {
 					const over = !!(_engineRef && _engineRef.board && _engineRef.board.gameover);
 					const step = _this.puzzleStep;
 					_this.puzzleStep = step + 1;
+					// SigilBench dev set (puzzles.html?bench=): the first turn alone
+					// is graded, as in the benchmark; the page records it.
+					if (puzzle.bench && step === 0 && typeof window.SIGIL_BENCH_FIRST_TURN === 'function') {
+						try { window.SIGIL_BENCH_FIRST_TURN({ key, sfnAfter: t.sfnAfter, won: over && _engineRef.board.winner === puzzle.mover }); } catch (e) { /* page hook */ }
+					}
 					if (puzzle.kind === 'winning') {
 						// One turn to find. A stored solution (or a win on the
 						// spot) solves it; anything else is judged by the engine
@@ -3303,6 +3308,10 @@ class PuzzleOpponent {
 				const evalStones = (typeof res.stones === 'number') ? res.stones : res.score_ui * 39;
 				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + evalStones.toFixed(1) + ' stones for it).';
 				comp._puzzleFail('That lets the AI escape: it replies ' + describePuzzleActions(res.actions) + '. Puzzle failed — play on, or Retry.');
+			}
+			// SigilBench: the engine's verdict on the first turn (puzzles.html?bench=).
+			if (comp.puzzle && comp.puzzle.bench && comp.puzzleMoves === 1 && typeof window.SIGIL_BENCH_JUDGE === 'function') {
+				try { window.SIGIL_BENCH_JUDGE(res.verdict, comp.puzzleJudge); } catch (e) { /* page hook */ }
 			}
 		}
 		return res.turn;
