@@ -133,7 +133,17 @@ def main():
     os.makedirs(os.path.join(run_dir, 'transcripts'), exist_ok=True)
     sysp = system_prompt()
     meta_path = os.path.join(run_dir, 'run.json')
-    if not (a.resume and os.path.exists(meta_path)):
+    if a.resume and os.path.exists(meta_path):
+        # Never mix configurations in one run directory (Codex review, PR #60).
+        old = load_json(meta_path)
+        cur = {'provider': a.provider, 'model': model, 'settings': getattr(prov, 'settings', {}),
+               'split': a.split, 'test_set_sha256': digest,
+               'system_prompt_sha256': hashlib.sha256(sysp.encode()).hexdigest()}
+        bad = [k for k, v in cur.items() if json.loads(json.dumps(old.get(k))) != json.loads(json.dumps(v))]
+        if bad:
+            sys.exit(f'--resume: {run_dir} was run with a different ' + ', '.join(bad) +
+                     '; start a new run directory instead')
+    else:
         json.dump({
             'canary': CANARY, 'benchmark': bench_version(), 'split': a.split, 'test_set_sha256': digest,
             'provider': a.provider, 'model': model, 'settings': getattr(prov, 'settings', {}),
@@ -158,6 +168,13 @@ def main():
     grader = Grader()
     wlock = threading.Lock()
     spent = {'in': 0, 'out': 0}
+    if a.resume and os.path.exists(res_path):
+        # A resumed run's cost cap counts what was already spent, including
+        # superseded attempts (Codex review, PR #60).
+        for line in open(res_path):
+            u = json.loads(line).get('usage') or {}
+            spent['in'] += u.get('input_tokens', 0)
+            spent['out'] += u.get('output_tokens', 0)
     stop = threading.Event()
 
     def cost():

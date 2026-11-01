@@ -164,8 +164,9 @@
 
 			<div class="bench__notice" id="notice">
 				<strong>Preview.</strong> These scores are on the public <strong>dev set</strong> (100 puzzles that are
-				already on the Puzzles page). They are for building the harness, not benchmark results. The 1,000-puzzle
-				private test set is not built yet.
+				already on the Puzzles page). They are for building the harness, not benchmark results. Mates in 1–3
+				proved too easy, so the next version of the set shifts toward longer mates and every model will be re-run.
+				The 1,000-puzzle private test set is not built yet.
 			</div>
 
 			<div class="bench__filters" role="group" aria-label="Puzzle subset" id="filters">
@@ -231,7 +232,8 @@
 			<h3>Changelog</h3>
 			<ul class="footnote" id="changelog">
 				<li><strong>0.1.1-dev</strong> (2026-11-01): one response per puzzle (the reminder is gone; earlier runs
-					re-scored from their transcripts); unproven answers settled by an exhaustive resolver; GPT-6 Luna added.</li>
+					re-scored from their transcripts); an exhaustive resolver for unproven answers (not yet applied to these
+					runs); GPT-6 Luna added.</li>
 				<li><strong>0.1.0-dev</strong> (2026-10-31): public dev set, proof-based grader, first dev-set runs.</li>
 			</ul>
 
@@ -383,6 +385,9 @@
 				'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
 				'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
 				'(* output tokens estimated for them), and the original score is shown under the model name. ' +
+				(data.resolver && data.resolver.indexOf('not applied') === 0
+					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
+					: '') +
 				(unapproved ? 'The accounts used for these dev-set runs are not yet on the approved no-training list.' : '');
 		}
 

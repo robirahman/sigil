@@ -1,5 +1,5 @@
 {
- "_comment": "Runs shown on docs/sigilbench.html. Canonical copies live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>; the *_noreminder dirs are the original runs re-scored under the one-response protocol (bench/tools/rescore_no_reminder.py) and then passed through the unproven-answer resolver (python3 -m sigilbench.resolve). Rebuild with: python3 bench/tools/build_leaderboard.py --runs-root <local dir holding the gcs paths>",
+ "_comment": "Runs shown on docs/sigilbench.html. Canonical copies live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>; the *_noreminder dirs are the original runs re-scored under the one-response protocol (bench/tools/rescore_no_reminder.py) The resolver was aborted part-way (2026-11-01), so the page is built with --first-pass: no run's unproven answers are resolved. Rebuild with: python3 bench/tools/build_leaderboard.py --runs-root <local dir holding the gcs paths> --first-pass",
  "split": "dev",
  "runs": [
   {

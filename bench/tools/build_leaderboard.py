@@ -32,6 +32,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--runs-root', required=True)
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--first-pass', action='store_true',
+                    help='ignore resolver records (use when the resolver did not finish every run alike)')
     a = ap.parse_args()
     man = load_json(os.path.join(BENCH, 'leaderboard', 'runs.json'))
     dev = load_json(os.path.join(BENCH, 'dev', 'dev_set.json'))
@@ -40,6 +42,14 @@ def main():
         d = os.path.join(a.runs_root, r['gcs'].split('/', 1)[1] if r['gcs'].startswith('dev-runs/') else r['gcs'])
         meta = load_json(os.path.join(d, 'run.json'))
         rows = load(d)
+        if a.first_pass:
+            # Last NON-resolver record per puzzle, so every run is graded alike.
+            keep = {}
+            for line in open(os.path.join(d, 'results.jsonl')):
+                x = json.loads(line)
+                if 'puzzle_id' in x and not (x.get('grade') or {}).get('resolved_from'):
+                    keep[x['puzzle_id']] = x
+            rows = list(keep.values())
         if len(rows) != len(dev['puzzles']):
             sys.exit(f"{r['gcs']}: {len(rows)} graded puzzles, expected {len(dev['puzzles'])}")
         st = {}
@@ -86,6 +96,7 @@ def main():
         'benchmark': bench_version(),
         'split': man['split'],
         'split_counts': dev['counts'],
+        'resolver': 'not applied (first-pass grading for every run)' if a.first_pass else 'applied',
         'generated': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d'),
         'entries': entries,
     }

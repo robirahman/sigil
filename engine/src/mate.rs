@@ -46,11 +46,14 @@ use crate::turn::Turn;
 
 /// Position key for deduplication among siblings (side to move and turn
 /// counter are constant across siblings, so they are left out).
-pub type Key = (u64, u64, [u8; 2], [u8; 2], [u8; 2], u8);
+/// Walls (Fissure) and Providence banks are part of it: two siblings can share
+/// every stone yet differ in a wall (Fissure on an isolated empty node) or a
+/// bank, and their futures differ (Codex review, PR #60).
+pub type Key = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2], u8);
 
 fn key(b: &Board) -> Key {
     let o = match b.outcome { Outcome::Ongoing => 0, Outcome::RedWins => 1, Outcome::BlueWins => 2 };
-    (b.stones[0], b.stones[1], b.spell_counter, b.lock, b.springlock, o)
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank, o)
 }
 
 fn won_by(o: Outcome, c: Color) -> bool {
