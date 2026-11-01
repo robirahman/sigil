@@ -138,6 +138,63 @@
 		.bench li { margin: 0 0 4px; }
 		table.results .ci-txt { white-space: nowrap; }
 		.back-link { display: inline-block; margin-top: 28px; color: var(--color-accent); text-decoration: none; }
+		/* Try the dev set */
+		.try-lock { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+		.try-lock[hidden] { display: none; }
+		.try-lock input, .try input[type=text], .try select, .try textarea {
+			box-sizing: border-box;
+			padding: 6px 10px;
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface);
+			color: var(--color-text-bright);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.95em;
+			max-width: 100%;
+		}
+		.try textarea { width: 100%; min-height: 120px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; }
+		.try-btn {
+			padding: 6px 12px;
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface-raised);
+			color: var(--color-text-bright);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.try-btn:hover { border-color: var(--color-accent); }
+		.try-btn[disabled] { opacity: 0.5; cursor: default; }
+		.try-err { color: #e06c6c; font-size: 0.9em; min-height: 1.2em; margin: 2px 0 0; }
+		.try-tabs { display: flex; gap: 6px; margin: 12px 0; }
+		.try-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+		.try-row label { color: var(--color-text-muted); font-size: 0.9em; }
+		.try pre {
+			white-space: pre-wrap;
+			word-break: break-word;
+			max-height: 320px;
+			overflow: auto;
+			background: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			padding: 10px;
+			font-size: 0.8em;
+			color: var(--color-text);
+		}
+		.try details { margin: 8px 0; }
+		.try summary { cursor: pointer; color: var(--color-text-warm); }
+		.verdict { border-left: 4px solid var(--color-border); padding: 8px 12px; margin: 10px 0; background: var(--color-surface); border-radius: 6px; }
+		.verdict--correct { border-left-color: #4caf7a; }
+		.verdict--likely { border-left-color: #d9b44a; }
+		.verdict--wrong, .verdict--invalid { border-left-color: #e06c6c; }
+		.verdict small { display: block; color: var(--color-text-muted); margin-top: 4px; word-break: break-word; }
+		table.try-list { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+		table.try-list th, table.try-list td { padding: 5px 8px; border-bottom: 1px solid var(--color-bg-mid); text-align: left; }
+		table.try-list th { font-family: 'Arvo', serif; color: var(--color-text-dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em; }
+		.st-correct { color: #4caf7a; }
+		.st-likely { color: #d9b44a; }
+		.st-wrong, .st-revealed { color: #e06c6c; }
+		.try-list-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--color-border); border-radius: 6px; }
 		.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 	</style>
 </head>
@@ -202,6 +259,81 @@
 			</div>
 			<p class="footnote" id="table-note"></p>
 
+			<h3 id="try">Try the dev set</h3>
+			<p>Play the 100 dev-set puzzles yourself under benchmark conditions, or give them to an AI model and grade
+				its answers here. The dev set is password-protected. Results stay in this browser.</p>
+			<form class="try-lock" id="try-lock" autocomplete="off">
+				<label class="visually-hidden" for="try-password">Password</label>
+				<input type="password" id="try-password" placeholder="Password" autocomplete="current-password" />
+				<button class="try-btn" type="submit" id="try-unlock">Unlock</button>
+			</form>
+			<p class="try-err" id="try-err" role="alert"></p>
+
+			<div class="try" id="try-panel" hidden>
+				<div class="bench__filters try-tabs" role="group" aria-label="Who is solving">
+					<button type="button" data-tab="human" aria-pressed="true">Play it yourself</button>
+					<button type="button" data-tab="ai" aria-pressed="false">Test an AI</button>
+				</div>
+
+				<div id="try-human">
+					<p>Open a puzzle and play <strong>one turn</strong>. As in the benchmark, only your first turn is graded:
+						a proven solution or a win on the spot is correct, and any other turn is judged by the engine. You
+						can play on or retry afterwards for practice, but the first result stands.</p>
+					<p id="human-summary"></p>
+					<div class="try-list-wrap">
+						<table class="try-list">
+							<thead><tr><th>Puzzle</th><th>Task</th><th>Your result</th><th></th></tr></thead>
+							<tbody id="human-list"></tbody>
+						</table>
+					</div>
+					<div class="try-row"><button class="try-btn" type="button" id="human-reset">Clear my results</button></div>
+				</div>
+
+				<div id="try-ai" hidden>
+					<p>Give a model the same prompt the benchmark harness sends: the system prompt (rules, action format and
+						task) and the puzzle prompt (the position and its nine spells). Through an API, also offer the
+						<code>submit_answer</code> tool. In a chat window with no tools, use <em>Copy as one message</em>,
+						which asks for the turn as a JSON block instead. Then paste the model's answer below.</p>
+					<div class="try-row">
+						<label for="ai-label">Model</label>
+						<input type="text" id="ai-label" placeholder="e.g. my-model, effort high" size="28" />
+					</div>
+					<div class="try-row">
+						<label for="ai-puzzle">Puzzle</label>
+						<button class="try-btn" type="button" id="ai-prev" aria-label="Previous puzzle">&larr;</button>
+						<select id="ai-puzzle"></select>
+						<button class="try-btn" type="button" id="ai-next" aria-label="Next puzzle">&rarr;</button>
+					</div>
+					<div class="try-row">
+						<button class="try-btn" type="button" data-copy="system">Copy system prompt</button>
+						<button class="try-btn" type="button" data-copy="user">Copy puzzle prompt</button>
+						<button class="try-btn" type="button" data-copy="both">Copy as one message</button>
+						<button class="try-btn" type="button" data-copy="tool">Copy tool definition</button>
+						<button class="try-btn" type="button" id="ai-download">Download all prompts (JSON)</button>
+						<span class="footnote" id="ai-copied" aria-live="polite"></span>
+					</div>
+					<details>
+						<summary>Show the puzzle prompt</summary>
+						<pre id="ai-user-prompt"></pre>
+					</details>
+					<label for="ai-answer" class="footnote">The model's answer: its <code>submit_answer</code> input, a JSON array of actions, or a whole reply ending in a JSON block.</label>
+					<textarea id="ai-answer" spellcheck="false" placeholder='[{"type": "hard_move", "node": "c9", "pushed_to": "c3"}, ...]'></textarea>
+					<div class="try-row">
+						<button class="try-btn" type="button" id="ai-grade">Grade</button>
+						<button class="try-btn" type="button" id="ai-reference">Show a reference solution</button>
+					</div>
+					<div id="ai-verdict" aria-live="polite"></div>
+					<p class="footnote">Grading here: the turn is replayed with the site's own rules. A proven stored solution,
+						or a turn that wins on the spot, is correct. Any other turn is searched by the in-browser engine
+						(about 10 seconds), which can prove the win or find the escape but does not check that the action
+						list was a legal turn. The benchmark's own grader checks legality and proves every answer; run it with
+						<a href="https://github.com/robirahman/sigil/tree/main/bench">the harness</a> for scores you report.
+						Dev-set scores are for development only.</p>
+					<p id="ai-summary"></p>
+					<div class="try-row"><button class="try-btn" type="button" id="ai-reset">Clear results for this model</button></div>
+				</div>
+			</div>
+
 			<h3>How it works</h3>
 			<ul>
 				<li><strong>Prompt.</strong> The complete rules of the digital game, the 39-node board graph, the position
@@ -232,6 +364,7 @@
 
 			<h3>Changelog</h3>
 			<ul class="footnote" id="changelog">
+				<li><strong>Unreleased</strong>: a password-protected <a href="#try">Try the dev set</a> panel for people and AI models.</li>
 				<li><strong>0.1.1-dev</strong> (2026-11-01): one response per puzzle (the reminder is gone; earlier runs
 					re-scored from their transcripts); an exhaustive resolver for unproven answers (not yet applied to these
 					runs); GPT-6 Luna added.</li>
@@ -413,6 +546,281 @@
 			.catch(() => {
 				document.getElementById('chart').innerHTML = '<p class="footnote">The results could not be loaded.</p>';
 			});
+	})();
+	</script>
+	<script>
+	/* Try the dev set: unlock the encrypted dev set (bench/tools/build_try_devset.py),
+	   list it for people (each puzzle opens puzzles.html?bench=<id>), and grade pasted
+	   AI answers with the site's rules and the in-browser engine. */
+	(function () {
+		'use strict';
+		const ENC_URL = 'static/data/sigilbench/devset.enc.json';
+		const DATA_KEY = 'sigilbench_dev_payload';      // sessionStorage: read by puzzles.html?bench=
+		const HUMAN_KEY = 'sigilbench_try_human';       // localStorage: {id: {status, how, n, at}}
+		const AI_KEY = 'sigilbench_try_ai';             // localStorage: {label: {id: {status, how, n, at}}}
+		const LABEL_KEY = 'sigilbench_try_ai_label';
+		const $ = (id) => document.getElementById(id);
+		const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+		const store = {
+			get(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } },
+			set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* blocked */ } },
+		};
+		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first', invalid: 'Invalid answer' };
+		let dev = null;
+
+		const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+		async function decrypt(enc, password) {
+			const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+			const key = await crypto.subtle.deriveKey(
+				{ name: 'PBKDF2', hash: enc.kdf.hash, iterations: enc.kdf.iterations, salt: b64(enc.kdf.salt) },
+				base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+			const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(enc.cipher.iv) }, key, b64(enc.ciphertext));
+			const text = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+			return JSON.parse(text);
+		}
+
+		function opened(d) {
+			dev = d;
+			try { sessionStorage.setItem(DATA_KEY, JSON.stringify(d)); } catch (e) { /* playing on the board needs it */ }
+			$('try-lock').hidden = true;
+			$('try-err').textContent = '';
+			$('try-panel').hidden = false;
+			const sel = $('ai-puzzle');
+			sel.innerHTML = d.puzzles.map((p, i) => '<option value="' + i + '">' + esc(p.id) + ' · mate in ' + p.n + ', ' + p.mover + ' to move</option>').join('');
+			$('ai-label').value = store.get(LABEL_KEY, '') || '';
+			drawHuman();
+			showPuzzle();
+			drawAi();
+		}
+
+		$('try-lock').addEventListener('submit', async (ev) => {
+			ev.preventDefault();
+			const pw = $('try-password').value;
+			if (!pw) return;
+			$('try-unlock').disabled = true;
+			$('try-err').textContent = '';
+			try {
+				if (!window.crypto || !crypto.subtle || typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decrypt the dev set.');
+				const enc = await fetch(ENC_URL, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+				let d;
+				try { d = await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); }
+				opened(d);
+			} catch (e) {
+				$('try-err').textContent = e.message || String(e);
+			} finally {
+				$('try-unlock').disabled = false;
+			}
+		});
+
+		document.querySelector('#try-panel .try-tabs').addEventListener('click', (ev) => {
+			const b = ev.target.closest('button[data-tab]');
+			if (!b) return;
+			for (const x of document.querySelectorAll('#try-panel .try-tabs button')) x.setAttribute('aria-pressed', String(x === b));
+			$('try-human').hidden = b.dataset.tab !== 'human';
+			$('try-ai').hidden = b.dataset.tab !== 'ai';
+		});
+
+		function summary(results) {
+			const by = { 1: [0, 0], 2: [0, 0], 3: [0, 0], 4: [0, 0] };
+			let c = 0, t = 0;
+			for (const p of dev.puzzles) {
+				const r = results[p.id];
+				if (!r || !r.status) continue;
+				t++;
+				by[p.n] = by[p.n] || [0, 0];
+				by[p.n][1]++;
+				if (r.status === 'correct') { c++; by[p.n][0]++; }
+			}
+			if (!t) return 'No puzzles attempted yet.';
+			const parts = Object.keys(by).filter((n) => by[n][1]).map((n) => 'mate in ' + n + ': ' + by[n][0] + '/' + by[n][1]);
+			return c + ' correct of ' + t + ' attempted (' + Math.round(100 * c / t) + '%) · ' + parts.join(' · ');
+		}
+		const statusCell = (r) => r && r.status ? '<span class="st-' + r.status + '" title="' + esc(r.how || '') + '">' + STATUS[r.status] + '</span>' : '–';
+
+		function drawHuman() {
+			const res = store.get(HUMAN_KEY, {});
+			$('human-summary').textContent = 'You: ' + summary(res);
+			$('human-list').innerHTML = dev.puzzles.map((p) =>
+				'<tr><td>' + esc(p.id) + '</td><td>Mate in ' + p.n + ', ' + (p.mover === 'red' ? 'Red' : 'Blue') + ' to move</td>' +
+				'<td>' + statusCell(res[p.id]) + '</td>' +
+				'<td><a href="puzzles.html?bench=' + encodeURIComponent(p.id) + '">' + (res[p.id] ? 'Practice' : 'Play') + '</a></td></tr>').join('');
+		}
+		$('human-reset').addEventListener('click', () => {
+			if (!confirm('Clear all your dev-set results on this device?')) return;
+			store.set(HUMAN_KEY, {});
+			drawHuman();
+		});
+
+		// ---- AI ----
+		const cur = () => dev.puzzles[parseInt($('ai-puzzle').value, 10) || 0];
+		const label = () => ($('ai-label').value || '').trim() || 'unnamed model';
+		function showPuzzle() {
+			$('ai-user-prompt').textContent = cur().user_prompt;
+			$('ai-verdict').innerHTML = '';
+			$('ai-answer').value = '';
+			const r = (store.get(AI_KEY, {})[label()] || {})[cur().id];
+			if (r) $('ai-verdict').innerHTML = verdictHtml(r, 'Already graded for ' + label() + ': ');
+		}
+		function drawAi() {
+			const res = store.get(AI_KEY, {})[label()] || {};
+			$('ai-summary').textContent = label() + ': ' + summary(res);
+		}
+		$('ai-puzzle').addEventListener('change', showPuzzle);
+		$('ai-prev').addEventListener('click', () => { const s = $('ai-puzzle'); if (s.selectedIndex > 0) { s.selectedIndex--; showPuzzle(); } });
+		$('ai-next').addEventListener('click', () => { const s = $('ai-puzzle'); if (s.selectedIndex < s.options.length - 1) { s.selectedIndex++; showPuzzle(); } });
+		$('ai-label').addEventListener('change', () => { store.set(LABEL_KEY, $('ai-label').value.trim()); drawAi(); showPuzzle(); });
+
+		function copyText(kind) {
+			const p = cur();
+			if (kind === 'system') return dev.system_prompt;
+			if (kind === 'user') return p.user_prompt;
+			if (kind === 'tool') return JSON.stringify(dev.tool, null, 2);
+			return dev.system_prompt + '\n\n' + dev.no_tool_note + '\n\n---\n\n' + p.user_prompt.replace(
+				'Submit your turn with the `' + dev.tool.name + '` tool.', 'End your reply with your turn as a JSON array of actions in a ```json block.');
+		}
+		document.querySelectorAll('#try-ai [data-copy]').forEach((b) => b.addEventListener('click', async () => {
+			const msg = $('ai-copied');
+			try { await navigator.clipboard.writeText(copyText(b.dataset.copy)); msg.textContent = 'Copied.'; }
+			catch (e) { msg.textContent = 'Copy failed; select the text in "Show the puzzle prompt" instead.'; }
+			setTimeout(() => { msg.textContent = ''; }, 2500);
+		}));
+		$('ai-download').addEventListener('click', () => {
+			// Model inputs only: no solution keys or reference solutions.
+			const prompts = {
+				canary: dev.canary, benchmark: dev.benchmark, name: dev.name,
+				system_prompt: dev.system_prompt, no_tool_note: dev.no_tool_note, tool: dev.tool,
+				puzzles: dev.puzzles.map((p) => ({ id: p.id, n: p.n, mover: p.mover, sfn: p.sfn, user_prompt: p.user_prompt })),
+			};
+			const blob = new Blob([JSON.stringify(prompts, null, 1)], { type: 'application/json' });
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob);
+			a.download = 'sigilbench-dev-prompts.json';
+			document.body.appendChild(a);
+			a.click();
+			setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+		});
+		$('ai-reference').addEventListener('click', () => {
+			// Shown before this model's answer is graded, the puzzle counts as not solved for it.
+			const p = cur(), who = label();
+			const all = store.get(AI_KEY, {});
+			const prior = (all[who] || {})[p.id];
+			if (!prior || prior.pending) {
+				if (!confirm('Showing a solution records ' + p.id + ' as not solved for "' + who + '". Show it?')) return;
+				all[who] = all[who] || {};
+				all[who][p.id] = { status: 'revealed', how: 'reference solution shown before grading', n: p.n, at: Date.now() };
+				store.set(AI_KEY, all);
+				drawAi();
+			}
+			$('ai-verdict').innerHTML = '<div class="verdict"><strong>One proven solution</strong><small>Other turns may also win.</small><pre>'
+				+ esc(JSON.stringify(cur().reference_solution, null, 1)) + '</pre></div>';
+		});
+		$('ai-reset').addEventListener('click', () => {
+			if (!confirm('Clear the dev-set results for "' + label() + '" on this device?')) return;
+			const all = store.get(AI_KEY, {});
+			delete all[label()];
+			store.set(AI_KEY, all);
+			drawAi();
+			showPuzzle();
+		});
+
+		function verdictHtml(r, prefix) {
+			return '<div class="verdict verdict--' + r.status + '"><strong>' + esc((prefix || '') + STATUS[r.status]) + '</strong>'
+				+ (r.how ? '<small>' + esc(r.how) + '</small>' : '') + '</div>';
+		}
+
+		// The site's rules and engine, loaded on the first grade.
+		const ENGINE_SCRIPTS = [
+			'static/scripts/engine/constants.js', 'static/scripts/engine/notation.js', 'static/scripts/engine/board.js',
+			'static/scripts/engine/moves.js', 'static/scripts/engine/spells.js', 'static/scripts/engine/sim-board.js',
+			'static/scripts/engine/features.js', 'static/scripts/engine/enumerator.js', 'static/scripts/engine/ai-player.js',
+			'static/scripts/engine/game-controller.js', 'static/scripts/engine/game-review.js?v=36',
+			'static/scripts/engine/rust-ai.js?v=35', 'static/scripts/game-board-local.js?v=37',
+			'static/scripts/sigilbench-replay.js?v=1',
+		];
+		let engineReady = null;
+		function loadEngine() {
+			if (engineReady) return engineReady;
+			engineReady = ENGINE_SCRIPTS.reduce((p, src) => p.then(() => new Promise((resolve, reject) => {
+				const s = document.createElement('script');
+				s.src = src;
+				s.onload = resolve;
+				s.onerror = () => reject(new Error('could not load ' + src));
+				document.head.appendChild(s);
+			})), Promise.resolve()).then(() => {
+				// Replays apply the whole turn at once, without the board's animation pacing.
+				AI_REPLAY_INSTANT = true;   // eslint-disable-line no-undef
+			});
+			engineReady.catch(() => { engineReady = null; });
+			return engineReady;
+		}
+
+		async function grade(p, text) {
+			let actions;
+			try { actions = SigilBenchReplay.extractActions(text); } catch (e) { return { status: 'invalid', how: e.message }; }
+			let r;
+			try { r = await SigilBenchReplay.replay(p.sfn, actions); } catch (e) { return { status: 'invalid', how: String((e && e.message) || e).split('\n')[0] }; }
+			if ((p.solution_keys || []).indexOf(r.key) >= 0) return { status: 'correct', how: 'A proven solution.' };
+			if (r.gameover && r.winner === p.mover) return { status: 'correct', how: 'The turn wins on the spot.' };
+			if (p.n === 1) return { status: 'wrong', how: 'The turn does not win the game. Position after it: ' + r.after };
+			const res = await getRustEngineWorker().judge({ sfn: r.after, plies: 2 * (p.n - 1), timeMs: 10000, ttBits: 18 });   // eslint-disable-line no-undef
+			if (!res || !res.ok) throw new Error('engine error: ' + ((res && res.error) || 'unknown'));
+			const how = res.exhaustive ? 'exhaustively' : 'at depth ' + res.depth;
+			const caveat = ' Not a stored solution; legality of the action list is not checked here.';
+			if (res.verdict === 'mate') return { status: 'correct', how: 'The engine proves it forces the win (' + how + ').' + caveat };
+			if (res.verdict === 'likely_mate') return { status: 'likely', how: 'The engine sees a forced win but could not prove it in time (' + how + ').' + caveat };
+			const reply = typeof describePuzzleActions === 'function' ? describePuzzleActions(res.actions) : 'a defence';   // eslint-disable-line no-undef
+			if (res.verdict === 'mate_slow') return { status: 'wrong', how: 'It wins, but not within ' + p.n + ' turns: the engine replies ' + reply + ' (' + how + ').' };
+			return { status: 'wrong', how: 'The opponent escapes with ' + reply + ' (' + how + ').' };
+		}
+
+		// The puzzle, answer and model label are pinned when grading starts, and
+		// the controls that change them are locked until it ends.
+		const LOCK_IDS = ['ai-grade', 'ai-label', 'ai-puzzle', 'ai-prev', 'ai-next', 'ai-reset'];
+		const lockAi = (on) => LOCK_IDS.forEach((id) => { $(id).disabled = on; });
+		$('ai-grade').addEventListener('click', async () => {
+			const p = cur();
+			const who = label();
+			const text = $('ai-answer').value;
+			if (!text.trim()) return;
+			// One response per puzzle: an answer is stored as not solved before
+			// grading starts, so leaving mid-grade cannot buy a second attempt.
+			const before = store.get(AI_KEY, {});
+			const prior = (before[who] || {})[p.id];
+			const first = !prior || !!prior.pending;
+			if (first) {
+				before[who] = before[who] || {};
+				before[who][p.id] = { status: 'wrong', how: 'left before grading finished', n: p.n, at: Date.now(), pending: true };
+				store.set(AI_KEY, before);
+			}
+			lockAi(true);
+			$('ai-verdict').innerHTML = '<div class="verdict"><strong>Grading…</strong></div>';
+			let r;
+			try {
+				await loadEngine();
+				r = await grade(p, text);
+			} catch (e) {
+				// Our failure, not the answer's: the attempt is not counted.
+				if (first) { const a = store.get(AI_KEY, {}); if (a[who]) delete a[who][p.id]; store.set(AI_KEY, a); }
+				$('ai-verdict').innerHTML = '<div class="verdict verdict--invalid"><strong>Could not grade</strong><small>' + esc(e.message || e) + '</small></div>';
+				lockAi(false);
+				return;
+			}
+			lockAi(false);
+			if (first) {
+				const all = store.get(AI_KEY, {});
+				all[who] = all[who] || {};
+				all[who][p.id] = Object.assign({ n: p.n, at: Date.now() }, r);
+				store.set(AI_KEY, all);
+			}
+			$('ai-verdict').innerHTML = verdictHtml(r) + (first ? '' : '<p class="footnote">Not recorded: ' + esc(who) + ' already has a result for this puzzle (one response per puzzle). Clear its results to start over.</p>');
+			drawAi();
+		});
+
+		// Already unlocked in this tab (coming back from a puzzle).
+		try {
+			const d = JSON.parse(sessionStorage.getItem(DATA_KEY) || 'null');
+			if (d && Array.isArray(d.puzzles)) opened(d);
+		} catch (e) { /* locked */ }
 	})();
 	</script>
 </body>
