@@ -213,12 +213,13 @@
 					including at the output-token cap, scores as <em>no answer</em>.</li>
 				<li><strong>Grading by proof.</strong> The browser's own rules replay the turn. The engine then checks
 					that a legal turn reaches the same position, and enumerates every reply to prove (or refute) the
-					forced win. Mate-in-3 answers the fast pass cannot settle go to an exhaustive resolver that tries
-					every continuation, so they too end up proven right or wrong; any that exhaust its time limit stay
-					<em>unproven</em> and count as not solved.</li>
+					forced win. Mate-in-3 answers this fast pass cannot settle are <em>unproven</em> and count as not
+					solved. From version 0.1.1 an exhaustive resolver that tries every continuation re-grades them as
+					proven right or wrong; <strong>the dev-set runs shown here were not passed through it</strong>, so their
+					unproven answers are first-pass results.</li>
 				<li><strong>Outcomes.</strong> <em>wrong</em>: legal but proven not to win in time. <em>no answer</em>:
-					the response ended without a turn. <em>unproven</em>: legal, no proof either way within the
-					resolver's time limit. <em>illegal</em>: no legal turn reaches the position. <em>invalid</em>:
+					the response ended without a turn. <em>unproven</em>: legal, but the grader found no proof either
+					way. <em>illegal</em>: no legal turn reaches the position. <em>invalid</em>:
 					the action list is malformed. <em>grader error</em>: the proof hit its size limit.</li>
 				<li><strong>Contamination.</strong> The test set will be 1,000 never-published positions kept in private
 					storage. Its SHA-256 will be published before any model is run, and evaluation accounts must be

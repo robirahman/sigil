@@ -172,7 +172,10 @@ def main():
         # A resumed run's cost cap counts what was already spent, including
         # superseded attempts (Codex review, PR #60).
         for line in open(res_path):
-            u = json.loads(line).get('usage') or {}
+            rec = json.loads(line)
+            if (rec.get('grade') or {}).get('resolved_from'):
+                continue        # a resolver record repeats its answer's usage
+            u = rec.get('usage') or {}
             spent['in'] += u.get('input_tokens', 0)
             spent['out'] += u.get('output_tokens', 0)
     stop = threading.Event()
