@@ -1,0 +1,5 @@
+{"bindings":[
+ {"role":"roles/storage.admin","members":["user:robi@intelligence.org"]},
+ {"role":"roles/storage.objectViewer","members":["serviceAccount:sigilbench-eval@focus-surfer-494820-g0.iam.gserviceaccount.com"]},
+ {"role":"roles/storage.objectCreator","members":["serviceAccount:sigilbench-eval@focus-surfer-494820-g0.iam.gserviceaccount.com"]}
+],"etag":"CAI="}

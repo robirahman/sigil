@@ -34,17 +34,26 @@
 //! position is the natural unit here.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+
+/// Threads `judge_turn_exhaustive` uses for each exhaustive mate-in-2 decision
+/// (bench_grade: BENCH_THREADS). 1 = single-threaded.
+static RESOLVE_THREADS: AtomicUsize = AtomicUsize::new(1);
+pub fn set_resolve_threads(n: usize) { RESOLVE_THREADS.store(n.max(1), AtomicOrdering::Relaxed); }
 
 use crate::board::{Board, Color, Outcome};
 use crate::turn::Turn;
 
 /// Position key for deduplication among siblings (side to move and turn
 /// counter are constant across siblings, so they are left out).
-pub type Key = (u64, u64, [u8; 2], [u8; 2], [u8; 2], u8);
+/// Walls (Fissure) and Providence banks are part of it: two siblings can share
+/// every stone yet differ in a wall (Fissure on an isolated empty node) or a
+/// bank, and their futures differ (Codex review, PR #60).
+pub type Key = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2], u8);
 
 fn key(b: &Board) -> Key {
     let o = match b.outcome { Outcome::Ongoing => 0, Outcome::RedWins => 1, Outcome::BlueWins => 2 };
-    (b.stones[0], b.stones[1], b.spell_counter, b.lock, b.springlock, o)
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank, o)
 }
 
 fn won_by(o: Outcome, c: Color) -> bool {
@@ -557,4 +566,202 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], m
             if c == Color::Red { "red" } else { "blue" },
             m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
+}
+
+// ---------------------------------------------------------------------------
+// SigilBench grading (`bench/`): judge ONE submitted turn by proof.
+// ---------------------------------------------------------------------------
+
+/// Time for each re-nomination `judge_turn` makes before calling a turn unproven.
+pub const BENCH_RENOMINATE_MS: u64 = 3_000;
+
+/// Verdict on a submitted turn, by `judge_turn`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnVerdict {
+    /// Proven: the turn forces a win within the allowed number of the mover's
+    /// turns (counting the submitted turn). `true` when it wins on the spot.
+    Mate { immediate: bool },
+    /// Proven NOT to force a win within the allowed turns (exhaustive).
+    NotMate,
+    /// No proof either way: some reply leaves the mover no mate-in-1, and the
+    /// nominate-then-prove search found no mate-in-2 after it. Mate-in-3 only.
+    Unproven,
+}
+
+/// Full position identity for matching a replayed turn against the legal
+/// successors: everything the SFN carries except the side to move, the turn
+/// counter and the (constant) spell list.
+pub type FullKey = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2]);
+
+pub fn full_key(b: &Board) -> FullKey {
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank)
+}
+
+/// The legal successor of `b` (side to move plays) whose position matches
+/// `claimed` (an after-position replayed from a submitted action list, e.g. by
+/// the browser's applyAITurn), as `child` builds it (end-of-turn effects and
+/// the outcome applied). `Ok(None)` = no legal turn reaches that position.
+pub fn legal_successor(b: &Board, claimed: &Board, budget: u64, time_ms: u64)
+    -> Result<Option<Board>, MateError>
+{
+    let mut s = Solver::new(budget, time_ms);
+    let want = full_key(claimed);
+    let c = b.to_move;
+    for t in s.turns(b, c)? {
+        s.tick()?;
+        let n = child(b, &t, c);
+        if full_key(&n) == want { return Ok(Some(n)); }
+    }
+    Ok(None)
+}
+
+/// SigilBench: does the mover's turn that produced `after` (opponent to move,
+/// as `child` builds it) force a win within `n` of the mover's turns, counting
+/// the turn just played? A faster win counts (a mate-in-1 answer to a
+/// mate-in-3 puzzle is correct). Proofs:
+///
+/// * the turn itself wins: `Mate { immediate: true }`.
+/// * n = 2: every reply is enumerated and, after each, the mover's mate-in-1
+///   is settled by full enumeration, so both `Mate` and `NotMate` are proofs.
+/// * n = 3: a reply that wins outright, or (none needing more) is a proof of
+///   `NotMate`; otherwise each reply without a mate-in-1 needs a mate-in-2,
+///   found by nominate-then-prove (`has_mate_in_le2`). A miss there is NOT a
+///   refutation, so it returns `Unproven` rather than `NotMate`.
+/// * n >= 4 is not supported yet (`Unproven` unless decided by the cheap
+///   checks).
+pub fn judge_turn(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n, false);
+    (r, s.stats)
+}
+
+/// `judge_turn` that never returns `Unproven` for n <= 3: every reply that
+/// leaves no mate-in-1 is settled by an EXHAUSTIVE mate-in-2 decision
+/// (`has_mate_in_le2_exhaustive`), so both `Mate` and `NotMate` are proofs.
+/// Far more expensive in the refutation case (every mover turn after the
+/// refuting reply needs its own refuting reply plus a full no-mate-in-1
+/// enumeration), so it is the resolver for answers `judge_turn` left
+/// unproven, not the first pass. `Err(Budget)` = still unresolved.
+pub fn judge_turn_exhaustive(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n, true);
+    (r, s.stats)
+}
+
+impl Solver {
+    /// Exhaustive: does `c` (to move at `b`) have a forced win in at most 2 of
+    /// its turns? Mate-in-1 first, then the nominated mate-in-2, then EVERY
+    /// distinct first turn is tested with `forced_after`, which is exhaustive
+    /// at both plies. `false` is therefore a proof that no mate-in-2 exists.
+    /// Parallel over first turns when `RESOLVE_THREADS` > 1.
+    fn has_mate_in_le2_exhaustive(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        // Cheap nominated pass (also seeds the killer replies).
+        if self.has_mate_in_le2(b, c)? { return Ok(true); }
+        let cands: Vec<Board> = self.successors(b, c)?.into_iter().map(|(_, n)| n)
+            .filter(|n| n.outcome == Outcome::Ongoing)   // a win was caught by has_mate_in_1
+            .collect();
+        let threads = RESOLVE_THREADS.load(AtomicOrdering::Relaxed).min(cands.len()).max(1);
+        if threads <= 1 {
+            for n in &cands {
+                if self.forced_after(n, c)?.is_some() { return Ok(true); }
+            }
+            return Ok(false);
+        }
+        // Workers take first turns off a shared index; any proof stops them
+        // all. A refutation needs every worker to finish without error.
+        let found = AtomicBool::new(false);
+        let next = AtomicUsize::new(0);
+        let (budget, deadline, killers) = (self.budget, self.deadline, self.killers.clone());
+        let results: Vec<(Result<(), MateError>, u64)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = (0..threads).map(|_| {
+                let (found, next, cands, killers) = (&found, &next, &cands, killers.clone());
+                sc.spawn(move || {
+                    let mut w = Solver::worker(budget, deadline, killers);
+                    let r = loop {
+                        if found.load(AtomicOrdering::Relaxed) { break Ok(()); }
+                        let i = next.fetch_add(1, AtomicOrdering::Relaxed);
+                        if i >= cands.len() { break Ok(()); }
+                        match w.forced_after(&cands[i], c) {
+                            Ok(Some(_)) => { found.store(true, AtomicOrdering::Relaxed); break Ok(()); }
+                            Ok(None) => {}
+                            Err(e) => break Err(e),
+                        }
+                    };
+                    (r, w.stats.nodes)
+                })
+            }).collect();
+            hs.into_iter().map(|h| h.join().expect("resolver worker panicked")).collect()
+        });
+        let mut err = None;
+        for (r, nodes) in results {
+            self.stats.nodes += nodes;
+            if let Err(e) = r { err = Some(e); }
+        }
+        if found.load(AtomicOrdering::Relaxed) { return Ok(true); }
+        match err { Some(e) => Err(e), None => Ok(false) }
+    }
+
+    /// A solver for one resolver thread: no nominating search is needed
+    /// (`forced_after` never nominates), so its table is tiny.
+    fn worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>) -> Self {
+        Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
+                 killers, se: crate::search::Search::new(10) }
+    }
+
+    fn judge_turn(&mut self, after: &Board, c: Color, n: u8, exhaustive: bool) -> Result<TurnVerdict, MateError> {
+        if won_by(after.outcome, c) { return Ok(TurnVerdict::Mate { immediate: true }); }
+        if after.outcome != Outcome::Ongoing || n <= 1 { return Ok(TurnVerdict::NotMate); }
+        let o = c.other();
+        let replies = self.successors(after, o)?;
+        // Cheap pass first: an outright win for the defender refutes at once.
+        if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Ok(TurnVerdict::NotMate); }
+        let mut need_m2: Vec<Board> = Vec::new();
+        for (_, rb) in &replies {
+            if rb.outcome != Outcome::Ongoing { continue; }      // the reply loses on the spot
+            if self.has_mate_in_1(rb, c)? { continue; }
+            if n == 2 { return Ok(TurnVerdict::NotMate); }       // exhaustive: no mate-in-1 here
+            need_m2.push(*rb);
+        }
+        if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
+        if n > 3 { return Ok(TurnVerdict::Unproven); }
+        if exhaustive {
+            // Cheap proofs first: a reply whose mate-in-2 the nominator finds
+            // never needs the exhaustive walk. The rest are decided exactly;
+            // the first reply with no mate-in-2 at all refutes the answer.
+            let mut hard: Vec<Board> = Vec::new();
+            for rb in &need_m2 {
+                if !self.has_mate_in_le2(rb, c)? { hard.push(*rb); }
+            }
+            // Defender's likeliest refutations first (strength-engine ORDER
+            // only): then usually one exhaustive "no mate-in-2" proof settles it.
+            if hard.len() > 1 {
+                self.check_deadline()?;
+                let o = c.other();
+                let _ = self.se.go(after, o, 3, BENCH_RENOMINATE_MS);
+                let mut score: HashMap<Key, i32> = HashMap::new();
+                for (t, v) in self.se.root_scores() { score.insert(key(&child(after, t, o)), *v); }
+                hard.sort_by_key(|rb| -(score.get(&key(rb)).copied().unwrap_or(i32::MIN / 2) as i64));
+            }
+            for rb in &hard {
+                if !self.has_mate_in_le2_exhaustive(rb, c)? { return Ok(TurnVerdict::NotMate); }
+            }
+            return Ok(TurnVerdict::Mate { immediate: false });
+        }
+        for rb in &need_m2 {
+            if self.has_mate_in_le2(rb, c)? { continue; }
+            // The inner nomination is a 250 ms search; before calling a turn
+            // unproven, nominate again with a longer 3-ply and a 5-ply search.
+            let mut cands = self.nominate(rb, c, 3, BENCH_RENOMINATE_MS)?;
+            cands.extend(self.nominate(rb, c, 5, BENCH_RENOMINATE_MS)?);
+            cands.sort();
+            cands.dedup();
+            if self.mate2_lines(rb, c, &cands, false, 1)?.is_empty() { return Ok(TurnVerdict::Unproven); }
+        }
+        Ok(TurnVerdict::Mate { immediate: false })
+    }
 }

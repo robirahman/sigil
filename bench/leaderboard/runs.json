@@ -1,0 +1,73 @@
+{
+ "_comment": "Runs shown on docs/sigilbench.html. Canonical copies live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>; the *_noreminder dirs are the original runs re-scored under the one-response protocol (bench/tools/rescore_no_reminder.py) The resolver was aborted part-way (2026-11-01), so the page is built with --first-pass: no run's unproven answers are resolved. Rebuild with: python3 bench/tools/build_leaderboard.py --runs-root <local dir holding the gcs paths> --first-pass",
+ "split": "dev",
+ "runs": [
+  {
+   "gcs": "dev-runs/2026-10-31/haiku_high_128k_noreminder",
+   "label": "Claude Haiku 5.5",
+   "config": "effort high, 128k output"
+  },
+  {
+   "gcs": "dev-runs/2026-10-31/gemini38flash_high_noreminder",
+   "label": "Gemini 3.8 Flash",
+   "config": "thinking high, 64k output"
+  },
+  {
+   "gcs": "dev-runs/2026-10-31/haiku_medium_noreminder",
+   "label": "Claude Haiku 5.5",
+   "config": "effort medium, 64k output"
+  },
+  {
+   "gcs": "dev-runs/2026-10-31/luna_high_noreminder",
+   "label": "GPT-6 Luna",
+   "config": "effort high, 100k output"
+  },
+  {
+   "gcs": "dev-runs/2026-10-31/haiku_full_noreminder",
+   "label": "Claude Haiku 5.5",
+   "config": "effort high, 64k output"
+  }
+ ],
+ "baselines": [
+  {
+   "id": "random",
+   "label": "Random legal turn",
+   "config": "uniform over distinct legal positions, seed 0",
+   "date": "2026-10-31",
+   "git_commit": "9cc9cc2",
+   "correct": 0,
+   "total": 100,
+   "by_n": {
+    "1": [
+     0,
+     34
+    ],
+    "2": [
+     0,
+     33
+    ],
+    "3": [
+     0,
+     33
+    ]
+   },
+   "status_counts": {
+    "wrong": 69,
+    "unproven": 28,
+    "grader_error": 3
+   }
+  },
+  {
+   "id": "engine",
+   "label": "Sigil NNUE engine",
+   "config": "pending",
+   "pending": true
+  },
+  {
+   "id": "humans",
+   "label": "Human experts (Robi, Andy)",
+   "config": "pending",
+   "pending": true
+  }
+ ]
+}
