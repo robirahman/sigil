@@ -578,6 +578,15 @@ function _emptyReview(opts) {
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+/** How long a review waits on a stored-review lookup before computing it here. */
+const REVIEW_LOOKUP_TIMEOUT_MS = 4000;
+/** `promise`, or null when it has not settled within REVIEW_LOOKUP_TIMEOUT_MS. */
+function _reviewLookup(promise) {
+	let timer;
+	const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), REVIEW_LOOKUP_TIMEOUT_MS); });
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Returns an object with AI-review state + methods that can be spread into an
  * Alpine.data() factory's return value. Both `game-board-local.js` and
@@ -676,7 +685,13 @@ function aiReviewMixin() {
 			//   - deep requested + only quick cached (or none) → recompute deep,
 			//     overwriting the cached entry
 			const gameId = this._roomCodeForReview;
-			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
+			// Offline, the stored reviews are out of reach: an RTDB once() then
+			// waits for a connection that never comes, so the review would never
+			// start. Skip the lookups when the browser knows it is offline, and
+			// give up on them after REVIEW_LOOKUP_TIMEOUT_MS otherwise (a dead
+			// connection that still reads as online) -- the review is computed here.
+			const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+			const db = (online && typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
 			// Stored reviews, best first: the Rust engine's offline depth-6
 			// evaluation (game_evals/<roomCode>, when it describes this game), a
 			// cached Deep Review, then for a Quick request the server's analysis
@@ -685,13 +700,13 @@ function aiReviewMixin() {
 			let stored = null, cached = null;
 			if (db && gameId && typeof loadGameEvals === 'function') {
 				try {
-					const doc = await loadGameEvals(db, gameId);
+					const doc = await _reviewLookup(loadGameEvals(db, gameId));
 					stored = doc ? rustEvalsToReview(doc, gameLog) : null;
 				} catch (e) { /* fall through to the cached review */ }
 			}
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
-					const c = await loadGameReview(db, gameId);
+					const c = await _reviewLookup(loadGameReview(db, gameId));
 					cached = c && okVersions.includes(c.modelVersion) ? c : null;
 				} catch (e) { /* fall through to compute */ }
 			}
@@ -717,7 +732,7 @@ function aiReviewMixin() {
 					try {
 						// Quick reviews take the positions the server already searched.
 						const cached = mode === 'quick' && db && typeof loadPositionEvals === 'function'
-							? await loadPositionEvals(db, _reviewPositions(gameLog).slice(0, -1)).catch(() => null) : null;
+							? await _reviewLookup(loadPositionEvals(db, _reviewPositions(gameLog).slice(0, -1))).catch(() => null) : null;
 						const searched = [];
 						result = await reviewGameRust(gameLog, mode, progress, this.winner, { cached, searched });
 						// The rest go to the server, which searches them again before
