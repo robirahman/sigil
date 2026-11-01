@@ -7,6 +7,9 @@
  *   {"ok": true, "after": <SFN, opponent to move>, "key": <puzzleSfnKey>,
  *    "gameover": bool, "winner": "red"|"blue"|null}
  *   {"ok": false, "error": "..."}            (malformed action list)
+ *   {"ok": false, "illegal": true, "error": "..."}
+ *                                            (a pushed_to that is not one of the
+ *                                             push destinations: an illegal push)
  *
  * The replay is exactly the page's (tools/puzzle-smoke.js --replay and
  * rust-ai.js rustActionsToTurn): applyAITurn, update, the Seal of Destruction
@@ -44,7 +47,7 @@ const FILES = [
 for (const f of FILES) vm.runInContext(fs.readFileSync(f, 'utf8'), sandbox, { filename: f });
 vm.runInContext('AI_REPLAY_INSTANT = true', sandbox);
 const G = vm.runInContext(`({ SigilBoard, SimBoard, sfnToDict, normalizeVariant, applyAITurn,
-	sealOfDestructionBurn, boardToSfn, puzzleSfnKey, NODE_ORDER })`, sandbox);
+	sealOfDestructionBurn, boardToSfn, puzzleSfnKey, NODE_ORDER, findPushOptions })`, sandbox);
 
 // Field -> kind of value. Anything else in an action is rejected, so a typo
 // ("pushed" for "pushed_to") is an error rather than silently ignored.
@@ -105,6 +108,8 @@ function validate(actions, spellNames) {
 	});
 }
 
+function illegal(msg) { const e = new Error(msg); e.illegal = true; return e; }
+
 async function replay(sfn, actions) {
 	const d = G.sfnToDict(sfn);
 	const b = new G.SigilBoard(null, G.normalizeVariant(d && d.variant));
@@ -115,7 +120,23 @@ async function replay(sfn, actions) {
 	const probe = sim.copy();
 	probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 	probe.getBoardStatePayload = () => ({});
-	await G.applyAITurn(probe, { actions }, color, () => {});
+	// One action at a time (applyAITurn keeps no state between actions), so
+	// each push destination can be checked against the board it applies to.
+	// applyAITurn itself would silently replace an impossible pushed_to with
+	// its first option, grading a turn the model did not submit.
+	const enemy = color === 'red' ? 'blue' : 'red';
+	for (const [i, a] of actions.entries()) {
+		const pushes = (a.type === 'hard_move' || a.type === 'blink') && probe.stones[a.node] === enemy;
+		if (a.pushed_to != null) {
+			if (!pushes) throw illegal(`action ${i + 1} (${a.type}): pushed_to ${a.pushed_to}, but nothing is pushed (${a.node} holds no enemy stone)`);
+			const r = G.findPushOptions(probe, a.node, color);
+			if (!r.options.includes(a.pushed_to)) {
+				throw illegal(`action ${i + 1} (${a.type} ${a.node}): pushed_to ${a.pushed_to} is not a push destination ` +
+					(r.options.length ? `(nearest empty nodes: ${r.options.join(', ')})` : '(the stone is crushed)'));
+			}
+		}
+		await G.applyAITurn(probe, { actions: [a] }, color, () => {});
+	}
 	probe.update();
 	G.sealOfDestructionBurn(probe, color);
 	probe.checkGameOver(color);
@@ -137,6 +158,7 @@ rl.on('line', (line) => {
 			out = await replay(req.sfn, req.actions);
 		} catch (e) {
 			out = { ok: false, error: String((e && e.message) || e).split('\n')[0].slice(0, 300) };
+			if (e && e.illegal) out.illegal = true;
 		}
 		process.stdout.write(JSON.stringify(out) + '\n');
 	});

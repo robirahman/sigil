@@ -83,9 +83,11 @@ These are documented in `actions.md`:
 - `applyAITurn` does not check legality step by step:
   - `move` onto an enemy stone overwrites it;
   - `hard_move` onto an empty node creates an enemy stone at the push destination;
-  - a `pushed_to` that is not among the push options is silently replaced by the first
-    option (T24b).
   - In each of these cases bench_grade catches the resulting impossible position.
+- Since 0.2.0-dev, apply.js checks every non-null `pushed_to` against the push options on
+  the board it applies to and returns `illegal` when it is not one of them (T24b). Before,
+  `applyAITurn` silently replaced it with the first option, so the graded position was not
+  the one the model submitted.
 - Order errors are invisible whenever a legal reordering reaches the same position. Writing
   the Providence placement after the dash is an example (case "Providence placement written
   after the dash"). The grader accepts such lists. This is harmless, since the position is
@@ -161,7 +163,7 @@ These are documented in `actions.md`:
 - **T24 push to the other equidistant node** — expected legal; apply.js ok=True; bench_grade legal=True (not_mate) → OK
   - SFN: `rrrbrrbbrb.r.b...b.....bb.r............/Bewitch,Seal_of_Lightning,Flourish,Seal_of_Wind,Grow,Fireblast,Slash,Surge,Comet b 16 0:0 -:- -:- b1`
   - actions: `[{"type":"hard_move","node":"a5","pushed_to":"c7"}]`
-- **T24b push with invalid pushed_to (silently replaced by default)** — expected legal; apply.js ok=True; bench_grade legal=True (not_mate) → OK
+- **T24b push with invalid pushed_to** — expected illegal; apply.js ok=False, illegal=True ("pushed_to a5 is not a push destination (nearest empty nodes: a11, c7)") → OK (0.2.0-dev; was silently replaced by the first option)
   - SFN: `rrrbrrbbrb.r.b...b.....bb.r............/Bewitch,Seal_of_Lightning,Flourish,Seal_of_Wind,Grow,Fireblast,Slash,Surge,Comet b 16 0:0 -:- -:- b1`
   - actions: `[{"type":"hard_move","node":"a5","pushed_to":"a5"}]`
 - **T33 hard_move onto an empty node** — expected illegal; apply.js ok=True; bench_grade legal=False (illegal) → OK

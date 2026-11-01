@@ -80,11 +80,13 @@ destinations itself, using the rule in rules section 4. It then reads `pushed_to
 follows:
 
 - **Two or more destinations:** `pushed_to` chooses among them. **Always give it.**
-  - If you omit it, or name a node that is not one of the nearest empty nodes, the replay
-    **silently** uses the first destination in its search order. That may not be the one
-    you meant.
+  - If you omit it, the replay uses the first destination in its search order. That may
+    not be the one you meant.
 - **Exactly one destination:** `pushed_to` may be omitted.
 - **No destination (the stone is crushed):** omit `pushed_to` or set it to `null`.
+- A `pushed_to` that names any other node (one that is not a nearest empty node, a node
+  given for a stone that is crushed, or a push on a node that holds no enemy stone) makes
+  the answer **illegal**.
 
 ## Casting and `kept`
 

@@ -15,6 +15,10 @@
 //! spell counters, locks, springlocks, Providence banks). The verdict is a
 //! proof except "unproven" (see `mate::judge_turn`).
 //!
+//! BENCH_TURN_CAP: turns per enumeration (default `mate::BENCH_TURN_CAP`,
+//! 2^23; the engine's own default is 2^20). A position wider than the cap is
+//! a grader error ("enumeration incomplete").
+//!
 //!     cargo build --release --no-default-features --example bench_grade
 use sigil_engine::board::Board;
 use sigil_engine::mate::{judge_turn, judge_turn_exhaustive, legal_successor, MateError, TurnVerdict};
@@ -40,6 +44,8 @@ fn main() {
     let threads = std::env::var("BENCH_THREADS").ok().and_then(|v| v.parse().ok())
         .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
     sigil_engine::mate::set_resolve_threads(threads);
+    sigil_engine::mate::set_turn_cap(std::env::var("BENCH_TURN_CAP").ok().and_then(|v| v.parse().ok())
+        .unwrap_or(sigil_engine::mate::BENCH_TURN_CAP));
     let stdout = std::io::stdout();
     for line in std::io::stdin().lock().lines() {
         let line = line.expect("stdin");

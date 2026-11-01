@@ -12,10 +12,12 @@ Pipeline for one answer (an applyAITurn action list):
 Outcomes (`status`):
   correct      proven forced win within N
   wrong        legal turn, proven not to force a win within N
-  illegal      no legal turn reaches the replayed position
+  illegal      no legal turn reaches the replayed position, or a pushed_to
+               names a node that is not a push destination (apply.js)
   invalid      the action list is malformed (apply.js rejected it)
-  unproven     legal; neither proven nor refuted (mate-in-3+ only) -> counted
-               wrong, flagged for re-check with a larger budget
+  unproven     legal; neither proven nor refuted (mate-in-3+ only): the
+               exhaustive mate-in-2 pass ran out of time or hit a cap ->
+               counted wrong, flagged for re-check with a larger budget
   grader_error budget exhausted / enumeration cap -> counted wrong, flagged
 """
 import json
@@ -74,7 +76,9 @@ class Grader:
         and `correct` plus details."""
         r = self.replay(puzzle['sfn'], actions)
         if not r.get('ok'):
-            return {'status': 'invalid', 'correct': False, 'detail': r.get('error')}
+            # An impossible push destination is a rules violation, not a format error.
+            return {'status': 'illegal' if r.get('illegal') else 'invalid', 'correct': False,
+                    'detail': r.get('error')}
         out = {'after': r['after'], 'key': r['key']}
         if r['key'] in set(puzzle.get('solution_keys') or []):
             return dict(out, status='correct', correct=True, proof='stored solution')

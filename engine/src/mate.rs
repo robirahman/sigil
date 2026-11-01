@@ -41,6 +41,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 static RESOLVE_THREADS: AtomicUsize = AtomicUsize::new(1);
 pub fn set_resolve_threads(n: usize) { RESOLVE_THREADS.store(n.max(1), AtomicOrdering::Relaxed); }
 
+/// Turns per enumeration for every solver in this process (default
+/// `TURN_CAP`; bench_grade sets `BENCH_TURN_CAP` via BENCH_TURN_CAP).
+static TURN_CAP_IN_USE: AtomicUsize = AtomicUsize::new(TURN_CAP);
+pub fn set_turn_cap(n: usize) { TURN_CAP_IN_USE.store(n.max(1), AtomicOrdering::Relaxed); }
+
 use crate::board::{Board, Color, Outcome};
 use crate::turn::Turn;
 
@@ -143,6 +148,12 @@ pub struct Solution {
 /// Turns per enumeration beyond which a position is declared unverifiable
 /// (the enumerator's own cap; a position that wide is unverifiable anyway).
 pub const TURN_CAP: usize = 1 << 20;
+/// The turn cap SigilBench grading uses instead (2^23, ~420 MB of turns at
+/// the widest; `set_turn_cap`). Grading looks at one answer, not a whole
+/// puzzle tree, and an answer whose replies exceed 2^20 must still be graded
+/// (sbdev-021 in the 2026-10-31 pilot: Red holds Flourish plus Seal of
+/// Summer, 1.27M replies).
+pub const BENCH_TURN_CAP: usize = 1 << 23;
 /// Ordered turns tried before falling back to a full enumeration when
 /// looking for a mate-in-1 (the probe finds most mates in a few hundred).
 pub const PROBE: usize = 4_000;
@@ -229,7 +240,7 @@ impl Solver {
     /// count is charged to the budget: enumeration, not application, is the
     /// expensive half once casts are involved.
     fn turns(&mut self, b: &Board, c: Color) -> Result<Vec<Turn>, MateError> {
-        let (turns, st) = b.enumerate_turns_capped(c, TURN_CAP);
+        let (turns, st) = b.enumerate_turns_capped(c, TURN_CAP_IN_USE.load(AtomicOrdering::Relaxed));
         if st.truncated || st.resolver_truncated {
             return Err(MateError::Incomplete(st.truncated, st.resolver_truncated));
         }
