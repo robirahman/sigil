@@ -1594,7 +1594,7 @@ document.addEventListener('alpine:init', () => {
 						startPos: _startPos,
 						tookBack: _tookBack,
 						startSfn: _startSfnForUndo,
-						aiTelemetry: (difficulty && Object.keys(_aiTelemetryByPly).length > 0) ? {
+						aiTelemetry: (aiMode && Object.keys(_aiTelemetryByPly).length > 0) ? {
 							v: 1,
 							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
 							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_mt256'),
