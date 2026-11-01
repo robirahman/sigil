@@ -653,15 +653,19 @@
 				const results = readResults();
 				const prior = results[bp.id];
 				let recorded = !!prior;
-				const record = (status, how) => {
-					if (recorded) return;
+				let pending = false;   // stored as not solved until the engine's verdict replaces it
+				const record = (status, how, opts) => {
+					if (recorded && !pending) return;
 					recorded = true;
+					pending = !!(opts && opts.pending);
 					const r = readResults();
 					r[bp.id] = { status, how, n: bp.n, at: Date.now() };
+					if (pending) r[bp.id].pending = true;
 					try { localStorage.setItem(BENCH_RESULTS_KEY, JSON.stringify(r)); } catch (e) { /* storage blocked */ }
 					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first (not solved)' }[status];
 					const el = document.getElementById('bench-result');
-					if (el) el.textContent = 'Recorded: ' + label + (how ? ' — ' + how : '') + '. Only your first turn counts; play on or retry for practice.';
+					if (el) el.textContent = pending ? 'The engine is judging your first turn…'
+						: 'Recorded: ' + label + (how ? ' — ' + how.replace(/\.$/, '') : '') + '. Only your first turn counts; play on or retry for practice.';
 				};
 				const keys = bp.solution_keys || [];
 				window.SIGIL_BENCH_FIRST_TURN = ({ key, won }) => {
@@ -669,6 +673,9 @@
 					else if (won) record('correct', 'wins on the spot');
 					else if (bp.n === 1) record('wrong', 'the turn does not win the game');
 					// Otherwise the engine judges it before replying (SIGIL_BENCH_JUDGE).
+					// The attempt is stored now, so leaving before the verdict
+					// cannot buy a second first attempt.
+					else record('wrong', 'left before the engine finished judging this turn', { pending: true });
 				};
 				window.SIGIL_BENCH_JUDGE = (verdict, text) => {
 					if (verdict === 'mate') record('correct', 'not a stored line; the engine proves it still forces the win');
@@ -678,7 +685,8 @@
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (p.bench !== bp.id) return;
 					if (status === 'revealed') record('revealed', '');
-					else if (status === 'failed' || status === 'failed-final') record('wrong', '');
+					// While the engine is judging, its verdict (SIGIL_BENCH_JUDGE) carries the detail.
+					else if ((status === 'failed' || status === 'failed-final') && !pending) record('wrong', '');
 				};
 				window.SIGIL_PUZZLE = puzzle;
 				const link = (j) => 'puzzles.html?bench=' + encodeURIComponent(list[j].id);

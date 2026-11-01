@@ -756,12 +756,16 @@
 			return { status: 'wrong', how: 'The opponent escapes with ' + reply + ' (' + how + ').' };
 		}
 
+		// The puzzle, answer and model label are pinned when grading starts, and
+		// the controls that change them are locked until it ends.
+		const LOCK_IDS = ['ai-grade', 'ai-label', 'ai-puzzle', 'ai-prev', 'ai-next', 'ai-reset'];
+		const lockAi = (on) => LOCK_IDS.forEach((id) => { $(id).disabled = on; });
 		$('ai-grade').addEventListener('click', async () => {
 			const p = cur();
+			const who = label();
 			const text = $('ai-answer').value;
 			if (!text.trim()) return;
-			const btn = $('ai-grade');
-			btn.disabled = true;
+			lockAi(true);
 			$('ai-verdict').innerHTML = '<div class="verdict"><strong>Grading…</strong></div>';
 			let r;
 			try {
@@ -769,16 +773,16 @@
 				r = await grade(p, text);
 			} catch (e) {
 				$('ai-verdict').innerHTML = '<div class="verdict verdict--invalid"><strong>Could not grade</strong><small>' + esc(e.message || e) + '</small></div>';
-				btn.disabled = false;
+				lockAi(false);
 				return;
 			}
-			btn.disabled = false;
+			lockAi(false);
 			const all = store.get(AI_KEY, {});
-			const mine = all[label()] = all[label()] || {};
+			const mine = all[who] = all[who] || {};
 			const first = !mine[p.id];
 			if (first) mine[p.id] = Object.assign({ n: p.n, at: Date.now() }, r);
 			store.set(AI_KEY, all);
-			$('ai-verdict').innerHTML = verdictHtml(r) + (first ? '' : '<p class="footnote">Not recorded: ' + esc(label()) + ' already has a result for this puzzle (one response per puzzle). Clear its results to start over.</p>');
+			$('ai-verdict').innerHTML = verdictHtml(r) + (first ? '' : '<p class="footnote">Not recorded: ' + esc(who) + ' already has a result for this puzzle (one response per puzzle). Clear its results to start over.</p>');
 			drawAi();
 		});
 
