@@ -765,6 +765,16 @@
 			const who = label();
 			const text = $('ai-answer').value;
 			if (!text.trim()) return;
+			// One response per puzzle: an answer is stored as not solved before
+			// grading starts, so leaving mid-grade cannot buy a second attempt.
+			const before = store.get(AI_KEY, {});
+			const prior = (before[who] || {})[p.id];
+			const first = !prior || !!prior.pending;
+			if (first) {
+				before[who] = before[who] || {};
+				before[who][p.id] = { status: 'wrong', how: 'left before grading finished', n: p.n, at: Date.now(), pending: true };
+				store.set(AI_KEY, before);
+			}
 			lockAi(true);
 			$('ai-verdict').innerHTML = '<div class="verdict"><strong>Grading…</strong></div>';
 			let r;
@@ -772,16 +782,19 @@
 				await loadEngine();
 				r = await grade(p, text);
 			} catch (e) {
+				// Our failure, not the answer's: the attempt is not counted.
+				if (first) { const a = store.get(AI_KEY, {}); if (a[who]) delete a[who][p.id]; store.set(AI_KEY, a); }
 				$('ai-verdict').innerHTML = '<div class="verdict verdict--invalid"><strong>Could not grade</strong><small>' + esc(e.message || e) + '</small></div>';
 				lockAi(false);
 				return;
 			}
 			lockAi(false);
-			const all = store.get(AI_KEY, {});
-			const mine = all[who] = all[who] || {};
-			const first = !mine[p.id];
-			if (first) mine[p.id] = Object.assign({ n: p.n, at: Date.now() }, r);
-			store.set(AI_KEY, all);
+			if (first) {
+				const all = store.get(AI_KEY, {});
+				all[who] = all[who] || {};
+				all[who][p.id] = Object.assign({ n: p.n, at: Date.now() }, r);
+				store.set(AI_KEY, all);
+			}
 			$('ai-verdict').innerHTML = verdictHtml(r) + (first ? '' : '<p class="footnote">Not recorded: ' + esc(who) + ' already has a result for this puzzle (one response per puzzle). Clear its results to start over.</p>');
 			drawAi();
 		});

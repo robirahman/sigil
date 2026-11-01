@@ -104,7 +104,8 @@
 	/**
 	 * Pulls the action list out of whatever a person pastes: a bare JSON
 	 * array, {"actions": [...]}, a submit_answer tool call, or a reply whose
-	 * LAST ```json block (or last top-level [...]) holds one of those.
+	 * LAST fenced code block holds one of those (with no fenced block, the
+	 * last top-level [{...}] in the text).
 	 */
 	function extractActions(text) {
 		const t = String(text || '').trim();
@@ -121,9 +122,14 @@
 			return null;
 		};
 		try { const v = unwrap(JSON.parse(t)); if (v) return v; } catch (e) { /* not bare JSON */ }
-		const blocks = [...t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1].trim());
-		for (const b of blocks.reverse()) {
-			try { const v = unwrap(JSON.parse(b)); if (v) return v; } catch (e) { /* next */ }
+		// Fenced blocks: only the LAST one is read (the no-tool prompt says so),
+		// so a malformed final block is invalid rather than an earlier draft.
+		const blocks = [...t.matchAll(/```[A-Za-z]*\s*([\s\S]*?)```/g)].map(m => m[1].trim());
+		if (blocks.length) {
+			let v = null;
+			try { v = unwrap(JSON.parse(blocks[blocks.length - 1])); } catch (e) { v = null; }
+			if (v) return v;
+			throw new Error('The last code block in the reply is not an action list (only the last block is read).');
 		}
 		// Last balanced [...] that starts an array of objects.
 		for (let i = t.lastIndexOf('[{'); i >= 0; i = t.lastIndexOf('[{', i - 1)) {
