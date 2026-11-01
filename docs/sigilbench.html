@@ -521,7 +521,7 @@
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
 					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' + m4(e) +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
-					'<td>' + (e.tokens ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
+					'<td>' + (e.tokens && e.tokens.output_per_puzzle ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
 			}
 			const unapproved = data.entries.some((e) => e.kind === 'model' && !e.approved_no_training);
