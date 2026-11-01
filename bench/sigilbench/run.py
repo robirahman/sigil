@@ -133,6 +133,9 @@ def main():
     os.makedirs(os.path.join(run_dir, 'transcripts'), exist_ok=True)
     sysp = system_prompt()
     meta_path = os.path.join(run_dir, 'run.json')
+    if not a.resume and (os.path.exists(meta_path) or os.path.exists(os.path.join(run_dir, 'results.jsonl'))):
+        # A fresh run never inherits another run's records (Codex review, PR #60).
+        sys.exit(f'{run_dir} already holds a run; pass --resume to continue it, or choose a new --out')
     if a.resume and os.path.exists(meta_path):
         # Never mix configurations in one run directory (Codex review, PR #60).
         old = load_json(meta_path)
@@ -172,7 +175,10 @@ def main():
         # A resumed run's cost cap counts what was already spent, including
         # superseded attempts (Codex review, PR #60).
         for line in open(res_path):
-            u = json.loads(line).get('usage') or {}
+            rec = json.loads(line)
+            if (rec.get('grade') or {}).get('resolved_from'):
+                continue        # a resolver record repeats its answer's usage
+            u = rec.get('usage') or {}
             spent['in'] += u.get('input_tokens', 0)
             spent['out'] += u.get('output_tokens', 0)
     stop = threading.Event()
@@ -181,6 +187,12 @@ def main():
         if a.price_in is None:
             return 0.0
         return spent['in'] / 1e6 * a.price_in + spent['out'] / 1e6 * a.price_out
+
+    if a.max_cost is not None and cost() >= a.max_cost:
+        # Already at the cap (resumed spend, or a zero cap): no new model calls.
+        print(f'cost cap ${a.max_cost} already reached (${cost():.2f} spent); not starting new puzzles',
+              file=sys.stderr)
+        stop.set()
 
     def one(p):
         if stop.is_set():
@@ -200,6 +212,11 @@ def main():
         secs = round(time.time() - t0, 1)
         if err:
             g = {'status': 'api_error', 'correct': False, 'detail': err}
+        elif ans['actions'] is None and ans.get('stop') == 'answered':
+            # submit_answer WAS called, but its arguments did not parse into an
+            # action list: a malformed answer, not a missing one.
+            g = {'status': 'invalid', 'correct': False,
+                 'detail': 'submit_answer arguments are not {"actions": [...]}'}
         elif ans['actions'] is None:
             g = {'status': 'no_answer', 'correct': False, 'detail': ans.get('stop')}
         else:
@@ -230,7 +247,7 @@ def main():
             list(ex.map(one, todo))
     finally:
         grader.close()
-    if not a.no_resolve and not stop.is_set():
+    if not a.no_resolve:   # local work, no API cost: runs even after --max-cost stopped new calls
         # Settle every "unproven" answer exactly (sigilbench/resolve.py), so the
         # score never depends on the first-pass nominator.
         resolve_run(run_dir, {p['id']: p for p in puzzles}, jobs=a.resolve_jobs,
