@@ -15,6 +15,9 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hours)
 CANDS=$(md candidates); SHARD=$(md shard); TMS=$(md time-ms)
+# Optional inner nomination times (engine/src/mate.rs inner_ms): more time on an idle VM.
+for v in inner2-ms:MATE_INNER2_MS inner3-ms:MATE_INNER3_MS inner3-retry-ms:MATE_INNER3_RETRY_MS; do
+  val=$(md ${v%%:*}); [ -n "$val" ] && export ${v##*:}=$val; done
 : "${RUN:=unknown}" "${WORKERS:=$(nproc)}" "${MAXH:=3}" "${SHARD:=0/1}" "${TMS:=900000}"
 [ -n "${BRANCH:-}" ] && [ -n "${CANDS:-}" ] || { echo "FATAL: branch and candidates metadata are required"; shutdown -h now; exit 1; }
 echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH candidates=$CANDS shard=$SHARD time_ms=$TMS"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Launch one mate-in-4 mining VM (startup script: runner_mate4.sh).
-#   BRANCH=sigil-bench-v2 CANDIDATES=puzzles/m4_candidates_2026-11-01.json SHARD=0/2 \
+#   [INNER2_MS=.. INNER3_MS=.. INNER3_RETRY_MS=..] BRANCH=sigil-bench-v2 CANDIDATES=puzzles/m4_candidates_2026-11-01.json SHARD=0/2 \
 #     launch_mate4.sh [name] [machine] [zone] [max-hours] [workers]
 # Spot c3d-highcpu-90 by default; collect gs://focus-surfer-494820-g0-sigil/runs/<run>/live/work_*.jsonl
 # and assemble locally with bench/tools/mine_mate4.py assemble. Teardown: engine/gcp/teardown.sh.
@@ -17,6 +17,6 @@ gcloud compute instances create "$NAME" --project="$PROJECT" --zone="$ZONE" --ma
   --boot-disk-size=25GB --boot-disk-type=pd-balanced --boot-disk-auto-delete \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write --labels=project=sigil,purpose=mate4 \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,candidates=$CANDIDATES,shard=$SHARD,time-ms=$TIME_MS" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,candidates=$CANDIDATES,shard=$SHARD,time-ms=$TIME_MS,inner2-ms=${INNER2_MS:-},inner3-ms=${INNER3_MS:-},inner3-retry-ms=${INNER3_RETRY_MS:-}" \
   --metadata-from-file="startup-script=$HERE/runner_mate4.sh" --format="value(name,status)"
 echo "$RUN"

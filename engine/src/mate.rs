@@ -157,6 +157,13 @@ pub const MAX_LINES_EMITTED: usize = 512;
 /// proof visits every reply, so this multiplies.
 pub const INNER_NOMINATE_MS: u64 = 250;
 
+/// An inner nomination time, overridable by environment variable (mining and
+/// re-proof runs on idle VMs give the nominator more time: a time-capped
+/// search that scores no move as a mate leaves a true mate unproven).
+fn inner_ms(var: &str, default: u64) -> u64 {
+    std::env::var(var).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+}
+
 struct Solver {
     budget: u64,
     deadline: Option<f64>,
@@ -398,7 +405,7 @@ impl Solver {
     /// then engine-nominated second turns, each proven against every reply.
     fn has_mate_in_le2(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
         if self.has_mate_in_1(b, c)? { return Ok(true); }
-        let cands = self.nominate(b, c, 3, INNER_NOMINATE_MS)?;
+        let cands = self.nominate(b, c, 3, inner_ms("MATE_INNER2_MS", INNER_NOMINATE_MS))?;
         Ok(!self.mate2_lines(b, c, &cands, false, 1)?.is_empty())
     }
 
@@ -468,6 +475,8 @@ impl Solver {
 /// Time the nominating search gets when looking for a mate-in-3 at an inner
 /// node of a mate-in-4 proof.
 pub const INNER_NOMINATE3_MS: u64 = 1_500;
+/// The second, longer nomination when the first finds no proven mate-in-3.
+pub const INNER_RENOMINATE3_MS: u64 = 8_000;
 
 impl Solver {
     /// Every reply to `after` (opponent to move) leaves `c` a PROVEN forced win
@@ -499,11 +508,19 @@ impl Solver {
             2 => self.has_mate_in_le2(b, c),
             _ => {
                 if self.has_mate_in_le2(b, c)? { return Ok(true); }
-                let cands = self.nominate(b, c, 5, INNER_NOMINATE3_MS)?;
+                // A cold 5-ply search often scores no root move as a mate in
+                // 1.5 s (the miner's warm table did), so a miss gets one longer
+                // re-nomination before the position counts as unproven.
                 let root = self.successors(b, c)?;
-                for (_, n) in &root {
-                    if n.outcome != Outcome::Ongoing || !cands.contains(&key(n)) { continue; }
-                    if self.forced_within(n, c, k - 1)? { return Ok(true); }
+                let mut tried: HashSet<Key> = HashSet::new();
+                for ms in [inner_ms("MATE_INNER3_MS", INNER_NOMINATE3_MS),
+                           inner_ms("MATE_INNER3_RETRY_MS", INNER_RENOMINATE3_MS)] {
+                    let cands = self.nominate(b, c, 5, ms)?;
+                    for (_, n) in &root {
+                        let kn = key(n);
+                        if n.outcome != Outcome::Ongoing || !cands.contains(&kn) || !tried.insert(kn) { continue; }
+                        if self.forced_within(n, c, k - 1)? { return Ok(true); }
+                    }
                 }
                 Ok(false)
             }
