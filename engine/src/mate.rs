@@ -34,6 +34,12 @@
 //! position is the natural unit here.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+
+/// Threads `judge_turn_exhaustive` uses for each exhaustive mate-in-2 decision
+/// (bench_grade: BENCH_THREADS). 1 = single-threaded.
+static RESOLVE_THREADS: AtomicUsize = AtomicUsize::new(1);
+pub fn set_resolve_threads(n: usize) { RESOLVE_THREADS.store(n.max(1), AtomicOrdering::Relaxed); }
 
 use crate::board::{Board, Color, Outcome};
 use crate::turn::Turn;
@@ -624,12 +630,87 @@ pub fn judge_turn(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
     -> (Result<TurnVerdict, MateError>, MateStats)
 {
     let mut s = Solver::new(budget, time_ms);
-    let r = s.judge_turn(after, mover, n);
+    let r = s.judge_turn(after, mover, n, false);
+    (r, s.stats)
+}
+
+/// `judge_turn` that never returns `Unproven` for n <= 3: every reply that
+/// leaves no mate-in-1 is settled by an EXHAUSTIVE mate-in-2 decision
+/// (`has_mate_in_le2_exhaustive`), so both `Mate` and `NotMate` are proofs.
+/// Far more expensive in the refutation case (every mover turn after the
+/// refuting reply needs its own refuting reply plus a full no-mate-in-1
+/// enumeration), so it is the resolver for answers `judge_turn` left
+/// unproven, not the first pass. `Err(Budget)` = still unresolved.
+pub fn judge_turn_exhaustive(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n, true);
     (r, s.stats)
 }
 
 impl Solver {
-    fn judge_turn(&mut self, after: &Board, c: Color, n: u8) -> Result<TurnVerdict, MateError> {
+    /// Exhaustive: does `c` (to move at `b`) have a forced win in at most 2 of
+    /// its turns? Mate-in-1 first, then the nominated mate-in-2, then EVERY
+    /// distinct first turn is tested with `forced_after`, which is exhaustive
+    /// at both plies. `false` is therefore a proof that no mate-in-2 exists.
+    /// Parallel over first turns when `RESOLVE_THREADS` > 1.
+    fn has_mate_in_le2_exhaustive(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        // Cheap nominated pass (also seeds the killer replies).
+        if self.has_mate_in_le2(b, c)? { return Ok(true); }
+        let cands: Vec<Board> = self.successors(b, c)?.into_iter().map(|(_, n)| n)
+            .filter(|n| n.outcome == Outcome::Ongoing)   // a win was caught by has_mate_in_1
+            .collect();
+        let threads = RESOLVE_THREADS.load(AtomicOrdering::Relaxed).min(cands.len()).max(1);
+        if threads <= 1 {
+            for n in &cands {
+                if self.forced_after(n, c)?.is_some() { return Ok(true); }
+            }
+            return Ok(false);
+        }
+        // Workers take first turns off a shared index; any proof stops them
+        // all. A refutation needs every worker to finish without error.
+        let found = AtomicBool::new(false);
+        let next = AtomicUsize::new(0);
+        let (budget, deadline, killers) = (self.budget, self.deadline, self.killers.clone());
+        let results: Vec<(Result<(), MateError>, u64)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = (0..threads).map(|_| {
+                let (found, next, cands, killers) = (&found, &next, &cands, killers.clone());
+                sc.spawn(move || {
+                    let mut w = Solver::worker(budget, deadline, killers);
+                    let r = loop {
+                        if found.load(AtomicOrdering::Relaxed) { break Ok(()); }
+                        let i = next.fetch_add(1, AtomicOrdering::Relaxed);
+                        if i >= cands.len() { break Ok(()); }
+                        match w.forced_after(&cands[i], c) {
+                            Ok(Some(_)) => { found.store(true, AtomicOrdering::Relaxed); break Ok(()); }
+                            Ok(None) => {}
+                            Err(e) => break Err(e),
+                        }
+                    };
+                    (r, w.stats.nodes)
+                })
+            }).collect();
+            hs.into_iter().map(|h| h.join().expect("resolver worker panicked")).collect()
+        });
+        let mut err = None;
+        for (r, nodes) in results {
+            self.stats.nodes += nodes;
+            if let Err(e) = r { err = Some(e); }
+        }
+        if found.load(AtomicOrdering::Relaxed) { return Ok(true); }
+        match err { Some(e) => Err(e), None => Ok(false) }
+    }
+
+    /// A solver for one resolver thread: no nominating search is needed
+    /// (`forced_after` never nominates), so its table is tiny.
+    fn worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>) -> Self {
+        Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
+                 killers, se: crate::search::Search::new(10) }
+    }
+
+    fn judge_turn(&mut self, after: &Board, c: Color, n: u8, exhaustive: bool) -> Result<TurnVerdict, MateError> {
         if won_by(after.outcome, c) { return Ok(TurnVerdict::Mate { immediate: true }); }
         if after.outcome != Outcome::Ongoing || n <= 1 { return Ok(TurnVerdict::NotMate); }
         let o = c.other();
@@ -645,6 +726,29 @@ impl Solver {
         }
         if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
         if n > 3 { return Ok(TurnVerdict::Unproven); }
+        if exhaustive {
+            // Cheap proofs first: a reply whose mate-in-2 the nominator finds
+            // never needs the exhaustive walk. The rest are decided exactly;
+            // the first reply with no mate-in-2 at all refutes the answer.
+            let mut hard: Vec<Board> = Vec::new();
+            for rb in &need_m2 {
+                if !self.has_mate_in_le2(rb, c)? { hard.push(*rb); }
+            }
+            // Defender's likeliest refutations first (strength-engine ORDER
+            // only): then usually one exhaustive "no mate-in-2" proof settles it.
+            if hard.len() > 1 {
+                self.check_deadline()?;
+                let o = c.other();
+                let _ = self.se.go(after, o, 3, BENCH_RENOMINATE_MS);
+                let mut score: HashMap<Key, i32> = HashMap::new();
+                for (t, v) in self.se.root_scores() { score.insert(key(&child(after, t, o)), *v); }
+                hard.sort_by_key(|rb| -(score.get(&key(rb)).copied().unwrap_or(i32::MIN / 2) as i64));
+            }
+            for rb in &hard {
+                if !self.has_mate_in_le2_exhaustive(rb, c)? { return Ok(TurnVerdict::NotMate); }
+            }
+            return Ok(TurnVerdict::Mate { immediate: false });
+        }
         for rb in &need_m2 {
             if self.has_mate_in_le2(rb, c)? { continue; }
             // The inner nomination is a 250 ms search; before calling a turn

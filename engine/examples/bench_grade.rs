@@ -8,13 +8,16 @@
 //!     {"legal":true|false,"verdict":"mate"|"not_mate"|"unproven"|"illegal"|"error",
 //!      "immediate":bool,"nodes":N,"seconds":S,"error":...}
 //!
+//! With BENCH_EXHAUSTIVE=1 the verdict is never "unproven" (it may be
+//! "error": budget exceeded) -- see `mate::judge_turn_exhaustive`.
+//!
 //! `legal` = some legal turn reaches exactly that position (stones, walls,
 //! spell counters, locks, springlocks, Providence banks). The verdict is a
 //! proof except "unproven" (see `mate::judge_turn`).
 //!
 //!     cargo build --release --no-default-features --example bench_grade
 use sigil_engine::board::Board;
-use sigil_engine::mate::{judge_turn, legal_successor, MateError, TurnVerdict};
+use sigil_engine::mate::{judge_turn, judge_turn_exhaustive, legal_successor, MateError, TurnVerdict};
 use std::io::{BufRead, Write};
 
 fn err(e: MateError) -> String {
@@ -30,6 +33,13 @@ fn main() {
     sigil_engine::cast_enum::set_full_rules(std::env::var("SIGIL_NARROW_RULES").is_err());
     let budget: u64 = std::env::var("BENCH_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(400_000_000);
     let time_ms: u64 = std::env::var("BENCH_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(300_000);
+    // BENCH_EXHAUSTIVE=1: the resolver for answers left "unproven" -- every
+    // inner mate-in-2 is decided exactly (mate::judge_turn_exhaustive).
+    let exhaustive = std::env::var("BENCH_EXHAUSTIVE").map(|v| v == "1").unwrap_or(false);
+    // Threads per exhaustive decision (default: all cores).
+    let threads = std::env::var("BENCH_THREADS").ok().and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
+    sigil_engine::mate::set_resolve_threads(threads);
     let stdout = std::io::stdout();
     for line in std::io::stdin().lock().lines() {
         let line = line.expect("stdin");
@@ -49,7 +59,8 @@ fn main() {
                 Ok(None) => return "{\"legal\":false,\"verdict\":\"illegal\"}".into(),
                 Err(e) => return format!("{{\"verdict\":\"error\",\"error\":{:?}}}", err(e)),
             };
-            let (r, st) = judge_turn(&after, b.to_move, n, budget, time_ms);
+            let (r, st) = if exhaustive { judge_turn_exhaustive(&after, b.to_move, n, budget, time_ms) }
+                          else { judge_turn(&after, b.to_move, n, budget, time_ms) };
             let secs = t0.elapsed().as_secs_f64();
             match r {
                 Ok(TurnVerdict::Mate { immediate }) => format!("{{\"legal\":true,\"verdict\":\"mate\",\"immediate\":{},\"nodes\":{},\"seconds\":{:.3}}}", immediate, st.nodes, secs),

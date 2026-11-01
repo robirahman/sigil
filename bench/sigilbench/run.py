@@ -6,7 +6,10 @@
 
 Writes bench/runs/<run_id>/: run.json (settings, versions), results.jsonl (one
 record per graded puzzle; re-runs append and the last record counts),
-transcripts/<puzzle>.json (full exchange), summary.json. Every file carries
+transcripts/<puzzle>.json (full exchange), summary.json. When the model
+calls are done, answers the first-pass grader left "unproven" (and budget
+errors) are settled by the exhaustive resolver (sigilbench/resolve.py;
+--no-resolve skips it, resolve_log.jsonl records it). Every file carries
 the SigilBench canary string. --resume skips puzzles already graded in that
 directory.
 """
@@ -28,6 +31,7 @@ from .grader import Grader
 from .prompt import system_prompt, user_prompt
 from .providers import OFFLINE, PROVIDERS
 from .report import summarize
+from .resolve import resolve_run
 
 
 def approval(provider, model):
@@ -85,6 +89,11 @@ def main():
     ap.add_argument('--price-out', type=float, default=None, help='USD per million output tokens')
     ap.add_argument('--max-cost', type=float, default=None, help='stop starting new puzzles past this USD estimate')
     ap.add_argument('--seed', type=int, default=0, help='random baseline seed')
+    ap.add_argument('--no-resolve', action='store_true',
+                    help='skip the exhaustive pass over answers the first-pass grader left unproven')
+    ap.add_argument('--resolve-jobs', type=int, default=None,
+                    help='answers resolved at once (default 1, each using CPUs/jobs threads)')
+    ap.add_argument('--resolve-time-ms', type=int, default=3_600_000, help='resolver wall-clock cap per answer')
     a = ap.parse_args()
 
     cls = PROVIDERS[a.provider]
@@ -204,6 +213,12 @@ def main():
             list(ex.map(one, todo))
     finally:
         grader.close()
+    if not a.no_resolve and not stop.is_set():
+        # Settle every "unproven" answer exactly (sigilbench/resolve.py), so the
+        # score never depends on the first-pass nominator.
+        resolve_run(run_dir, {p['id']: p for p in puzzles}, jobs=a.resolve_jobs,
+                    time_ms=a.resolve_time_ms, include_errors=True,
+                    log=lambda m: print(m, file=sys.stderr))
     s = summarize(run_dir)
     s['canary'] = CANARY
     json.dump(s, open(os.path.join(run_dir, 'summary.json'), 'w'), indent=1)

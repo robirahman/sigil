@@ -194,7 +194,6 @@
 							<th scope="col">Mate in 3</th>
 							<th scope="col" title="How the puzzles that were not solved failed">Not solved</th>
 							<th scope="col" title="Mean output tokens per puzzle, reasoning included">Output tokens</th>
-							<th scope="col" title="Answers given only after one reminder, when the first response ended without an answer">After reminder</th>
 						</tr>
 					</thead>
 					<tbody></tbody>
@@ -209,13 +208,16 @@
 					board. About 8,500 tokens.</li>
 				<li><strong>Answer.</strong> One <code>submit_answer</code> tool call holding the whole turn as an ordered
 					action list: the regular move, an optional dash, optional casts and their effects. The first call is
-					final, and no feedback is given. A model that stops without answering gets one reminder.</li>
+					final, and no feedback is given. One response per puzzle: a response that ends without an answer,
+					including at the output-token cap, scores as <em>no answer</em>.</li>
 				<li><strong>Grading by proof.</strong> The browser's own rules replay the turn. The engine then checks
 					that a legal turn reaches the same position, and enumerates every reply to prove (or refute) the
-					forced win. Mate-in-3 answers that are neither proven nor refuted are marked <em>unproven</em> and
-					count as not solved.</li>
-				<li><strong>Outcomes.</strong> <em>wrong</em>: legal but proven not to win in time. <em>unproven</em>:
-					legal, no proof either way. <em>illegal</em>: no legal turn reaches the position. <em>invalid</em>:
+					forced win. Mate-in-3 answers the fast pass cannot settle go to an exhaustive resolver that tries
+					every continuation, so they too end up proven right or wrong; any that exhaust its time limit stay
+					<em>unproven</em> and count as not solved.</li>
+				<li><strong>Outcomes.</strong> <em>wrong</em>: legal but proven not to win in time. <em>no answer</em>:
+					the response ended without a turn. <em>unproven</em>: legal, no proof either way within the
+					resolver's time limit. <em>illegal</em>: no legal turn reaches the position. <em>invalid</em>:
 					the action list is malformed. <em>grader error</em>: the proof hit its size limit.</li>
 				<li><strong>Contamination.</strong> The test set will be 1,000 never-published positions kept in private
 					storage. Its SHA-256 will be published before any model is run, and evaluation accounts must be
@@ -228,6 +230,8 @@
 
 			<h3>Changelog</h3>
 			<ul class="footnote" id="changelog">
+				<li><strong>0.1.1-dev</strong> (2026-11-01): one response per puzzle (the reminder is gone; earlier runs
+					re-scored from their transcripts); unproven answers settled by an exhaustive resolver; GPT-6 Luna added.</li>
 				<li><strong>0.1.0-dev</strong> (2026-10-31): public dev set, proof-based grader, first dev-set runs.</li>
 			</ul>
 
@@ -357,26 +361,28 @@
 				if (e.kind === 'baseline') tr.className = 'is-baseline';
 				if (e.pending) {
 					tr.innerHTML = '<td><span class="name">' + e.label + '</span><span class="cfg">baseline · not run yet</span></td>' +
-						'<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>';
+						'<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>';
 					tb.appendChild(tr);
 					continue;
 				}
 				const o = e.overall;
 				tr.innerHTML =
 					'<td><span class="name">' + e.label + '</span><span class="cfg">' + (e.kind === 'baseline' ? 'baseline · ' : '') +
-					e.config + (e.date ? ' · ' + e.date : '') + '</span></td>' +
+					e.config + (e.date ? ' · ' + e.date : '') +
+					(e.with_reminder && e.with_reminder.correct !== o.correct ? ' · ' + pct(e.with_reminder.accuracy) + ' with the old reminder' : '') +
+					'</span></td>' +
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
 					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
-					'<td>' + (e.tokens ? fmtInt(e.tokens.output_per_puzzle) : '–') + '</td>' +
-					'<td>' + (e.reminded ? e.reminded.answers + '<span class="ci-txt">' + e.reminded.correct + ' solved</span>' : '–') + '</td>';
+					'<td>' + (e.tokens ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
 			}
 			const unapproved = data.entries.some((e) => e.kind === 'model' && !e.approved_no_training);
 			document.getElementById('table-note').textContent =
 				'Benchmark ' + data.benchmark.version + ', ' + data.split + ' split, updated ' + data.generated + '. ' +
-				'"After reminder": the first response ended without an answer (usually at the output-token cap), so the ' +
-				'model got one more response; those answers are included in the scores. ' +
+				'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
+				'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
+				'(* output tokens estimated for them), and the original score is shown under the model name. ' +
 				(unapproved ? 'The accounts used for these dev-set runs are not yet on the approved no-training list.' : '');
 		}
 

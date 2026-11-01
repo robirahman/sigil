@@ -6,8 +6,10 @@
 Rules shared by every adapter (they define the benchmark protocol):
   * one tool, `submit_answer`; the model may reason as long as its budget
     allows, then must call it; the FIRST call is final (no feedback, no retry);
-  * if a response ends without the call, ONE reminder is sent; still nothing
-    -> no answer (scored wrong);
+  * ONE response per puzzle: if it ends without the call (including at the
+    output-token cap), that is no answer (scored wrong). There is no
+    reminder: a reminder after a capped response hands the model a second
+    full budget, which some models need and others don't (removed 2026-10-31);
   * no fallback to another model on refusal (a refusal is no answer) --
     the score must be one model's;
   * nothing is stored provider-side where the API allows choosing
@@ -21,7 +23,7 @@ import json
 import random
 import subprocess
 
-from .prompt import REMINDER, TOOL_DESCRIPTION, TOOL_NAME, TOOL_SCHEMA
+from .prompt import TOOL_DESCRIPTION, TOOL_NAME, TOOL_SCHEMA
 
 
 def _parse_actions(inp):
@@ -54,7 +56,7 @@ class Anthropic:
     """Claude via the official SDK, streaming, adaptive thinking, effort."""
     name = 'anthropic'
 
-    def __init__(self, model, effort='high', max_tokens=64000, **_):
+    def __init__(self, model, effort='high', max_tokens=128000, **_):
         import anthropic
         self.client = anthropic.Anthropic(max_retries=6, timeout=3600)
         self.model, self.effort, self.max_tokens = model, effort, max_tokens
@@ -64,7 +66,7 @@ class Anthropic:
         tools = [{'name': TOOL_NAME, 'description': TOOL_DESCRIPTION, 'input_schema': TOOL_SCHEMA}]
         messages = [{'role': 'user', 'content': user}]
         usage, transcript = {'input_tokens': 0, 'output_tokens': 0}, []
-        for attempt in range(2):
+        for _ in range(1):   # one response per puzzle, no reminder
             # Cache breakpoint on the system prompt: it is identical for every puzzle.
             sys_blocks = [{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}]
             kw = dict(model=self.model, max_tokens=self.max_tokens, system=sys_blocks, messages=messages,
@@ -87,10 +89,6 @@ class Anthropic:
             if msg.stop_reason == 'refusal':
                 return {'actions': None, 'raw_answer': None, 'stop': 'refusal', 'usage': usage,
                         'transcript': transcript}
-            if attempt == 0:
-                messages = messages + [{'role': 'assistant', 'content': content},
-                                       {'role': 'user', 'content': REMINDER}]
-                transcript.append({'role': 'user', 'content': REMINDER})
         return {'actions': None, 'raw_answer': None, 'stop': f'no tool call ({msg.stop_reason})',
                 'usage': usage, 'transcript': transcript}
 
@@ -116,7 +114,7 @@ class OpenAI:
                   'parameters': TOOL_SCHEMA}]
         inp = [{'role': 'user', 'content': user}]
         usage, transcript = {'input_tokens': 0, 'output_tokens': 0}, []
-        for attempt in range(2):
+        for _ in range(1):   # one response per puzzle, no reminder
             kw = dict(model=self.model, instructions=system, input=inp, tools=tools, tool_choice='auto',
                       store=False, max_output_tokens=self.max_tokens,
                       include=['reasoning.encrypted_content'])
@@ -132,9 +130,6 @@ class OpenAI:
                 if getattr(x, 'type', None) == 'function_call' and x.name == TOOL_NAME:
                     return {'actions': _parse_actions(x.arguments), 'raw_answer': x.arguments,
                             'stop': 'answered', 'usage': usage, 'transcript': transcript}
-            if attempt == 0:
-                inp = inp + out + [{'role': 'user', 'content': REMINDER}]
-                transcript.append({'role': 'user', 'content': REMINDER})
         return {'actions': None, 'raw_answer': None, 'stop': f'no tool call ({r.status})',
                 'usage': usage, 'transcript': transcript}
 
@@ -156,7 +151,7 @@ class XAI:
                                                    'parameters': TOOL_SCHEMA}}]
         msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]
         usage, transcript = {'input_tokens': 0, 'output_tokens': 0}, []
-        for attempt in range(2):
+        for _ in range(1):   # one response per puzzle, no reminder
             kw = dict(model=self.model, messages=msgs, tools=tools, tool_choice='auto', max_tokens=self.max_tokens)
             if self.effort:
                 kw['reasoning_effort'] = self.effort
@@ -170,10 +165,8 @@ class XAI:
                 if tc.function.name == TOOL_NAME:
                     return {'actions': _parse_actions(tc.function.arguments), 'raw_answer': tc.function.arguments,
                             'stop': 'answered', 'usage': usage, 'transcript': transcript}
-            if attempt == 0:
-                msgs = msgs + [{'role': 'assistant', 'content': m.content or ''}, {'role': 'user', 'content': REMINDER}]
-                transcript.append({'role': 'user', 'content': REMINDER})
-        return {'actions': None, 'raw_answer': None, 'stop': 'no tool call', 'usage': usage, 'transcript': transcript}
+        return {'actions': None, 'raw_answer': None, 'stop': f'no tool call ({r.choices[0].finish_reason})',
+                'usage': usage, 'transcript': transcript}
 
 
 class Gemini:
@@ -204,7 +197,7 @@ class Gemini:
             thinking_config=types.ThinkingConfig(**tc))
         contents = [types.Content(role='user', parts=[types.Part(text=user)])]
         usage, transcript = {'input_tokens': 0, 'output_tokens': 0}, []
-        for attempt in range(2):
+        for _ in range(1):   # one response per puzzle, no reminder
             r = self.client.models.generate_content(model=self.model, contents=contents, config=cfg)
             um = r.usage_metadata
             if um:
@@ -218,10 +211,9 @@ class Gemini:
                     return {'actions': _parse_actions(dict(p.function_call.args or {})),
                             'raw_answer': _jsonable(p.function_call.args), 'stop': 'answered',
                             'usage': usage, 'transcript': transcript}
-            if attempt == 0 and cand and cand.content:
-                contents = contents + [cand.content, types.Content(role='user', parts=[types.Part(text=REMINDER)])]
-                transcript.append({'role': 'user', 'content': REMINDER})
-        return {'actions': None, 'raw_answer': None, 'stop': 'no tool call', 'usage': usage, 'transcript': transcript}
+        fr = getattr(cand, 'finish_reason', None) if cand else None
+        return {'actions': None, 'raw_answer': None, 'stop': f'no tool call ({getattr(fr, "name", fr)})',
+                'usage': usage, 'transcript': transcript}
 
 
 class Oracle:

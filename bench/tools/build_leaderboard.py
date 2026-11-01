@@ -52,19 +52,13 @@ def main():
         tin = sum((x.get('usage') or {}).get('input_tokens', 0) for x in rows)
         tout = sum((x.get('usage') or {}).get('output_tokens', 0) for x in rows)
         secs = sorted(x.get('seconds') or 0 for x in rows)
-        # Answers that needed the one reminder (the first response ended
-        # without a submit_answer call -- in practice the output cap): they
-        # got a second response's worth of tokens.
-        rem = rem_ok = 0
-        tdir = os.path.join(d, 'transcripts')
-        for x in rows:
-            path = os.path.join(tdir, x['puzzle_id'] + '.json')
-            if not os.path.exists(path):
-                continue
-            t = load_json(path).get('transcript') or []
-            if sum(1 for m in t if m.get('role') in ('assistant', 'model')) > 1:
-                rem += 1
-                rem_ok += bool(x['correct'])
+        # The same run as originally graded, with the old one-reminder
+        # protocol (shown for reference only).
+        orig = d[:-len('_noreminder')] if d.rstrip('/').endswith('_noreminder') else None
+        with_reminder = None
+        if orig and os.path.exists(os.path.join(orig, 'results.jsonl')):
+            o = load(orig)
+            with_reminder = acc(sum(x['correct'] for x in o), len(o))
         entries.append(dict(
             id=os.path.basename(d.rstrip('/')), kind='model', label=r['label'], config=r['config'],
             provider=meta['provider'], model=meta['model'], settings=meta.get('settings'),
@@ -72,9 +66,11 @@ def main():
             git_commit=(meta.get('git_commit') or '')[:7],
             approved_no_training=bool(meta.get('approval')),
             overall=acc(sum(x['correct'] for x in rows), len(rows)), by_n=by_n, status_counts=st,
-            tokens={'input_per_puzzle': round(tin / len(rows)), 'output_per_puzzle': round(tout / len(rows))},
+            tokens={'input_per_puzzle': round(tin / len(rows)), 'output_per_puzzle': round(tout / len(rows)),
+                    'estimated': any(x.get('usage_estimated') for x in rows)},
+            resolved=sum(1 for x in rows if (x.get('grade') or {}).get('resolved_from')),
+            with_reminder=with_reminder,
             median_seconds=secs[len(secs) // 2],
-            reminded={'answers': rem, 'correct': rem_ok},
         ))
     for b in man['baselines']:
         if b.get('pending'):

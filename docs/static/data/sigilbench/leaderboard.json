@@ -13,18 +13,18 @@
   "2": 33,
   "3": 33
  },
- "generated": "2026-10-31",
+ "generated": "2026-11-01",
  "entries": [
   {
-   "id": "haiku_medium",
+   "id": "haiku_high_128k_noreminder",
    "kind": "model",
    "label": "Claude Haiku 5.5",
-   "config": "effort medium, 64k output",
+   "config": "effort high, 128k output",
    "provider": "anthropic",
    "model": "claude-haiku-5-5",
    "settings": {
-    "effort": "medium",
-    "max_tokens": 64000,
+    "effort": "high",
+    "max_tokens": 128000,
     "thinking": "adaptive (display summarized)"
    },
    "date": "2026-10-31",
@@ -41,12 +41,12 @@
    },
    "by_n": {
     "1": {
-     "correct": 23,
+     "correct": 26,
      "total": 34,
-     "accuracy": 0.6765,
+     "accuracy": 0.7647,
      "ci95": [
-      0.5084,
-      0.8087
+      0.6,
+      0.8756
      ]
     },
     "2": {
@@ -59,118 +59,29 @@
      ]
     },
     "3": {
-     "correct": 11,
+     "correct": 8,
      "total": 33,
-     "accuracy": 0.3333,
+     "accuracy": 0.2424,
      "ci95": [
-      0.1975,
-      0.5039
+      0.1283,
+      0.4102
      ]
     }
    },
    "status_counts": {
-    "illegal": 9,
     "correct": 47,
-    "wrong": 26,
-    "unproven": 16,
-    "grader_error": 2
+    "wrong": 6,
+    "unproven": 3,
+    "illegal": 5,
+    "no_answer": 39
    },
    "tokens": {
-    "input_per_puzzle": 16454,
-    "output_per_puzzle": 37164
+    "input_per_puzzle": 54939,
+    "output_per_puzzle": 83863,
+    "estimated": true
    },
-   "median_seconds": 163.0,
-   "reminded": {
-    "answers": 19,
-    "correct": 3
-   }
-  },
-  {
-   "id": "haiku_full",
-   "kind": "model",
-   "label": "Claude Haiku 5.5",
-   "config": "effort high, 64k output",
-   "provider": "anthropic",
-   "model": "claude-haiku-5-5",
-   "settings": {
-    "effort": "high",
-    "max_tokens": 64000,
-    "thinking": "adaptive (display summarized)"
-   },
-   "date": "2026-10-31",
-   "git_commit": "9cc9cc2",
-   "approved_no_training": false,
-   "overall": {
-    "correct": 50,
-    "total": 100,
-    "accuracy": 0.5,
-    "ci95": [
-     0.4038,
-     0.5962
-    ]
-   },
-   "by_n": {
-    "1": {
-     "correct": 21,
-     "total": 34,
-     "accuracy": 0.6176,
-     "ci95": [
-      0.4504,
-      0.761
-     ]
-    },
-    "2": {
-     "correct": 17,
-     "total": 33,
-     "accuracy": 0.5152,
-     "ci95": [
-      0.3522,
-      0.675
-     ]
-    },
-    "3": {
-     "correct": 12,
-     "total": 33,
-     "accuracy": 0.3636,
-     "ci95": [
-      0.2219,
-      0.5338
-     ]
-    }
-   },
-   "status_counts": {
-    "correct": 50,
-    "wrong": 22,
-    "unproven": 18,
-    "illegal": 9,
-    "grader_error": 1
-   },
-   "tokens": {
-    "input_per_puzzle": 43506,
-    "output_per_puzzle": 50343
-   },
-   "median_seconds": 291.4,
-   "reminded": {
-    "answers": 59,
-    "correct": 18
-   }
-  },
-  {
-   "id": "haiku_high_128k",
-   "kind": "model",
-   "label": "Claude Haiku 5.5",
-   "config": "effort high, 128k output",
-   "provider": "anthropic",
-   "model": "claude-haiku-5-5",
-   "settings": {
-    "effort": "high",
-    "max_tokens": 128000,
-    "thinking": "adaptive (display summarized)"
-   },
-   "date": "2026-10-31",
-   "git_commit": "9cc9cc2",
-   "approved_no_training": false,
-   "overall": {
+   "resolved": 0,
+   "with_reminder": {
     "correct": 60,
     "total": 100,
     "accuracy": 0.6,
@@ -179,54 +90,10 @@
      0.6906
     ]
    },
-   "by_n": {
-    "1": {
-     "correct": 26,
-     "total": 34,
-     "accuracy": 0.7647,
-     "ci95": [
-      0.6,
-      0.8756
-     ]
-    },
-    "2": {
-     "correct": 18,
-     "total": 33,
-     "accuracy": 0.5455,
-     "ci95": [
-      0.3799,
-      0.7016
-     ]
-    },
-    "3": {
-     "correct": 16,
-     "total": 33,
-     "accuracy": 0.4848,
-     "ci95": [
-      0.325,
-      0.6478
-     ]
-    }
-   },
-   "status_counts": {
-    "correct": 60,
-    "wrong": 16,
-    "unproven": 15,
-    "illegal": 8,
-    "grader_error": 1
-   },
-   "tokens": {
-    "input_per_puzzle": 54939,
-    "output_per_puzzle": 84040
-   },
-   "median_seconds": 408.4,
-   "reminded": {
-    "answers": 39,
-    "correct": 13
-   }
+   "median_seconds": 408.4
   },
   {
-   "id": "gemini38flash_high",
+   "id": "gemini38flash_high_noreminder",
    "kind": "model",
    "label": "Gemini 3.8 Flash",
    "config": "thinking high, 64k output",
@@ -287,13 +154,252 @@
    },
    "tokens": {
     "input_per_puzzle": 10873,
-    "output_per_puzzle": 47398
+    "output_per_puzzle": 47398,
+    "estimated": false
    },
-   "median_seconds": 337.9,
-   "reminded": {
-    "answers": 0,
-    "correct": 0
-   }
+   "resolved": 0,
+   "with_reminder": {
+    "correct": 48,
+    "total": 100,
+    "accuracy": 0.48,
+    "ci95": [
+     0.3846,
+     0.5768
+    ]
+   },
+   "median_seconds": 337.9
+  },
+  {
+   "id": "haiku_medium_noreminder",
+   "kind": "model",
+   "label": "Claude Haiku 5.5",
+   "config": "effort medium, 64k output",
+   "provider": "anthropic",
+   "model": "claude-haiku-5-5",
+   "settings": {
+    "effort": "medium",
+    "max_tokens": 64000,
+    "thinking": "adaptive (display summarized)"
+   },
+   "date": "2026-10-31",
+   "git_commit": "9cc9cc2",
+   "approved_no_training": false,
+   "overall": {
+    "correct": 44,
+    "total": 100,
+    "accuracy": 0.44,
+    "ci95": [
+     0.3467,
+     0.5377
+    ]
+   },
+   "by_n": {
+    "1": {
+     "correct": 23,
+     "total": 34,
+     "accuracy": 0.6765,
+     "ci95": [
+      0.5084,
+      0.8087
+     ]
+    },
+    "2": {
+     "correct": 12,
+     "total": 33,
+     "accuracy": 0.3636,
+     "ci95": [
+      0.2219,
+      0.5338
+     ]
+    },
+    "3": {
+     "correct": 9,
+     "total": 33,
+     "accuracy": 0.2727,
+     "ci95": [
+      0.1507,
+      0.4422
+     ]
+    }
+   },
+   "status_counts": {
+    "illegal": 9,
+    "correct": 44,
+    "wrong": 15,
+    "unproven": 12,
+    "no_answer": 19,
+    "grader_error": 1
+   },
+   "tokens": {
+    "input_per_puzzle": 16454,
+    "output_per_puzzle": 37089,
+    "estimated": true
+   },
+   "resolved": 0,
+   "with_reminder": {
+    "correct": 47,
+    "total": 100,
+    "accuracy": 0.47,
+    "ci95": [
+     0.3751,
+     0.5671
+    ]
+   },
+   "median_seconds": 163.0
+  },
+  {
+   "id": "luna_high_noreminder",
+   "kind": "model",
+   "label": "GPT-6 Luna",
+   "config": "effort high, 100k output",
+   "provider": "openai",
+   "model": "gpt-6-luna",
+   "settings": {
+    "effort": "high",
+    "max_output_tokens": 100000,
+    "store": false
+   },
+   "date": "2026-10-31",
+   "git_commit": "9cc9cc2",
+   "approved_no_training": false,
+   "overall": {
+    "correct": 39,
+    "total": 100,
+    "accuracy": 0.39,
+    "ci95": [
+     0.3002,
+     0.488
+    ]
+   },
+   "by_n": {
+    "1": {
+     "correct": 21,
+     "total": 34,
+     "accuracy": 0.6176,
+     "ci95": [
+      0.4504,
+      0.761
+     ]
+    },
+    "2": {
+     "correct": 11,
+     "total": 33,
+     "accuracy": 0.3333,
+     "ci95": [
+      0.1975,
+      0.5039
+     ]
+    },
+    "3": {
+     "correct": 7,
+     "total": 33,
+     "accuracy": 0.2121,
+     "ci95": [
+      0.1068,
+      0.3775
+     ]
+    }
+   },
+   "status_counts": {
+    "correct": 39,
+    "unproven": 18,
+    "illegal": 8,
+    "no_answer": 12,
+    "wrong": 23
+   },
+   "tokens": {
+    "input_per_puzzle": 17529,
+    "output_per_puzzle": 36682,
+    "estimated": true
+   },
+   "resolved": 0,
+   "with_reminder": {
+    "correct": 42,
+    "total": 100,
+    "accuracy": 0.42,
+    "ci95": [
+     0.328,
+     0.5179
+    ]
+   },
+   "median_seconds": 263.0
+  },
+  {
+   "id": "haiku_full_noreminder",
+   "kind": "model",
+   "label": "Claude Haiku 5.5",
+   "config": "effort high, 64k output",
+   "provider": "anthropic",
+   "model": "claude-haiku-5-5",
+   "settings": {
+    "effort": "high",
+    "max_tokens": 64000,
+    "thinking": "adaptive (display summarized)"
+   },
+   "date": "2026-10-31",
+   "git_commit": "9cc9cc2",
+   "approved_no_training": false,
+   "overall": {
+    "correct": 32,
+    "total": 100,
+    "accuracy": 0.32,
+    "ci95": [
+     0.2367,
+     0.4166
+    ]
+   },
+   "by_n": {
+    "1": {
+     "correct": 21,
+     "total": 34,
+     "accuracy": 0.6176,
+     "ci95": [
+      0.4504,
+      0.761
+     ]
+    },
+    "2": {
+     "correct": 8,
+     "total": 33,
+     "accuracy": 0.2424,
+     "ci95": [
+      0.1283,
+      0.4102
+     ]
+    },
+    "3": {
+     "correct": 3,
+     "total": 33,
+     "accuracy": 0.0909,
+     "ci95": [
+      0.0314,
+      0.2357
+     ]
+    }
+   },
+   "status_counts": {
+    "correct": 32,
+    "no_answer": 59,
+    "wrong": 2,
+    "unproven": 3,
+    "illegal": 4
+   },
+   "tokens": {
+    "input_per_puzzle": 43506,
+    "output_per_puzzle": 50087,
+    "estimated": true
+   },
+   "resolved": 0,
+   "with_reminder": {
+    "correct": 50,
+    "total": 100,
+    "accuracy": 0.5,
+    "ci95": [
+     0.4038,
+     0.5962
+    ]
+   },
+   "median_seconds": 291.4
   },
   {
    "id": "random",

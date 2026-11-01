@@ -83,7 +83,3 @@ def user_prompt(puzzle):
         '# The spells on this board\n\n' + spells_section(d['spells']),
         f'Submit your turn with the `{TOOL_NAME}` tool.',
     ])
-
-
-REMINDER = (f'You did not call the `{TOOL_NAME}` tool. Call it now, once, with your final turn as an '
-            'action list. This is your last chance to answer.')
