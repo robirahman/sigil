@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v91';
+const CACHE_VERSION = 'v92';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -53,6 +53,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
 	'./static/data/sigilbench/leaderboard.json',
+	'./static/data/sigilbench/leaderboard_dev_v2.json',
 	// spell.html's Try-it positions and game statistics.
 	'./static/data/spell-examples.json',
 	'./strategy/data/spell_position_winrates.json',

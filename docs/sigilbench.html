@@ -163,17 +163,22 @@
 				defence. Any proven win counts, including one faster than N.</p>
 
 			<div class="bench__notice" id="notice">
-				<strong>Preview.</strong> These scores are on the public <strong>dev set</strong> (100 puzzles that are
-				already on the Puzzles page). They are for building the harness, not benchmark results. Mates in 1–3
-				proved too easy, so the next version of the set shifts toward longer mates and every model will be re-run.
-				The 1,000-puzzle private test set is not built yet.
+				<strong>Preview.</strong> These scores are on the public <strong>dev sets</strong>, for building the
+				harness, not benchmark results. Dev set v1 is 100 puzzles from the Puzzles page (mate in 1–3). Mates in
+				1–3 proved too easy, so dev set v2 adds mate in 4 (25 of each length, every spell); the models will be
+				re-run on it. The 1,000-puzzle private test set is not built yet.
 			</div>
 
+			<div class="bench__filters" role="group" aria-label="Puzzle set" id="sets">
+				<button type="button" data-set="dev_v1" aria-pressed="true">Dev set v1 (mate in 1–3)</button>
+				<button type="button" data-set="dev_v2" aria-pressed="false">Dev set v2 (mate in 1–4)</button>
+			</div>
 			<div class="bench__filters" role="group" aria-label="Puzzle subset" id="filters">
 				<button type="button" data-n="all" aria-pressed="true">All puzzles</button>
 				<button type="button" data-n="1" aria-pressed="false">Mate in 1</button>
 				<button type="button" data-n="2" aria-pressed="false">Mate in 2</button>
 				<button type="button" data-n="3" aria-pressed="false">Mate in 3</button>
+				<button type="button" data-n="4" aria-pressed="false" hidden>Mate in 4</button>
 			</div>
 
 			<div class="chart" id="chart">
@@ -193,6 +198,7 @@
 							<th scope="col">Mate in 1</th>
 							<th scope="col">Mate in 2</th>
 							<th scope="col">Mate in 3</th>
+							<th scope="col" class="col-m4" hidden>Mate in 4</th>
 							<th scope="col" title="How the puzzles that were not solved failed">Not solved</th>
 							<th scope="col" title="Mean output tokens per puzzle, reasoning included">Output tokens</th>
 						</tr>
@@ -245,7 +251,9 @@
 	<script>
 	(function () {
 		'use strict';
-		const DATA_URL = 'static/data/sigilbench/leaderboard.json';
+		const DATA_URLS = { dev_v1: 'static/data/sigilbench/leaderboard.json',
+			dev_v2: 'static/data/sigilbench/leaderboard_dev_v2.json' };
+		const cache = {};
 		const OUTCOMES = [
 			['wrong', 'wrong'], ['unproven', 'unproven'], ['illegal', 'illegal'], ['invalid', 'invalid'],
 			['no_answer', 'no answer'], ['grader_error', 'grader error'], ['api_error', 'API error'],
@@ -350,7 +358,7 @@
 				g.appendChild(hit);
 				svg.appendChild(g);
 			});
-			const label = { all: 'all puzzles', 1: 'mate in 1', 2: 'mate in 2', 3: 'mate in 3' }[subset];
+			const label = { all: 'all puzzles', 1: 'mate in 1', 2: 'mate in 2', 3: 'mate in 3', 4: 'mate in 4' }[subset];
 			const count = subset === 'all' ? Object.values(data.split_counts).reduce((a, b) => a + b, 0) : data.split_counts[subset];
 			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + ' (' + count + ' puzzles)';
 		}
@@ -359,12 +367,15 @@
 			const tb = document.querySelector('#results-table tbody');
 			tb.innerHTML = '';
 			const cell = (s) => (s ? pct(s.accuracy) + '<span class="ci-txt">' + s.correct + '/' + s.total + '</span>' : '–');
+			const has4 = !!data.split_counts['4'];
+			for (const th of document.querySelectorAll('.col-m4')) th.hidden = !has4;
+			const m4 = (e) => (has4 ? '<td>' + cell((e.by_n || {})['4']) + '</td>' : '');
 			for (const e of rows()) {
 				const tr = document.createElement('tr');
 				if (e.kind === 'baseline') tr.className = 'is-baseline';
 				if (e.pending) {
 					tr.innerHTML = '<td><span class="name">' + e.label + '</span><span class="cfg">baseline · not run yet</span></td>' +
-						'<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>';
+						'<td>–</td><td>–</td><td>–</td><td>–</td>' + (has4 ? '<td>–</td>' : '') + '<td>–</td><td>–</td>';
 					tb.appendChild(tr);
 					continue;
 				}
@@ -375,17 +386,26 @@
 					(e.with_reminder && e.with_reminder.correct !== o.correct ? ' · ' + pct(e.with_reminder.accuracy) + ' with the old reminder' : '') +
 					'</span></td>' +
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
-					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' +
+					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' + m4(e) +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
 					'<td>' + (e.tokens ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
 			}
 			const unapproved = data.entries.some((e) => e.kind === 'model' && !e.approved_no_training);
+			const reminderNote = data.entries.some((e) => e.with_reminder)
+				? 'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
+				  'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
+				  '(* output tokens estimated for them), and the original score is shown under the model name. '
+				: '';
+			const engineNote = data.entries.some((e) => e.provider === 'engine')
+				? 'The engine plays one turn per puzzle with the site\'s Very Hard settings (60 s, shipped NNUE eval), graded by the same proof. '
+				: '';
+			const m4Note = data.split_counts['4']
+				? 'Mate-in-4 answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
+				: '';
 			document.getElementById('table-note').textContent =
-				'Benchmark ' + data.benchmark.version + ', ' + data.split + ' split, updated ' + data.generated + '. ' +
-				'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
-				'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
-				'(* output tokens estimated for them), and the original score is shown under the model name. ' +
+				data.set_label + ': benchmark ' + data.benchmark.version + ', updated ' + data.generated + '. ' +
+				engineNote + m4Note + reminderNote +
 				(data.resolver && data.resolver.indexOf('not applied') === 0
 					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
 					: '') +
@@ -407,12 +427,32 @@
 			drawChart();
 		});
 
-		fetch(DATA_URL, { cache: 'no-cache' })
-			.then((r) => r.json())
-			.then((d) => { data = d; render(); })
-			.catch(() => {
-				document.getElementById('chart').innerHTML = '<p class="footnote">The results could not be loaded.</p>';
-			});
+		function showSet(id) {
+			for (const x of document.querySelectorAll('#sets button')) x.setAttribute('aria-pressed', String(x.dataset.set === id));
+			const done = (d) => {
+				data = d;
+				const has4 = !!d.split_counts['4'];
+				const b4 = document.querySelector('#filters button[data-n="4"]');
+				b4.hidden = !has4;
+				if (!has4 && subset === '4') {
+					subset = 'all';
+					for (const x of document.querySelectorAll('#filters button')) x.setAttribute('aria-pressed', String(x.dataset.n === 'all'));
+				}
+				render();
+			};
+			if (cache[id]) return done(cache[id]);
+			fetch(DATA_URLS[id], { cache: 'no-cache' })
+				.then((r) => r.json())
+				.then((d) => { cache[id] = d; done(d); })
+				.catch(() => {
+					document.getElementById('table-note').textContent = 'The results for this set could not be loaded.';
+				});
+		}
+		document.getElementById('sets').addEventListener('click', (ev) => {
+			const b = ev.target.closest('button[data-set]');
+			if (b) showSet(b.dataset.set);
+		});
+		showSet('dev_v1');
 	})();
 	</script>
 </body>
