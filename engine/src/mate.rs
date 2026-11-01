@@ -134,6 +134,10 @@ pub struct Solution {
     /// Proven mate-in-3 first turns among the nominated ones; only computed
     /// when `mate1` and `mate2` are both empty.
     pub mate3: Vec<Line>,
+    /// Proven mate-in-4 first turns among the nominated ones; only computed
+    /// when mate-in-1..3 are all empty and `max_mate >= 4`. Lines carry no
+    /// defence or continuations (the proof is kept, the line is not).
+    pub mate4: Vec<Line>,
     pub stats: MateStats,
 }
 
@@ -458,6 +462,68 @@ impl Solver {
     }
 }
 
+/// Time the nominating search gets when looking for a mate-in-3 at an inner
+/// node of a mate-in-4 proof.
+pub const INNER_NOMINATE3_MS: u64 = 1_500;
+
+impl Solver {
+    /// Every reply to `after` (opponent to move) leaves `c` a PROVEN forced win
+    /// within `k` more turns of `c` (k = 1, 2 or 3; nominate-then-prove for
+    /// k >= 2, so `false` is not a refutation unless k == 1).
+    fn forced_within(&mut self, after: &Board, c: Color, k: u8) -> Result<bool, MateError> {
+        let o = c.other();
+        let replies = self.successors(after, o)?;
+        if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Ok(false); }
+        // Cheapest first: most replies leave an immediate win.
+        let mut rest: Vec<Board> = Vec::new();
+        for (_, rb) in &replies {
+            if rb.outcome != Outcome::Ongoing { continue; }
+            if self.has_mate_in_1(rb, c)? { continue; }
+            if k <= 1 { return Ok(false); }
+            rest.push(*rb);
+        }
+        for rb in &rest {
+            if !self.has_mate_in_le(rb, c, k)? { return Ok(false); }
+        }
+        Ok(true)
+    }
+
+    /// Does `c` (to move at `b`) have a PROVEN forced win within `k` turns?
+    fn has_mate_in_le(&mut self, b: &Board, c: Color, k: u8) -> Result<bool, MateError> {
+        match k {
+            0 => Ok(false),
+            1 => self.has_mate_in_1(b, c),
+            2 => self.has_mate_in_le2(b, c),
+            _ => {
+                if self.has_mate_in_le2(b, c)? { return Ok(true); }
+                let cands = self.nominate(b, c, 5, INNER_NOMINATE3_MS)?;
+                let root = self.successors(b, c)?;
+                for (_, n) in &root {
+                    if n.outcome != Outcome::Ongoing || !cands.contains(&key(n)) { continue; }
+                    if self.forced_within(n, c, k - 1)? { return Ok(true); }
+                }
+                Ok(false)
+            }
+        }
+    }
+
+    /// Proven mate-in-4 first turns for `c` at `b` among `cand_keys`: after every
+    /// legal reply the mover has a proven forced win within 3 more turns.
+    fn mate4_lines(&mut self, b: &Board, c: Color, cand_keys: &[Key]) -> Result<Vec<Line>, MateError> {
+        let mut out = Vec::new();
+        if cand_keys.is_empty() { return Ok(out); }
+        let root = self.successors(b, c)?;
+        for (t, n) in &root {
+            if n.outcome != Outcome::Ongoing || !cand_keys.contains(&key(n)) { continue; }
+            if self.forced_within(n, c, 3)? {
+                out.push(Line { turn: *t, after: *n, defence: None, finish: None, mates_after_defence: 0,
+                                replies: 0, continuations: Vec::new() });
+            }
+        }
+        Ok(out)
+    }
+}
+
 /// Solve `b` for the side to move: mate-in-1 lines (complete); else proven
 /// mate-in-2 lines among the nominated first turns; else, if `max_mate >= 3`,
 /// proven mate-in-3 lines (see the module doc). `budget` bounds `apply_turn`
@@ -477,7 +543,7 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate:
         .map(|(t, n)| Line { turn: *t, after: *n, defence: None, finish: None,
                              mates_after_defence: 0, replies: 0, continuations: Vec::new() })
         .collect();
-    let mut sol = Solution { mate1, mate2: Vec::new(), mate3: Vec::new(), stats: s.stats };
+    let mut sol = Solution { mate1, mate2: Vec::new(), mate3: Vec::new(), mate4: Vec::new(), stats: s.stats };
     if !sol.mate1.is_empty() || max_mate < 2 { sol.stats = s.stats; return Ok(sol); }
 
     // Nomination budgets: a 3-ply search settles in a few seconds even on a
@@ -498,6 +564,15 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate:
     cand3.sort();
     cand3.dedup();
     sol.mate3 = s.mate3_lines(b, c, &cand3)?;
+    if !sol.mate3.is_empty() || max_mate < 4 { sol.stats = s.stats; return Ok(sol); }
+
+    // ---- mate-in-4: nominated by a 7-ply search and by the hints ----
+    let root7_ms = if time_ms > 0 { (time_ms / 3).clamp(1_000, 120_000) } else { 20_000 };
+    let mut cand4 = s.nominate(b, c, 7, root7_ms)?;
+    cand4.extend_from_slice(extra_keys);
+    cand4.sort();
+    cand4.dedup();
+    sol.mate4 = s.mate4_lines(b, c, &cand4)?;
     sol.stats = s.stats;
     Ok(sol)
 }
@@ -559,9 +634,10 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], m
     let m1: Vec<String> = sol.mate1.iter().take(MAX_LINES_EMITTED).map(|l| line_json(&b, l, c)).collect();
     let m2: Vec<String> = sol.mate2.iter().map(|l| line_json(&b, l, c)).collect();
     let m3: Vec<String> = sol.mate3.iter().map(|l| line_json(&b, l, c)).collect();
-    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"mate3\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
+    let m4: Vec<String> = sol.mate4.iter().map(|l| line_json(&b, l, c)).collect();
+    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"mate3\":[{}],\"mate4\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
             if c == Color::Red { "red" } else { "blue" },
-            m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), sol.stats.root_successors, sol.stats.nodes,
+            m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), m4.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
 }
 
@@ -725,7 +801,15 @@ impl Solver {
             need_m2.push(*rb);
         }
         if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
-        if n > 3 { return Ok(TurnVerdict::Unproven); }
+        if n == 4 {
+            // Every reply without a mate-in-1 needs a proven win within 3 more
+            // turns (nominate-then-prove; a miss is unproven, not wrong).
+            for rb in &need_m2 {
+                if !self.has_mate_in_le(rb, c, 3)? { return Ok(TurnVerdict::Unproven); }
+            }
+            return Ok(TurnVerdict::Mate { immediate: false });
+        }
+        if n > 4 { return Ok(TurnVerdict::Unproven); }
         if exhaustive {
             // Cheap proofs first: a reply whose mate-in-2 the nominator finds
             // never needs the exhaustive walk. The rest are decided exactly;
