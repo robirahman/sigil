@@ -721,7 +721,7 @@
 				window.SIGIL_PUZZLE_SOURCE = 'Benchmark conditions: your first turn is graded, as a model\'s one submitted turn is. '
 					+ (prior ? 'Already attempted (' + prior.status + '); this attempt is practice.' : 'Think it through before you play.');
 				window.SIGIL_PUZZLE_TAGS = '';
-				const done = Object.values(results).filter(r => r && r.status);
+				const done = list.map(p => results[p.id]).filter(r => r && r.status);   // this set only (v1 results share the store)
 				window.SIGIL_PUZZLE_PROGRESS = (k + 1) + ' of ' + list.length + ' dev puzzles · ' + done.length + ' attempted, '
 					+ done.filter(r => r.status === 'correct').length + ' correct (this device)';
 				window.SIGIL_PUZZLE_FILTER_HTML = '<span id="bench-result"></span>';
