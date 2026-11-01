@@ -560,9 +560,12 @@
 			drawChart();
 		});
 
+		let wantSet = null;   // the set last clicked; superseded fetches are ignored
 		function showSet(id) {
+			wantSet = id;
 			for (const x of document.querySelectorAll('#sets button')) x.setAttribute('aria-pressed', String(x.dataset.set === id));
 			const done = (d) => {
+				if (wantSet !== id) return;
 				data = d;
 				const has4 = !!d.split_counts['4'];
 				const b4 = document.querySelector('#filters button[data-n="4"]');
@@ -578,6 +581,7 @@
 				.then((r) => r.json())
 				.then((d) => { cache[id] = d; done(d); })
 				.catch(() => {
+					if (wantSet !== id) return;
 					document.getElementById('table-note').textContent = 'The results for this set could not be loaded.';
 				});
 		}

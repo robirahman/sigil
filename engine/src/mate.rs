@@ -178,6 +178,12 @@ struct Solver {
     /// `prove_le` results by (position, k, deep): `true` is a proof; `false`
     /// only means "not found in that mode" and is never read as a refutation.
     le_memo: HashMap<(Key, u8, bool), bool>,
+    /// For each `false` in `le_memo`: the `mk_gen` it was computed under. A
+    /// miss is provisional; once new mover killers are learned it is retried
+    /// with them before being reused.
+    le_miss_gen: HashMap<(Key, u8, bool), u64>,
+    /// Bumped whenever a new mover killer is learned.
+    mk_gen: u64,
     /// Mover turns that completed a proof at each k (index k): the same mating
     /// turn often works against many defences, so it is tried first.
     mkillers: [Vec<Turn>; 4],
@@ -194,7 +200,8 @@ impl Solver {
         se.set_elastic(None);
         se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
-                 killers: Vec::new(), se, le_memo: HashMap::new(), mkillers: Default::default() }
+                 killers: Vec::new(), se, le_memo: HashMap::new(),
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
     }
 
     fn time_left_ms(&self) -> Option<f64> {
@@ -513,6 +520,7 @@ impl Solver {
         if v.iter().any(|x| x.slice() == t.slice()) { return; }
         v.insert(0, t);
         v.truncate(8);
+        self.mk_gen += 1;
     }
 
     /// Every reply to `after` (opponent to move) leaves `c` a proven win within
@@ -566,11 +574,34 @@ impl Solver {
         if self.has_mate_in_1(b, c)? { return Ok(true); }
         if k <= 1 { return Ok(false); }
         let mk = (key(b), k, deep);
-        if let Some(&v) = self.le_memo.get(&mk) { return Ok(v); }
+        if let Some(&v) = self.le_memo.get(&mk) {
+            if v { return Ok(true); }
+            // A cached miss only means the candidates tried then failed. If
+            // new mover killers have been learned since, try them first.
+            if self.le_miss_gen.get(&mk) == Some(&self.mk_gen) { return Ok(false); }
+            let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
+            let r = self.try_mkillers(&root, c, k, &mut HashSet::new())?;
+            self.le_memo.insert(mk, r);
+            if r { self.le_miss_gen.remove(&mk); } else { self.le_miss_gen.insert(mk, self.mk_gen); }
+            return Ok(r);
+        }
         if deep { if let Some(&true) = self.le_memo.get(&(key(b), k, false)) { return Ok(true); } }
         let r = self.prove_le_inner(b, c, k, deep)?;
         self.le_memo.insert(mk, r);
+        if !r { self.le_miss_gen.insert(mk, self.mk_gen); }
         Ok(r)
+    }
+
+    /// Try the current mover killers at k (skipping children in `tried`).
+    fn try_mkillers(&mut self, root: &[(Turn, Board)], c: Color, k: u8, tried: &mut HashSet<Key>) -> Result<bool, MateError> {
+        let killers = self.mkillers[k as usize].clone();
+        for kt in &killers {
+            if let Some(&(t, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
+                if !tried.insert(key(&n)) { continue; }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
+            }
+        }
+        Ok(false)
     }
 
     fn prove_le_inner(&mut self, b: &Board, c: Color, k: u8, deep: bool) -> Result<bool, MateError> {
@@ -579,13 +610,7 @@ impl Solver {
         let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
         let mut tried: HashSet<Key> = HashSet::new();
         // 1. Mover killers.
-        let killers = self.mkillers[k as usize].clone();
-        for kt in &killers {
-            if let Some(&(t, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
-                if !tried.insert(key(&n)) { continue; }
-                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
-            }
-        }
+        if self.try_mkillers(&root, c, k, &mut tried)? { return Ok(true); }
         // 2. Nominations (a short and a longer search).
         let depth = 2 * k as i32 - 1;
         let times = if k >= 3 {
@@ -937,7 +962,7 @@ impl Solver {
     fn worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>) -> Self {
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
                  killers, se: crate::search::Search::new(10), le_memo: HashMap::new(),
-                 mkillers: Default::default() }
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
     }
 
     /// A worker that may nominate (deep mate-in-4 search): a real, smaller
@@ -951,7 +976,8 @@ impl Solver {
         se.set_elastic(None);
         se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
-                 killers, se, le_memo: HashMap::new(), mkillers }
+                 killers, se, le_memo: HashMap::new(),
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers }
     }
 
     fn judge_turn(&mut self, after: &Board, c: Color, n: u8, exhaustive: bool) -> Result<TurnVerdict, MateError> {
