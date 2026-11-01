@@ -26,6 +26,12 @@
    "gcs": "dev-runs/2026-10-31/haiku_full_noreminder",
    "label": "Claude Haiku 5.5",
    "config": "effort high, 64k output"
+  },
+  {
+   "gcs": "engine-runs/2026-11-01/engine_vh_v1",
+   "kind": "baseline",
+   "label": "Sigil engine (SigilNet NNUE)",
+   "config": "Very Hard settings, 60 s per puzzle"
   }
  ],
  "baselines": [
@@ -58,16 +64,12 @@
    }
   },
   {
-   "id": "engine",
-   "label": "Sigil NNUE engine",
-   "config": "pending",
-   "pending": true
-  },
-  {
    "id": "humans",
    "label": "Human experts (Robi, Andy)",
    "config": "pending",
    "pending": true
   }
- ]
+ ],
+ "set_id": "dev_v1",
+ "set_label": "Dev set v1"
 }

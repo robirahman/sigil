@@ -11,9 +11,10 @@ An LLM benchmark of forced-mate puzzles from Sigil. The model sees a position an
 | `dev/dev_set.json` | 100 public dev puzzles (34 mate-in-1, 33 mate-in-2, 33 mate-in-3) from the already-published Puzzles page set. Use them for development only, never to report a score. Built by `tools/build_dev_set.py`. |
 | `prompt/` | `rules.md`, `actions.md` and `spells.json`: the rules and turn format given to the model. `VERIFICATION.md` records how each documented encoding was checked. |
 | `sigilbench/` | The harness: `prompt.py`, `render.py` (the position as text), `providers.py` (Anthropic, OpenAI, xAI, Gemini, plus offline `oracle` and `random`), `grader.py`, `run.py`, `report.py`. |
-| `grader/apply.js` | Replays an action list with the browser's own rules (`applyAITurn`). |
+| `grader/apply.js` | Replays an action list with the browser's own rules (`applyAITurn`). The schema, validation and replay live in `docs/static/scripts/sigilbench-replay.js`, shared with the site. |
 | `../engine/examples/bench_grade.rs` | Legality check, plus the mate proof (`mate::judge_turn`). |
 | `tools/grader_selftest.py` | Grader self-test on the dev set. |
+| `tools/build_try_devset.py` | Builds the password-protected copy of the dev set and its prompts for the site's "Try the dev set" panel (`docs/static/data/sigilbench/devset.enc.json`; password from `$SIGILBENCH_TRY_PASSWORD`). Re-run after changing the dev set or `prompt/`. |
 | `tools/rescore_no_reminder.py` | Re-scores runs made with the old reminder protocol, from their transcripts. |
 | `sigilbench/resolve.py` | Exhaustive resolver for `unproven` answers. |
 | `providers_approved.json` | Accounts confirmed opted out of training and under zero data retention. |

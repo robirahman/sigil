@@ -32,14 +32,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--runs-root', required=True)
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--manifest', default=os.path.join(BENCH, 'leaderboard', 'runs.json'))
+    ap.add_argument('--dev-set', default=os.path.join(BENCH, 'dev', 'dev_set.json'))
     ap.add_argument('--first-pass', action='store_true',
                     help='ignore resolver records (use when the resolver did not finish every run alike)')
     a = ap.parse_args()
-    man = load_json(os.path.join(BENCH, 'leaderboard', 'runs.json'))
-    dev = load_json(os.path.join(BENCH, 'dev', 'dev_set.json'))
+    man = load_json(a.manifest)
+    dev = load_json(a.dev_set)
     entries = []
     for r in man['runs']:
-        d = os.path.join(a.runs_root, r['gcs'].split('/', 1)[1] if r['gcs'].startswith('dev-runs/') else r['gcs'])
+        d = os.path.join(a.runs_root, r['gcs'])
+        if not os.path.exists(d):      # --runs-root may hold the contents of dev-runs/ itself
+            d = os.path.join(a.runs_root, r['gcs'].split('/', 1)[1])
         meta = load_json(os.path.join(d, 'run.json'))
         rows = load(d)
         if a.first_pass:
@@ -70,7 +74,7 @@ def main():
             o = load(orig)
             with_reminder = acc(sum(x['correct'] for x in o), len(o))
         entries.append(dict(
-            id=os.path.basename(d.rstrip('/')), kind='model', label=r['label'], config=r['config'],
+            id=os.path.basename(d.rstrip('/')), kind=r.get('kind', 'model'), label=r['label'], config=r['config'],
             provider=meta['provider'], model=meta['model'], settings=meta.get('settings'),
             date=meta['started'][:4] + '-' + meta['started'][4:6] + '-' + meta['started'][6:8],
             git_commit=(meta.get('git_commit') or '')[:7],
@@ -95,6 +99,8 @@ def main():
         'canary': CANARY,
         'benchmark': bench_version(),
         'split': man['split'],
+        'set_id': man.get('set_id', 'dev_v1'),
+        'set_label': man.get('set_label', 'Dev set v1'),
         'split_counts': dev['counts'],
         'resolver': 'not applied (first-pass grading for every run)' if a.first_pass else 'applied',
         'generated': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d'),
