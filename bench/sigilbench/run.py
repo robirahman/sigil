@@ -203,6 +203,11 @@ def main():
         secs = round(time.time() - t0, 1)
         if err:
             g = {'status': 'api_error', 'correct': False, 'detail': err}
+        elif ans['actions'] is None and ans.get('stop') == 'answered':
+            # submit_answer WAS called, but its arguments did not parse into an
+            # action list: a malformed answer, not a missing one.
+            g = {'status': 'invalid', 'correct': False,
+                 'detail': 'submit_answer arguments are not {"actions": [...]}'}
         elif ans['actions'] is None:
             g = {'status': 'no_answer', 'correct': False, 'detail': ans.get('stop')}
         else:
@@ -233,7 +238,7 @@ def main():
             list(ex.map(one, todo))
     finally:
         grader.close()
-    if not a.no_resolve and not stop.is_set():
+    if not a.no_resolve:   # local work, no API cost: runs even after --max-cost stopped new calls
         # Settle every "unproven" answer exactly (sigilbench/resolve.py), so the
         # score never depends on the first-pass nominator.
         resolve_run(run_dir, {p['id']: p for p in puzzles}, jobs=a.resolve_jobs,
