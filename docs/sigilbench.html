@@ -185,14 +185,14 @@
 		.try summary { cursor: pointer; color: var(--color-text-warm); }
 		.verdict { border-left: 4px solid var(--color-border); padding: 8px 12px; margin: 10px 0; background: var(--color-surface); border-radius: 6px; }
 		.verdict--correct { border-left-color: #4caf7a; }
-		.verdict--likely { border-left-color: #d9b44a; }
+		.verdict--likely, .verdict--unproven { border-left-color: #d9b44a; }
 		.verdict--wrong, .verdict--invalid { border-left-color: #e06c6c; }
 		.verdict small { display: block; color: var(--color-text-muted); margin-top: 4px; word-break: break-word; }
 		table.try-list { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 		table.try-list th, table.try-list td { padding: 5px 8px; border-bottom: 1px solid var(--color-bg-mid); text-align: left; }
 		table.try-list th { font-family: 'Arvo', serif; color: var(--color-text-dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em; }
 		.st-correct { color: #4caf7a; }
-		.st-likely { color: #d9b44a; }
+		.st-likely, .st-unproven { color: #d9b44a; }
 		.st-wrong, .st-revealed { color: #e06c6c; }
 		.try-list-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--color-border); border-radius: 6px; }
 		.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -220,17 +220,22 @@
 				defence. Any proven win counts, including one faster than N.</p>
 
 			<div class="bench__notice" id="notice">
-				<strong>Preview.</strong> These scores are on the public <strong>dev set</strong> (100 puzzles that are
-				already on the Puzzles page). They are for building the harness, not benchmark results. Mates in 1–3
-				proved too easy, so the next version of the set shifts toward longer mates and every model will be re-run.
-				The 1,000-puzzle private test set is not built yet.
+				<strong>Preview.</strong> These scores are on the public <strong>dev sets</strong>, for building the
+				harness, not benchmark results. Dev set v1 is 100 puzzles from the Puzzles page (mate in 1–3). Mates in
+				1–3 proved too easy, so dev set v2 adds mate in 4 (25 of each length, every spell); the models will be
+				re-run on it. The 1,000-puzzle private test set is not built yet.
 			</div>
 
+			<div class="bench__filters" role="group" aria-label="Puzzle set" id="sets">
+				<button type="button" data-set="dev_v1" aria-pressed="true">Dev set v1 (mate in 1–3)</button>
+				<button type="button" data-set="dev_v2" aria-pressed="false">Dev set v2 (mate in 1–4)</button>
+			</div>
 			<div class="bench__filters" role="group" aria-label="Puzzle subset" id="filters">
 				<button type="button" data-n="all" aria-pressed="true">All puzzles</button>
 				<button type="button" data-n="1" aria-pressed="false">Mate in 1</button>
 				<button type="button" data-n="2" aria-pressed="false">Mate in 2</button>
 				<button type="button" data-n="3" aria-pressed="false">Mate in 3</button>
+				<button type="button" data-n="4" aria-pressed="false" hidden>Mate in 4</button>
 			</div>
 
 			<div class="chart" id="chart">
@@ -250,6 +255,7 @@
 							<th scope="col">Mate in 1</th>
 							<th scope="col">Mate in 2</th>
 							<th scope="col">Mate in 3</th>
+							<th scope="col" class="col-m4" hidden>Mate in 4</th>
 							<th scope="col" title="How the puzzles that were not solved failed">Not solved</th>
 							<th scope="col" title="Mean output tokens per puzzle, reasoning included">Output tokens</th>
 						</tr>
@@ -260,8 +266,8 @@
 			<p class="footnote" id="table-note"></p>
 
 			<h3 id="try">Try the dev set</h3>
-			<p>Play the 100 dev-set puzzles yourself under benchmark conditions, or give them to an AI model and grade
-				its answers here. The dev set is password-protected. Results stay in this browser.</p>
+			<p>Play the 100 puzzles of dev set v2 (25 each of mate in 1, 2, 3 and 4, every spell) yourself under
+				benchmark conditions, or give them to an AI model and grade its answers here. The dev set is password-protected. Results stay in this browser.</p>
 			<form class="try-lock" id="try-lock" autocomplete="off">
 				<label class="visually-hidden" for="try-password">Password</label>
 				<input type="password" id="try-password" placeholder="Password" autocomplete="current-password" />
@@ -378,7 +384,9 @@
 	<script>
 	(function () {
 		'use strict';
-		const DATA_URL = 'static/data/sigilbench/leaderboard.json';
+		const DATA_URLS = { dev_v1: 'static/data/sigilbench/leaderboard.json',
+			dev_v2: 'static/data/sigilbench/leaderboard_dev_v2.json' };
+		const cache = {};
 		const OUTCOMES = [
 			['wrong', 'wrong'], ['unproven', 'unproven'], ['illegal', 'illegal'], ['invalid', 'invalid'],
 			['no_answer', 'no answer'], ['grader_error', 'grader error'], ['api_error', 'API error'],
@@ -483,7 +491,7 @@
 				g.appendChild(hit);
 				svg.appendChild(g);
 			});
-			const label = { all: 'all puzzles', 1: 'mate in 1', 2: 'mate in 2', 3: 'mate in 3' }[subset];
+			const label = { all: 'all puzzles', 1: 'mate in 1', 2: 'mate in 2', 3: 'mate in 3', 4: 'mate in 4' }[subset];
 			const count = subset === 'all' ? Object.values(data.split_counts).reduce((a, b) => a + b, 0) : data.split_counts[subset];
 			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + ' (' + count + ' puzzles)';
 		}
@@ -492,12 +500,15 @@
 			const tb = document.querySelector('#results-table tbody');
 			tb.innerHTML = '';
 			const cell = (s) => (s ? pct(s.accuracy) + '<span class="ci-txt">' + s.correct + '/' + s.total + '</span>' : '–');
+			const has4 = !!data.split_counts['4'];
+			for (const th of document.querySelectorAll('.col-m4')) th.hidden = !has4;
+			const m4 = (e) => (has4 ? '<td>' + cell((e.by_n || {})['4']) + '</td>' : '');
 			for (const e of rows()) {
 				const tr = document.createElement('tr');
 				if (e.kind === 'baseline') tr.className = 'is-baseline';
 				if (e.pending) {
 					tr.innerHTML = '<td><span class="name">' + e.label + '</span><span class="cfg">baseline · not run yet</span></td>' +
-						'<td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>';
+						'<td>–</td><td>–</td><td>–</td><td>–</td>' + (has4 ? '<td>–</td>' : '') + '<td>–</td><td>–</td>';
 					tb.appendChild(tr);
 					continue;
 				}
@@ -508,17 +519,26 @@
 					(e.with_reminder && e.with_reminder.correct !== o.correct ? ' · ' + pct(e.with_reminder.accuracy) + ' with the old reminder' : '') +
 					'</span></td>' +
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
-					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' +
+					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' + m4(e) +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
-					'<td>' + (e.tokens ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
+					'<td>' + (e.tokens && e.tokens.output_per_puzzle ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
 			}
 			const unapproved = data.entries.some((e) => e.kind === 'model' && !e.approved_no_training);
+			const reminderNote = data.entries.some((e) => e.with_reminder)
+				? 'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
+				  'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
+				  '(* output tokens estimated for them), and the original score is shown under the model name. '
+				: '';
+			const engineNote = data.entries.some((e) => e.provider === 'engine')
+				? 'The engine plays one turn per puzzle with the site\'s Very Hard settings (60 s, shipped NNUE eval), graded by the same proof. '
+				: '';
+			const m4Note = data.split_counts['4']
+				? 'Mate-in-4 answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
+				: '';
 			document.getElementById('table-note').textContent =
-				'Benchmark ' + data.benchmark.version + ', ' + data.split + ' split, updated ' + data.generated + '. ' +
-				'One response per puzzle. These runs were made with an older harness that sent one reminder after a ' +
-				'response without an answer; they are re-scored from their transcripts with those puzzles counted as no answer ' +
-				'(* output tokens estimated for them), and the original score is shown under the model name. ' +
+				data.set_label + ': benchmark ' + data.benchmark.version + ', updated ' + data.generated + '. ' +
+				engineNote + m4Note + reminderNote +
 				(data.resolver && data.resolver.indexOf('not applied') === 0
 					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
 					: '') +
@@ -540,12 +560,36 @@
 			drawChart();
 		});
 
-		fetch(DATA_URL, { cache: 'no-cache' })
-			.then((r) => r.json())
-			.then((d) => { data = d; render(); })
-			.catch(() => {
-				document.getElementById('chart').innerHTML = '<p class="footnote">The results could not be loaded.</p>';
-			});
+		let wantSet = null;   // the set last clicked; superseded fetches are ignored
+		function showSet(id) {
+			wantSet = id;
+			for (const x of document.querySelectorAll('#sets button')) x.setAttribute('aria-pressed', String(x.dataset.set === id));
+			const done = (d) => {
+				if (wantSet !== id) return;
+				data = d;
+				const has4 = !!d.split_counts['4'];
+				const b4 = document.querySelector('#filters button[data-n="4"]');
+				b4.hidden = !has4;
+				if (!has4 && subset === '4') {
+					subset = 'all';
+					for (const x of document.querySelectorAll('#filters button')) x.setAttribute('aria-pressed', String(x.dataset.n === 'all'));
+				}
+				render();
+			};
+			if (cache[id]) return done(cache[id]);
+			fetch(DATA_URLS[id], { cache: 'no-cache' })
+				.then((r) => r.json())
+				.then((d) => { cache[id] = d; done(d); })
+				.catch(() => {
+					if (wantSet !== id) return;
+					document.getElementById('table-note').textContent = 'The results for this set could not be loaded.';
+				});
+		}
+		document.getElementById('sets').addEventListener('click', (ev) => {
+			const b = ev.target.closest('button[data-set]');
+			if (b) showSet(b.dataset.set);
+		});
+		showSet('dev_v1');
 	})();
 	</script>
 	<script>
@@ -555,6 +599,7 @@
 	(function () {
 		'use strict';
 		const ENC_URL = 'static/data/sigilbench/devset.enc.json';
+		const SET_ID = 'dev_v2';                        // must match build_try_devset.py SET_ID
 		const DATA_KEY = 'sigilbench_dev_payload';      // sessionStorage: read by puzzles.html?bench=
 		const HUMAN_KEY = 'sigilbench_try_human';       // localStorage: {id: {status, how, n, at}}
 		const AI_KEY = 'sigilbench_try_ai';             // localStorage: {label: {id: {status, how, n, at}}}
@@ -565,7 +610,7 @@
 			get(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } },
 			set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* blocked */ } },
 		};
-		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first', invalid: 'Invalid answer' };
+		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first', invalid: 'Invalid answer' };
 		let dev = null;
 
 		const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -601,9 +646,12 @@
 			$('try-err').textContent = '';
 			try {
 				if (!window.crypto || !crypto.subtle || typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decrypt the dev set.');
-				const enc = await fetch(ENC_URL, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
-				let d;
-				try { d = await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); }
+				const get = (mode) => fetch(ENC_URL, { cache: mode }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+				const open = async (enc) => { try { return await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); } };
+				let d = await open(await get('no-cache'));
+				// An older service worker can still hand out the previous set's file.
+				if (d.set !== SET_ID) d = await open(await get('reload'));
+				if (d.set !== SET_ID) throw new Error('This browser still has an older copy of the dev set. Reload the page and try again.');
 				opened(d);
 			} catch (e) {
 				$('try-err').textContent = e.message || String(e);
@@ -734,7 +782,7 @@
 			'static/scripts/engine/moves.js', 'static/scripts/engine/spells.js', 'static/scripts/engine/sim-board.js',
 			'static/scripts/engine/features.js', 'static/scripts/engine/enumerator.js', 'static/scripts/engine/ai-player.js',
 			'static/scripts/engine/game-controller.js', 'static/scripts/engine/game-review.js?v=36',
-			'static/scripts/engine/rust-ai.js?v=35', 'static/scripts/game-board-local.js?v=37',
+			'static/scripts/engine/rust-ai.js?v=35', 'static/scripts/game-board-local.js?v=38',
 			'static/scripts/sigilbench-replay.js?v=1',
 		];
 		let engineReady = null;
@@ -769,7 +817,11 @@
 			if (res.verdict === 'mate') return { status: 'correct', how: 'The engine proves it forces the win (' + how + ').' + caveat };
 			if (res.verdict === 'likely_mate') return { status: 'likely', how: 'The engine sees a forced win but could not prove it in time (' + how + ').' + caveat };
 			const reply = typeof describePuzzleActions === 'function' ? describePuzzleActions(res.actions) : 'a defence';   // eslint-disable-line no-undef
+			// A proven mate that needs more turns than allowed is a refutation at any N.
 			if (res.verdict === 'mate_slow') return { status: 'wrong', how: 'It wins, but not within ' + p.n + ' turns: the engine replies ' + reply + ' (' + how + ').' };
+			// Mate in 4: the browser search cannot settle a forced mate in 3 after every reply, so
+			// "no win found" is not a refutation (the harness's grader decides those).
+			if (p.n >= 4) return { status: 'unproven', how: 'Not a stored solution, and the in-browser engine found no forced win (' + how + '). At mate in 4 this search is not a proof either way; run the harness grader for a verdict.' };
 			return { status: 'wrong', how: 'The opponent escapes with ' + reply + ' (' + how + ').' };
 		}
 
@@ -819,7 +871,7 @@
 		// Already unlocked in this tab (coming back from a puzzle).
 		try {
 			const d = JSON.parse(sessionStorage.getItem(DATA_KEY) || 'null');
-			if (d && Array.isArray(d.puzzles)) opened(d);
+			if (d && Array.isArray(d.puzzles) && d.set === SET_ID) opened(d);
 		} catch (e) { /* locked */ }
 	})();
 	</script>

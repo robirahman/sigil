@@ -1,5 +1,10 @@
 # SigilBench changelog
 
+
+## 0.2.0-dev (unreleased, branch sigil-bench-v2)
+- Dev set v2 (`bench/dev/dev_set_v2.json`): 25 each of mate in 1-4, all 45 spells (see `bench/dev/DEV_SET_V2.md`).
+- Mate-in-4 grading: AND-OR prover with mover/defender killers and a proof memo; the resolver adds a deep parallel scan of every mover turn at the outermost choice. Dev-v2 reference answers proven: 20/25 first pass (was ~12), 24/25 with the resolver.
+
 ## Unreleased
 - Site: SigilBench in the main menu, and a password-protected "Try the dev set" panel: people play the dev puzzles on the board with the first turn graded (`puzzles.html?bench=<id>`); for AIs it copies the harness's exact prompts and grades a pasted answer in the browser (stored proven solutions, wins on the spot, otherwise the in-browser engine's search, which does not check legality).
 

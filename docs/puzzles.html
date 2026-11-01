@@ -213,7 +213,7 @@
 								<p class="puzzle-panel__sub puzzle-panel__source" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
+									x-text="puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within ' + ({ 3: 'three', 4: 'four' }[puzzle.mate] || puzzle.mate) + ' of your turns, whatever the replies.'))"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
@@ -447,7 +447,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
-		<script src="static/scripts/game-board-local.js?v=37"></script>
+		<script src="static/scripts/game-board-local.js?v=38"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->
@@ -635,7 +635,7 @@
 				const loading = document.getElementById('puzzle-loading');
 				let dev = null;
 				try { dev = JSON.parse(sessionStorage.getItem(BENCH_DATA_KEY) || 'null'); } catch (e) { dev = null; }
-				if (!dev || !Array.isArray(dev.puzzles)) {
+				if (!dev || !Array.isArray(dev.puzzles) || dev.set !== 'dev_v2') {   // sigilbench.html SET_ID
 					loading.innerHTML = 'The SigilBench dev set is password-protected. <a href="sigilbench.html#try">Unlock it on the SigilBench page</a>, then open a puzzle from there.';
 					return;
 				}
@@ -643,12 +643,28 @@
 				const list = dev.puzzles;
 				const k = Math.max(0, list.findIndex(p => p.id === params.get('bench')));
 				const bp = list[k];
-				const src = all.find(p => p.id === bp.source_puzzle_id);
-				if (!src || src.sfn !== bp.sfn) {
-					loading.textContent = 'Could not find this dev puzzle on the board (' + bp.id + ').';
-					return;
-				}
-				const puzzle = Object.assign({}, src, { bench: bp.id, tags: [] });
+				// Dev puzzles from the Puzzles set use its puzzle (with the proven
+				// defences and continuations); mined ones (v2's mate in 4) were never
+				// published, so they get a puzzle built from the dev entry: its
+				// winning first turns and one reference line, no stored defences --
+				// the engine picks every reply.
+				const src = all.find(p => p.id === bp.source_puzzle_id && p.sfn === bp.sfn);
+				// The browser derives the side to move from the turn counter (Red on
+				// odd turns). Self-play SFNs can be off by one (the parity trap the
+				// Puzzles set corrected); shift such a counter so the board opens
+				// with the right side to move. Keys leave the counter out.
+				const browserSfn = (sfn) => {
+					const t = String(sfn).trim().split(/\s+/);
+					const tc = parseInt(t[2], 10);
+					if (!isNaN(tc) && (t[1] === 'r') !== (tc % 2 === 1)) t[2] = String(tc + 1);
+					return t.join(' ');
+				};
+				const puzzle = src ? Object.assign({}, src, { bench: bp.id, tags: [] }) : {
+					id: bp.id, bench: bp.id, kind: 'mate', mate: bp.n, mover: bp.mover, sfn: browserSfn(bp.sfn),
+					variant: bp.variant || 'competitive', turn: parseInt(String(bp.sfn).split(/\s+/)[2], 10) || null,
+					tags: [], game: {}, solution_keys: bp.solution_keys || [],
+					solutions: bp.reference_solution ? [{ actions: bp.reference_solution }] : [],
+				};
 				const readResults = () => { try { return JSON.parse(localStorage.getItem(BENCH_RESULTS_KEY) || '{}') || {}; } catch (e) { return {}; } };
 				const results = readResults();
 				const prior = results[bp.id];
@@ -662,7 +678,7 @@
 					r[bp.id] = { status, how, n: bp.n, at: Date.now() };
 					if (pending) r[bp.id].pending = true;
 					try { localStorage.setItem(BENCH_RESULTS_KEY, JSON.stringify(r)); } catch (e) { /* storage blocked */ }
-					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', revealed: 'Solution shown first (not solved)' }[status];
+					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first (not solved)' }[status];
 					const el = document.getElementById('bench-result');
 					if (el) el.textContent = pending ? 'The engine is judging your first turn…'
 						: 'Recorded: ' + label + (how ? ' — ' + how.replace(/\.$/, '') : '') + '. Only your first turn counts; play on or retry for practice.';
@@ -680,6 +696,9 @@
 				window.SIGIL_BENCH_JUDGE = (verdict, text) => {
 					if (verdict === 'mate') record('correct', 'not a stored line; the engine proves it still forces the win');
 					else if (verdict === 'likely_mate') record('likely', 'the engine sees a forced win but could not prove it in time');
+					// At mate in 4 the browser search is no refutation: a turn it cannot prove stays unproven.
+					// mate_slow is a proven win that takes too long: wrong at any N.
+					else if (bp.n >= 4 && verdict !== 'mate_slow' && !/escapes the mate/.test(text || '')) record('unproven', 'not a stored solution, and the in-browser engine could not prove a forced win');
 					else record('wrong', (text || 'the engine finds an escape').replace(/^Engine: /, 'engine: '));
 				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
@@ -702,7 +721,7 @@
 				window.SIGIL_PUZZLE_SOURCE = 'Benchmark conditions: your first turn is graded, as a model\'s one submitted turn is. '
 					+ (prior ? 'Already attempted (' + prior.status + '); this attempt is practice.' : 'Think it through before you play.');
 				window.SIGIL_PUZZLE_TAGS = '';
-				const done = Object.values(results).filter(r => r && r.status);
+				const done = list.map(p => results[p.id]).filter(r => r && r.status);   // this set only (v1 results share the store)
 				window.SIGIL_PUZZLE_PROGRESS = (k + 1) + ' of ' + list.length + ' dev puzzles · ' + done.length + ' attempted, '
 					+ done.filter(r => r.status === 'correct').length + ' correct (this device)';
 				window.SIGIL_PUZZLE_FILTER_HTML = '<span id="bench-result"></span>';

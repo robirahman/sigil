@@ -2163,8 +2163,10 @@ document.addEventListener('alpine:init', () => {
 							_puzzleExpectGameOver = true;
 							return;
 						}
-						_this.puzzleMessage = step === 0 && puzzle.mate === 3
-							? 'Correct! Two more to go.' : 'Correct! Now find the finishing move.';
+						// Turns still to play after this one (mate in 4: three, then two).
+						const rem = puzzle.mate - (step + 1);
+						_this.puzzleMessage = rem >= 2
+							? 'Correct! ' + ({ 2: 'Two', 3: 'Three' }[rem] || rem) + ' more to go.' : 'Correct! Now find the finishing move.';
 						return;
 					}
 					// Final solver turn: the game must be over now -- or about to be:
@@ -3304,6 +3306,11 @@ class PuzzleOpponent {
 			} else if (res.verdict === 'mate_slow') {
 				comp.puzzleJudge = 'Engine: a forced win exists but needs ' + (turns ? turnsText(turns) : res.mate_in + ' plies') + ', more than the puzzle allows (' + how + ').';
 				comp._puzzleFail('That wins eventually, but not within ' + this.puzzle.mate + ' turns. The engine replies ' + describePuzzleActions(res.actions) + '. Play on, or Retry.');
+			} else if (this.puzzle.mate >= 4 && !res.exhaustive) {
+				// Mate in 4 (SigilBench dev set v2): a bounded search that finds no
+				// forced win has not refuted one, so the attempt is not failed.
+				comp.puzzleJudge = 'Engine: found no forced win (' + how + '), but at mate in 4 its search is not a proof either way.';
+				comp.puzzleMessage = 'Not a stored solution, and the engine could not prove it wins — unproven. Play on, or Retry.';
 			} else {
 				const evalStones = (typeof res.stones === 'number') ? res.stones : res.score_ui * 39;
 				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + evalStones.toFixed(1) + ' stones for it).';

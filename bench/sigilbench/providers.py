@@ -249,5 +249,46 @@ class RandomLegal:
                 'stop': 'answered', 'usage': {}, 'transcript': [], 'n_legal_positions': len(kids)}
 
 
-PROVIDERS = {c.name: c for c in (Anthropic, OpenAI, XAI, Gemini, Oracle, RandomLegal)}
-OFFLINE = {'oracle', 'random'}
+class Engine:
+    """Baseline: the shipped Sigil engine (SigilNet NNUE eval) plays ONE turn
+    from the puzzle position with a browser tier's settings
+    (engine/harness/tier_roundrobin.TIERS: per-move time, table size, the
+    shipped eval, width and adaptive search), on a fresh table, exactly as
+    puzzle_attempts.py plays a tier's first turn. It answers with the position
+    its turn produces (`after_sfn`); the grader proves it like any answer.
+    `model` is the tier name (very_easy, easy, medium, hard, very_hard)."""
+    name = 'engine'
+
+    def __init__(self, model='hard', **_):
+        import os
+        import sys
+        here = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            'engine', 'harness')
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import sigil_engine as se
+        from tier_roundrobin import TIERS, EVAL, WIDTH, ADAPTIVE
+        if model not in TIERS:
+            raise SystemExit(f'--model must be a tier: {sorted(TIERS)}')
+        if hasattr(se, 'SHIPPED_POLICY'):
+            se.set_policy(*se.SHIPPED_POLICY)
+        if hasattr(se, 'SHIPPED_EXPLORE'):
+            se.set_policy_explore(*se.SHIPPED_EXPLORE)
+        self.se, self.cfg, self.eval, self.width, self.adaptive = se, TIERS[model], EVAL, WIDTH, ADAPTIVE
+        self.model = model
+        self.settings = {'tier': model, 'ms': self.cfg['ms'], 'tt_bits': self.cfg['tt'], 'eval': EVAL,
+                         'width': WIDTH, 'adaptive': list(ADAPTIVE)}
+
+    def solve(self, system, user, puzzle=None):
+        se = self.se
+        sess = se.SearchSession(self.cfg['tt'])
+        sess.new_game()
+        b = se.Board.from_sfn(puzzle['sfn'])
+        # Positional args as puzzle_attempts.play: (board, ms, max_depth, window, width, history, eval).
+        sess.play_best(b, self.cfg['ms'], 64, 16, self.width, [b.key_js], self.eval, adaptive=self.adaptive)
+        return {'actions': None, 'after_sfn': b.to_sfn(), 'raw_answer': None, 'stop': 'answered',
+                'usage': {}, 'transcript': []}
+
+
+PROVIDERS = {c.name: c for c in (Anthropic, OpenAI, XAI, Gemini, Oracle, RandomLegal, Engine)}
+OFFLINE = {'oracle', 'random', 'engine'}

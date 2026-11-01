@@ -97,7 +97,7 @@ def main():
     a = ap.parse_args()
 
     cls = PROVIDERS[a.provider]
-    model = a.model or {'oracle': 'reference', 'random': 'uniform'}.get(a.provider)
+    model = a.model or {'oracle': 'reference', 'random': 'uniform', 'engine': 'hard'}.get(a.provider)
     if not model:
         sys.exit('--model is required for API providers')
     appr = None
@@ -212,6 +212,8 @@ def main():
         secs = round(time.time() - t0, 1)
         if err:
             g = {'status': 'api_error', 'correct': False, 'detail': err}
+        elif ans.get('after_sfn'):
+            g = grader.grade_after(p, ans['after_sfn'])      # engine baseline: graded by position
         elif ans['actions'] is None and ans.get('stop') == 'answered':
             # submit_answer WAS called, but its arguments did not parse into an
             # action list: a malformed answer, not a missing one.
@@ -222,7 +224,7 @@ def main():
         else:
             g = grader.grade(p, ans['actions'])
         rec = {'puzzle_id': p['id'], 'n': p['n'], 'status': g['status'], 'correct': g['correct'],
-               'answer': ans.get('actions'), 'raw_answer': ans.get('raw_answer'),
+               'answer': ans.get('actions') or ans.get('after_sfn'), 'raw_answer': ans.get('raw_answer'),
                'stop': ans.get('stop'), 'usage': ans.get('usage'), 'seconds': secs,
                'grade': {k: v for k, v in g.items() if k not in ('status', 'correct')}}
         with wlock:

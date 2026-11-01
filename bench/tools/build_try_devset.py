@@ -24,7 +24,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from sigilbench.common import CANARY, DEV_SET, REPO, bench_version, load_json  # noqa: E402
+from sigilbench.common import BENCH, CANARY, REPO, bench_version, load_json  # noqa: E402
 from sigilbench import prompt as P  # noqa: E402
 
 from cryptography.hazmat.primitives import hashes  # noqa: E402
@@ -33,6 +33,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # noqa: E402
 
 OUT = os.path.join(REPO, 'docs', 'static', 'data', 'sigilbench', 'devset.enc.json')
 ITERATIONS = 310_000
+# The set the site offers. The page only accepts a cached payload whose `set`
+# matches its own SET_ID, so bump both together.
+DEV_SET = os.path.join(BENCH, 'dev', 'dev_set_v2.json')
+SET_ID = 'dev_v2'
 
 # Appended to the system prompt in the "one message" copy, for chat
 # interfaces that cannot offer the submit_answer tool.
@@ -42,8 +46,8 @@ NO_TOOL_NOTE = (
     'is final.')
 
 
-def payload():
-    dev = load_json(DEV_SET)
+def payload(path=DEV_SET, set_id=SET_ID):
+    dev = load_json(path)
     puzzles = []
     for p in dev['puzzles']:
         puzzles.append({
@@ -51,6 +55,7 @@ def payload():
             'n': p['n'],
             'mover': p['mover'],
             'sfn': p['sfn'],
+            'variant': p.get('variant'),
             'source_puzzle_id': p['source_puzzle_id'],
             'solution_keys': p['solution_keys'],
             'reference_solution': p['reference_solution'],
@@ -58,6 +63,7 @@ def payload():
         })
     return {
         'canary': CANARY,
+        'set': set_id,
         'benchmark': bench_version().get('version'),
         'name': dev.get('name'),
         'counts': dev.get('counts'),
@@ -86,6 +92,8 @@ def encrypt(data: bytes, password: str):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--dev-set', default=DEV_SET)
+    ap.add_argument('--set-id', default=SET_ID)
     ap.add_argument('--check', action='store_true', help='decrypt the existing file with the password and report')
     a = ap.parse_args()
     pw = os.environ.get('SIGILBENCH_TRY_PASSWORD')
@@ -97,9 +105,9 @@ def main():
                        iterations=e['kdf']['iterations']).derive(pw.encode())
         d = json.loads(gzip.decompress(AESGCM(k).decrypt(base64.b64decode(e['cipher']['iv']),
                                                           base64.b64decode(e['ciphertext']), None)))
-        print(f"ok: {len(d['puzzles'])} puzzles, benchmark {d['benchmark']}")
+        print(f"ok: set {d.get('set')}, {len(d['puzzles'])} puzzles, benchmark {d['benchmark']}")
         return
-    raw = json.dumps(payload(), separators=(',', ':')).encode()
+    raw = json.dumps(payload(a.dev_set, a.set_id), separators=(',', ':')).encode()
     enc = encrypt(gzip.compress(raw, mtime=0), pw)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, 'w') as f:

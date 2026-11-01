@@ -1,0 +1,22 @@
+{
+ "_comment": "Dev set v2 (bench/dev/dev_set_v2.json). Engine runs live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>. Rebuild: python3 bench/tools/build_leaderboard.py --manifest bench/leaderboard/runs_dev_v2.json --dev-set bench/dev/dev_set_v2.json --out docs/static/data/sigilbench/leaderboard_dev_v2.json --runs-root <local copy of the bucket>",
+ "split": "dev",
+ "set_id": "dev_v2",
+ "set_label": "Dev set v2",
+ "runs": [
+  {
+   "gcs": "engine-runs/2026-11-01/engine_vh_v2",
+   "kind": "baseline",
+   "label": "Sigil engine (SigilNet NNUE)",
+   "config": "Very Hard settings, 60 s per puzzle"
+  }
+ ],
+ "baselines": [
+  {
+   "id": "humans",
+   "label": "Human experts (Robi, Andy)",
+   "config": "pending",
+   "pending": true
+  }
+ ]
+}
