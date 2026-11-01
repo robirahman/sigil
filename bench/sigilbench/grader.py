@@ -30,6 +30,14 @@ DEFAULT_GRADE_BIN = os.environ.get('SIGILBENCH_GRADE_BIN') or os.path.join(
     'release', 'examples', 'bench_grade')
 
 
+def sfn_key(sfn):
+    """puzzleSfnKey (game-board-local.js): stones, spell counters, locks,
+    springlocks, plus the Providence banks when present."""
+    t = sfn.split()
+    pm = [x for x in t[6:] if x.startswith('pm:')]
+    return ' '.join([t[0].split('/')[0]] + t[3:6] + pm)
+
+
 class _Proc:
     def __init__(self, argv, env=None):
         self.argv, self.env = argv, env
@@ -75,10 +83,17 @@ class Grader:
         r = self.replay(puzzle['sfn'], actions)
         if not r.get('ok'):
             return {'status': 'invalid', 'correct': False, 'detail': r.get('error')}
-        out = {'after': r['after'], 'key': r['key']}
-        if r['key'] in set(puzzle.get('solution_keys') or []):
+        return self.grade_after(puzzle, r['after'], r['key'])
+
+    def grade_after(self, puzzle, after, key=None):
+        """Grade a turn given by the position it produced (the engine
+        baseline hands in its after-position, not an action list). Legality
+        and the proof are bench_grade's, exactly as for an action list."""
+        key = key or sfn_key(after)
+        out = {'after': after, 'key': key}
+        if key in set(puzzle.get('solution_keys') or []):
             return dict(out, status='correct', correct=True, proof='stored solution')
-        g = self.rust.ask(f"{puzzle['n']}\t{puzzle['sfn']}\t{r['after']}")
+        g = self.rust.ask(f"{puzzle['n']}\t{puzzle['sfn']}\t{after}")
         out['rust'] = g
         v = g.get('verdict')
         if v == 'illegal':
