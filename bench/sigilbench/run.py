@@ -133,6 +133,9 @@ def main():
     os.makedirs(os.path.join(run_dir, 'transcripts'), exist_ok=True)
     sysp = system_prompt()
     meta_path = os.path.join(run_dir, 'run.json')
+    if not a.resume and (os.path.exists(meta_path) or os.path.exists(os.path.join(run_dir, 'results.jsonl'))):
+        # A fresh run never inherits another run's records (Codex review, PR #60).
+        sys.exit(f'{run_dir} already holds a run; pass --resume to continue it, or choose a new --out')
     if a.resume and os.path.exists(meta_path):
         # Never mix configurations in one run directory (Codex review, PR #60).
         old = load_json(meta_path)
@@ -184,6 +187,12 @@ def main():
         if a.price_in is None:
             return 0.0
         return spent['in'] / 1e6 * a.price_in + spent['out'] / 1e6 * a.price_out
+
+    if a.max_cost is not None and cost() >= a.max_cost:
+        # Already at the cap (resumed spend, or a zero cap): no new model calls.
+        print(f'cost cap ${a.max_cost} already reached (${cost():.2f} spent); not starting new puzzles',
+              file=sys.stderr)
+        stop.set()
 
     def one(p):
         if stop.is_set():
