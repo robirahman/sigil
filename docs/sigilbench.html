@@ -140,6 +140,7 @@
 		.back-link { display: inline-block; margin-top: 28px; color: var(--color-accent); text-decoration: none; }
 		/* Try the dev set */
 		.try-lock { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+		.try-lock[hidden] { display: none; }
 		.try-lock input, .try input[type=text], .try select, .try textarea {
 			box-sizing: border-box;
 			padding: 6px 10px;
@@ -363,6 +364,7 @@
 
 			<h3>Changelog</h3>
 			<ul class="footnote" id="changelog">
+				<li><strong>Unreleased</strong>: a password-protected <a href="#try">Try the dev set</a> panel for people and AI models.</li>
 				<li><strong>0.1.1-dev</strong> (2026-11-01): one response per puzzle (the reminder is gone; earlier runs
 					re-scored from their transcripts); an exhaustive resolver for unproven answers (not yet applied to these
 					runs); GPT-6 Luna added.</li>
