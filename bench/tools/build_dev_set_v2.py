@@ -32,9 +32,11 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sigilbench.common import BENCH, CANARY, REPO  # noqa: E402
 from sigilbench.grader import Grader  # noqa: E402
 from sigilbench.render import parse_sfn  # noqa: E402
+from mine_mate4 import fix_parity  # noqa: E402
 
 SRC = os.path.join(REPO, 'docs', 'static', 'puzzles', 'mate_puzzles.json')
 OUT = os.path.join(BENCH, 'dev', 'dev_set_v2.json')
@@ -96,6 +98,8 @@ def main():
     pool = [dict(p, source='published') for p in pub['puzzles'] if p['kind'] == 'mate' and p['mate'] in (1, 2, 3)]
     pool += [dict(p, source=p.get('source', 'mined-v2')) for p in mined['puzzles'] if p.get('mate') == 4]
     pool = [p for p in pool if p['variant'] in ('standard', 'competitive')]
+    for p in pool:
+        p['sfn'] = fix_parity(p['sfn'])     # pools mined before the parity fix
     rng.shuffle(pool)
     g = Grader()
     g_fast = Grader(time_ms=60_000)     # faster-mate checks

@@ -38,6 +38,17 @@ def skey(s):
     return ' '.join([t[0].split('/')[0]] + t[3:6] + pm)
 
 
+def fix_parity(sfn):
+    """The browser's turn parity: Red moves on odd turns, Blue on even ones.
+    About two thirds of self-play SFNs carry a counter one lower than that
+    (the PR #44 parity trap); shift such a counter up by one. Only the counter
+    changes -- the side token, which is what every rule reads, stays."""
+    t = sfn.split()
+    if (t[1] == 'r') != (int(t[2]) % 2 == 1):
+        t[2] = str(int(t[2]) + 1)
+    return ' '.join(t)
+
+
 def cmd_candidates(a):
     games = {}
     for f in a.games:
@@ -66,7 +77,7 @@ def cmd_candidates(a):
         if k in seen:
             continue
         seen.add(k)
-        out.append({'id': f"{p['game']['id']}-t{prev['turnNumber']}", 'sfn': s,
+        out.append({'id': f"{p['game']['id']}-t{prev['turnNumber']}", 'sfn': fix_parity(s),
                     'hints': [prev['sfnAfter']] if prev.get('sfnAfter') else [], 'from_m3': p['id'],
                     'variant': g.get('variant') or 'standard',
                     'game': {'id': p['game']['id'], 'winner': g.get('winner'), 'date': p['game'].get('date')}})
@@ -127,7 +138,7 @@ def cmd_assemble(a):
             continue
         c = cands[cid]
         sols = [{'actions': l['actions'], 'after': l['after'], 'key': skey(l['after'])} for l in r['mate4']]
-        puzzles.append({'id': cid, 'kind': 'mate', 'mate': 4, 'mover': r['mover'], 'sfn': c['sfn'],
+        puzzles.append({'id': cid, 'kind': 'mate', 'mate': 4, 'mover': r['mover'], 'sfn': fix_parity(c['sfn']),
                         'variant': c['variant'], 'game': c['game'], 'from_m3': c['from_m3'],
                         'source': 'mined-v2 (2026-11)', 'root_successors': r.get('root_successors'),
                         'solution_keys': sorted({s['key'] for s in sols}), 'solutions': sols,
