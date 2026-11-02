@@ -119,3 +119,34 @@ python3 engine/harness/human_vs_rust_report.py <completed_games dump> --users <u
 
 H1 = superhuman by the campaign's definition (>= 65% vs humans rated >= 1400); H0 = not;
 `continue` = more games needed. `?ai=rust_anchor` is the frozen reference; never upgrade it.
+
+## Run 5 -- Round 4 Self-Play Fleet & SNN2 Network Co-Training (Engine v35)
+
+**STATUS: PENDING LAUNCH** (Detailed handoff instructions: [`docs/designs/ai-training-todos.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/ai-training-todos.md)).
+
+All pre-training engine fixes shipped on `main` in PR #57 (v35: `TurnIter` DashCast ordering, Providence bank bounds <= 60, threefold repetition mate prepass, 8-slot `FoldRing`, and `SNN2` wall/bank support).
+Round 4 generates a clean self-play corpus free of historical search blind spots.
+
+```sh
+cd engine/gcp
+./buildtest.sh
+./launch_s3_fleet.sh r4-fleet 60 c3d-highcpu-90 us-central1-f
+```
+
+60 shards x ~100-150 games: expect ~6,000–9,000 games in `gs://focus-surfer-494820-g0-sigil/runs/r4-fleet/`. Collect with:
+
+```sh
+cd engine/gcp
+./collect.sh r4-fleet
+./teardown.sh
+```
+
+| step | command / script | gate / acceptance criteria |
+|---|---|---|
+| Policy extract | `python engine/harness/policy_train.py extract --shards "engine/gcp/runs/r4-fleet/live/*.npz"` | Fail-fast assertion: primary candidate window drop rate < 1% (non-default sacrifice pairs & dash pushes preserved) |
+| Policy train | `python engine/harness/policy_train.py train --examples ... --out engine/src/policy_weights.rs` | Test suite passes: `cargo test --release --lib` |
+| SNN2 value train | `python engine/harness/nn_eval.py train --data packed_snn2_r4.npz --snn2 --out engine/nets/nnue_snn2_r4.bin` | R1-R4 combined + 5x upsampled human surprise positions |
+| WASM Parity | `node tools/nn-wasm-parity.js --net engine/nets/nnue_snn2_r4.bin` | 100% bit-exact match across 500 test positions including walls and bank |
+| Tactical Gate | `GWSMF5` (Turn 26) & `QJLGQR` (Turn 25-26) | Red parries `dash + Flourish` at depth >= 5; Blue executes 3rd repetition mate |
+| Arena Elo Gate | `cargo run --release --bin arena -- --games 400 --time 2500 --eval-a nnue_snn2_r4 --eval-b nnue_mt256` | >= +20 Elo with lower 95% confidence bound > 0 vs v34 |
+

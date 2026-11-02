@@ -1,8 +1,10 @@
 # Superhuman Desktop Engine (Hard & Very Hard Tiers)
 
 *   **Author:** robirahman
-*   **Status:** Proposed
-*   **Date:** 2026-10-31
+*   **Status:** In Progress (Stage 1 & Stage 2 merged to `main` in PR #57 at `c41464f`; Stage 3 training pending)
+*   **Date:** 2026-10-31 (Updated 2026-11-02)
+*   **Implementation Tracking:** [`docs/designs/ai-training-todos.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/ai-training-todos.md)
+*   **Tactical Benchmarks:** [`engine/data/benchmarks/`](file:///storage/emulated/10/Documents/sigil/engine/data/benchmarks/)
 
 --------------------------------------------------------------------------------
 

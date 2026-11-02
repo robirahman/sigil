@@ -1,0 +1,781 @@
+{
+  "game": {
+    "blueEloAfter": 1630,
+    "blueEloBefore": 1657,
+    "blueUid": "__ai_rust_hard__",
+    "eloChange": 27,
+    "eloProcessed": true,
+    "endReason": "play",
+    "finalSfn": "......rr.r...rr...rxrr.r..rbb.........b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 31 6:1 Decay:Flourish -:- r3 competitive",
+    "ranked": true,
+    "redEloAfter": 1386,
+    "redEloBefore": 1359,
+    "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+    "roomCode": "GWSMF5",
+    "setupSfn": "......................................./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 1 0:0 -:- -:- b1 competitive",
+    "spellNames": [
+      "Harvest",
+      "Flourish",
+      "Fissure",
+      "Decay",
+      "Fury",
+      "Annuity",
+      "Gust",
+      "Dividend",
+      "Charge"
+    ],
+    "timeControl": {
+      "type": "none"
+    },
+    "timestamp": 1793465415094,
+    "turns": [
+      {
+        "actions": [
+          "b8",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 1
+      },
+      {
+        "actions": [
+          {
+            "node": "b4",
+            "type": "blink"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 2
+      },
+      {
+        "actions": [
+          "b7",
+          "Dividend",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 3
+      },
+      {
+        "actions": [
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 4
+      },
+      {
+        "actions": [
+          "b10",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 5
+      },
+      {
+        "actions": [
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "node": "b8",
+            "providence": true,
+            "pushed_to": "b9",
+            "type": "hard_move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 6
+      },
+      {
+        "actions": [
+          "b8",
+          "b7",
+          "Dividend",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 7
+      },
+      {
+        "actions": [
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "node": "b8",
+            "providence": true,
+            "pushed_to": "b13",
+            "type": "hard_move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 8
+      },
+      {
+        "actions": [
+          "b8",
+          "b7",
+          "b5",
+          "Dividend",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 9
+      },
+      {
+        "actions": [
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "node": "b6",
+            "providence": true,
+            "type": "move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 10
+      },
+      {
+        "actions": [
+          "c11",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 11
+      },
+      {
+        "actions": [
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "node": "b8",
+            "providence": true,
+            "pushed_to": "c6",
+            "type": "hard_move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 12
+      },
+      {
+        "actions": [
+          "b8",
+          "b7",
+          "b12",
+          "c5",
+          "Dividend",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 13
+      },
+      {
+        "actions": [
+          {
+            "node": "b2",
+            "type": "move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 14
+      },
+      {
+        "actions": [
+          "c1",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 15
+      },
+      {
+        "actions": [
+          {
+            "node": "b3",
+            "type": "move"
+          },
+          {
+            "node": "b1",
+            "providence": true,
+            "type": "move"
+          },
+          {
+            "kept": [
+              "b2"
+            ],
+            "spell": "Flourish",
+            "type": "cast"
+          },
+          {
+            "node": "b7",
+            "type": "move"
+          },
+          {
+            "node": "c4",
+            "type": "move"
+          },
+          {
+            "node": "c3",
+            "type": "move"
+          },
+          {
+            "node": "c7",
+            "type": "move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 16
+      },
+      {
+        "actions": [
+          "c5",
+          "c2",
+          "skip_providence",
+          "Fury",
+          "b8",
+          "c11",
+          "c4",
+          "a12",
+          "c3",
+          "c2",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 17
+      },
+      {
+        "actions": [
+          {
+            "node": "c8",
+            "type": "move"
+          },
+          {
+            "spell": "Charge",
+            "type": "cast"
+          },
+          {
+            "node": "b8",
+            "pushed_to": "b9",
+            "type": "hard_move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 18
+      },
+      {
+        "actions": [
+          "b10",
+          "b8",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 19
+      },
+      {
+        "actions": [
+          {
+            "node": "b8",
+            "pushed_to": "c11",
+            "type": "hard_move"
+          },
+          {
+            "spell": "Dividend",
+            "type": "cast"
+          },
+          {
+            "banked": 1,
+            "spell": "Dividend",
+            "type": "bank_stones"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 20
+      },
+      {
+        "actions": [
+          "c7",
+          "Fissure",
+          "c3",
+          "b7",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 21
+      },
+      {
+        "actions": [
+          {
+            "node": "c7",
+            "pushed_to": "c4",
+            "type": "hard_move"
+          },
+          {
+            "spell": "Charge",
+            "type": "cast"
+          },
+          {
+            "node": "c10",
+            "type": "move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 22
+      },
+      {
+        "actions": [
+          "b8",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 23
+      },
+      {
+        "actions": [
+          {
+            "node": "c7",
+            "type": "move"
+          },
+          {
+            "node": "c4",
+            "providence": true,
+            "pushed_to": "c5",
+            "type": "hard_move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 24
+      },
+      {
+        "actions": [
+          "b3",
+          "dash",
+          "b13",
+          "c11",
+          "b2",
+          "Fury",
+          "b8",
+          "b8",
+          "b6",
+          "b5",
+          "b5",
+          "b4",
+          "b4",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 25
+      },
+      {
+        "actions": [
+          {
+            "node": "b11",
+            "type": "move"
+          },
+          {
+            "spell": "Charge",
+            "type": "cast"
+          },
+          {
+            "node": "b6",
+            "pushed_to": "b12",
+            "type": "hard_move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 26
+      },
+      {
+        "actions": [
+          "b6",
+          "dash",
+          "c3",
+          "c5",
+          "b1",
+          "a9",
+          "Flourish",
+          "b5",
+          "b6",
+          "c11",
+          "b10",
+          "b8",
+          "b9",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 27
+      },
+      {
+        "actions": [
+          {
+            "node": "c3",
+            "type": "move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 28
+      },
+      {
+        "actions": [
+          "a7",
+          "dash",
+          "b12",
+          "c11",
+          "a8",
+          "Fury",
+          "b8",
+          "b9",
+          "b5",
+          "a9",
+          "a10",
+          "b11",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 29
+      },
+      {
+        "actions": [
+          {
+            "node": "c2",
+            "type": "move"
+          },
+          {
+            "type": "pass"
+          }
+        ],
+        "color": "blue",
+        "kind": "sim",
+        "turnNumber": 30
+      },
+      {
+        "actions": [
+          "b2",
+          "Decay",
+          "a10",
+          "a8",
+          "pass"
+        ],
+        "color": "red",
+        "kind": "input",
+        "turnNumber": 31
+      }
+    ],
+    "variant": "competitive",
+    "winner": "red"
+  },
+  "hydrated": {
+    "ok": true,
+    "turns": [
+      {
+        "color": "red",
+        "turnNumber": 1,
+        "sfnBefore": "......................................./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 1 0:0 -:- -:- b1 competitive",
+        "sfnAfter": "....................r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 1 0:0 -:- -:- tied competitive"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 2,
+        "sfnBefore": "....................r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 2 0:0 -:- -:- tied competitive",
+        "sfnAfter": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 2 0:0 -:- -:- b1 competitive"
+      },
+      {
+        "color": "red",
+        "turnNumber": 3,
+        "sfnBefore": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 3 0:0 -:- -:- b1 competitive",
+        "sfnAfter": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 3 0:0 -:- -:- tied competitive pm:1:0"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 4,
+        "sfnBefore": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 4 0:0 -:- -:- tied competitive pm:1:0",
+        "sfnAfter": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 4 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 5,
+        "sfnBefore": "................b...r................../Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 5 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "................b...r.r................/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 5 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 6,
+        "sfnBefore": "................b...r.r................/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 6 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": "................b...brr................/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 6 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 7,
+        "sfnBefore": "................b...brr................/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 7 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "................b...rrr..............b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 7 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 8,
+        "sfnBefore": "................b...rrr..............b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 8 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": "................b...brr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 8 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 9,
+        "sfnBefore": "................b...brr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 9 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "................bb..rrr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 9 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 10,
+        "sfnBefore": "................bb..rrr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 10 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": "................bbb.rrr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 10 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 11,
+        "sfnBefore": "................bbb.rrr..r...........b./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 11 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "................bbb.rrr..r..........rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 11 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 12,
+        "sfnBefore": "................bbb.rrr..r..........rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 12 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": "................bbb.brr..r.....r....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 12 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 13,
+        "sfnBefore": "................bbb.brr..r.....r....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 13 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "................bbb.rrr..r....br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 13 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 14,
+        "sfnBefore": "................bbb.rrr..r....br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 14 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": "..............b.bbb.rrr..r....br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 14 0:0 -:- -:- b1 competitive pm:1:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 15,
+        "sfnBefore": "..............b.bbb.rrr..r....br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 15 0:0 -:- -:- b1 competitive pm:1:1",
+        "sfnAfter": "..............b.bbb.rrr..rr...br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 15 0:0 -:- -:- tied competitive pm:1:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 16,
+        "sfnBefore": "..............b.bbb.rrr..rr...br....rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 16 0:0 -:- -:- tied competitive pm:1:1",
+        "sfnAfter": ".............bb....brrr..rr.bbbrb...rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 16 0:1 -:Flourish -:- b1 competitive pm:1:0"
+      },
+      {
+        "color": "red",
+        "turnNumber": 17,
+        "sfnBefore": ".............bb....brrr..rr.bbbrb...rb./Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 17 0:1 -:Flourish -:- b1 competitive pm:1:0",
+        "sfnAfter": "...........b.bb....br....rrrrrrrb....bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 17 1:1 Fury:Flourish -:- r1 competitive pm:1:0"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 18,
+        "sfnBefore": "...........b.bb....br....rrrrrrrb....bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 18 1:1 Fury:Flourish -:- r1 competitive pm:1:0",
+        "sfnAfter": "...........b.bb....bbr...rrrrrrr.b...bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 18 1:1 Fury:Flourish -:- tied competitive pm:1:0"
+      },
+      {
+        "color": "red",
+        "turnNumber": 19,
+        "sfnBefore": "...........b.bb....bbr...rrrrrrr.b...bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 19 1:1 Fury:Flourish -:- tied competitive pm:1:0",
+        "sfnAfter": "...........b.bb.b..brrr..rrrrrrr.b...bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 19 1:1 Fury:Flourish -:- r1 competitive"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 20,
+        "sfnBefore": "...........b.bb.b..brrr..rrrrrrr.b...bb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 20 1:1 Fury:Flourish -:- r1 competitive",
+        "sfnAfter": "...........b.bb.b...brr..rrrrrrr.b..rbb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 20 1:1 Fury:Flourish -:- tied competitive pm:0:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 21,
+        "sfnBefore": "...........b.bb.b...brr..rrrrrrr.b..rbb/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 21 1:1 Fury:Flourish -:- tied competitive pm:0:1",
+        "sfnAfter": "...........b.bb....x.rr..rr.r...rb..r.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 21 2:1 Fissure:Flourish -:- tied competitive pm:0:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 22,
+        "sfnBefore": "...........b.bb....x.rr..rr.r...rb..r.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 22 2:1 Fissure:Flourish -:- tied competitive pm:0:1",
+        "sfnAfter": "...........b.bb....x.rr..rr.rr...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 22 2:1 Fissure:Flourish -:- b1 competitive pm:0:1"
+      },
+      {
+        "color": "red",
+        "turnNumber": 23,
+        "sfnBefore": "...........b.bb....x.rr..rr.rr...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 23 2:1 Fissure:Flourish -:- b1 competitive pm:0:1",
+        "sfnAfter": "...........b.bb....xrrr..rr.rr...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 23 2:1 Fissure:Flourish -:- tied competitive pm:0:1"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 24,
+        "sfnBefore": "...........b.bb....xrrr..rr.rr...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 24 2:1 Fissure:Flourish -:- tied competitive pm:0:1",
+        "sfnAfter": "...........b.bb....xrrr..rr.rbr.bb.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 24 2:1 Fissure:Flourish -:- b1 competitive"
+      },
+      {
+        "color": "red",
+        "turnNumber": 25,
+        "sfnBefore": "...........b.bb....xrrr..rr.rbr.bb.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 25 2:1 Fissure:Flourish -:- b1 competitive",
+        "sfnAfter": "...........b.brrrrrx......r.rbr.bb.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 25 3:1 Fury:Flourish -:- tied competitive"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 26,
+        "sfnBefore": "...........b.brrrrrx......r.rbr.bb.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 26 3:1 Fury:Flourish -:- tied competitive",
+        "sfnAfter": "...........b.brrrrbx...br.r.rbr..b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 26 3:1 Fury:Flourish -:- b1 competitive"
+      },
+      {
+        "color": "red",
+        "turnNumber": 27,
+        "sfnBefore": "...........b.brrrrbx...br.r.rbr..b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 27 3:1 Fury:Flourish -:- b1 competitive",
+        "sfnAfter": "........bb.b.r...rrxrrrbr.r..b...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 27 4:1 Flourish:Flourish -:- tied competitive"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 28,
+        "sfnBefore": "........bb.b.r...rrxrrrbr.r..b...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 28 4:1 Flourish:Flourish -:- tied competitive",
+        "sfnAfter": "........bb.b.r...rrxrrrbr.r.bb...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 28 4:1 Flourish:Flourish -:- b1 competitive"
+      },
+      {
+        "color": "red",
+        "turnNumber": 29,
+        "sfnBefore": "........bb.b.r...rrxrrrbr.r.bb...b.br.b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 29 4:1 Flourish:Flourish -:- b1 competitive",
+        "sfnAfter": "......rrrr.bbr....rxrr.r..r.bb...b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 29 5:1 Fury:Flourish -:- r2 competitive"
+      },
+      {
+        "color": "blue",
+        "turnNumber": 30,
+        "sfnBefore": "......rrrr.bbr....rxrr.r..r.bb...b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 30 5:1 Fury:Flourish -:- r2 competitive",
+        "sfnAfter": "......rrrr.bbr....rxrr.r..rbbb...b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge b 30 5:1 Fury:Flourish -:- r1 competitive"
+      },
+      {
+        "color": "red",
+        "turnNumber": 31,
+        "sfnBefore": "......rrrr.bbr....rxrr.r..rbbb...b.b..b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 31 5:1 Fury:Flourish -:- r1 competitive",
+        "sfnAfter": "......rr.r...rr...rxrr.r..rbb.........b/Harvest,Flourish,Fissure,Decay,Fury,Annuity,Gust,Dividend,Charge r 31 6:1 Decay:Flourish -:- r3 competitive"
+      }
+    ]
+  }
+}
