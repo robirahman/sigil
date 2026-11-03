@@ -25,7 +25,9 @@ qjlgqr_room.json):
   Q1  Red to move on turn 25, the position on the board for the 2nd time: at
       every depth in --depths and at --time-ms, the engine's turn is not the
       recorded blunder, and Blue has no mate in 1 after it (no reply that
-      repeats the position a 3rd time).
+      repeats the position a 3rd time), judged by the referee module (the
+      installed sigil_engine unless --referee): a build that cannot see the
+      repetition mate must not grade its own move.
   Q2  Blue to move on turn 26: a depth-2 search finds the 3rd-repetition win,
       mate in 1 ply, reaching the repeated position.
 
@@ -75,14 +77,30 @@ def value(r, mate=99.0):
 
 
 class Gate:
-    def __init__(self, se, ev):
+    def __init__(self, se, ev, ref=None):
         self.se = se
+        self.ref = ref or se
         self.ev = ev
         self.adaptive = tuple(se.SHIPPED_ADAPTIVE)
         se.set_policy(*se.SHIPPED_POLICY)
         if hasattr(se, 'SHIPPED_EXPLORE'):
             se.set_policy_explore(*se.SHIPPED_EXPLORE)
         self.rows = []
+
+    def referee(self, sfn, hist):
+        """A depth-2 search by the referee module (default: the installed one),
+        under its own shipped config."""
+        ref = self.ref
+        ref.set_policy(*ref.SHIPPED_POLICY)
+        if hasattr(ref, 'SHIPPED_EXPLORE'):
+            ref.set_policy_explore(*ref.SHIPPED_EXPLORE)
+        try:
+            return ref.analyze(sfn, ref.SHIPPED_EVAL, max_depth=2, history_sfns=list(hist),
+                               adaptive=tuple(ref.SHIPPED_ADAPTIVE))
+        finally:
+            self.se.set_policy(*self.se.SHIPPED_POLICY)
+            if hasattr(self.se, 'SHIPPED_EXPLORE'):
+                self.se.set_policy_explore(*self.se.SHIPPED_EXPLORE)
 
     def analyze(self, sfn, hist, depth=64, time_ms=0):
         return self.se.analyze(sfn, self.ev, max_depth=depth, time_ms=time_ms,
@@ -139,7 +157,9 @@ def qjlgqr(g, depths, time_ms):
         r = g.analyze(r25, hist25, depth=64 if d == 'time' else d, time_ms=time_ms if d == 'time' else 0)
         lab = f'{time_ms} ms' if d == 'time' else f'depth={d}'
         child = r['expected_sfn']
-        reply = g.analyze(child, hist25 + [child], depth=2) if child else None
+        # The referee is the installed module, not the one under test: a build
+        # blind to repetition mates would otherwise clear its own move.
+        reply = g.referee(child, hist25 + [child]) if child else None
         blue_mates = bool(reply and reply['mate_in_turns'] is not None and reply['mate_in_turns'] > 0
                           and reply['mate_plies'] <= 1)
         g.record('Q1', lab, child is not None and key(child) != key(blunder) and not blue_mates,
@@ -158,6 +178,8 @@ def main():
     ap.add_argument('--time-ms', type=int, default=10000)
     ap.add_argument('--eval', default='', help='default: the module\'s SHIPPED_EVAL')
     ap.add_argument('--module', default='', help='a libsigil_engine.so to test instead of the installed module')
+    ap.add_argument('--referee', default='',
+                    help='module (.so) that judges Q1\'s Blue replies; default: the installed sigil_engine')
     ap.add_argument('--deep', action='store_true',
                     help='G2 at depth 6 too (single-threaded, GWSMF5 b 26 at depth 6 takes over 5 minutes)')
     ap.add_argument('--json', default='')
@@ -167,7 +189,8 @@ def main():
     depths = [int(x) for x in a.depths.split(',') if x]
     print(f"tactical gate: module={getattr(se, '__file__', a.module)} eval={ev} policy={tuple(se.SHIPPED_POLICY)} "
           f"adaptive={tuple(se.SHIPPED_ADAPTIVE)}", flush=True)
-    g = Gate(se, ev)
+    ref = load_module(a.referee) if a.referee else (load_module('') if a.module else se)
+    g = Gate(se, ev, ref)
     gwsmf5(g, depths, a.time_ms, a.deep)
     qjlgqr(g, depths, a.time_ms)
     failed = [r for r in g.rows if not r['ok']]
