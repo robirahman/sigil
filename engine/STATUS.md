@@ -12,9 +12,10 @@ with this section, this section is right.
 | shipped config | eval `nnue_mt256`, generator policy `SHIPPED_POLICY` (on, **min_width 32**: lowered from 96 in PR #57 with no arena; the 2026-10 sweep had 96 best), `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `elastic` FULL + `adopt_partial`, `lmr` band x2 R=1, pondering on for >= 10 s tiers, `TurnIter` stage order `Moves -> MoveCast -> DashCast -> Dash`, bank cap <= 60, repetition-mate prepass ON, 8-slot `FoldRing` leaf cache |
 | tests | **198/198** `cargo test --release --lib`, 49/49 Cloud Functions, wasm smoke 158 plies, nn-wasm parity 264/264 |
 | browser builds | `sigil_engine_bg.wasm` (1,193,083 bytes), `sigil_engine_mt_bg.wasm` (1,388,788 bytes; ~500 KB freed by gating legacy nets) |
-| telemetry | `aiTelemetry` (depth, nodes, eval, threads, ponder, TT fill) written to Firebase `completed_games`; rules in `database.rules.json`. Arrival and the live rules deploy not yet confirmed. |
-| strength | **v35 has no arena result.** v35 vs v34, and min_width 32 vs 96, are Step 0 of the training plan |
-| pending | v35 -> v36 training plan (SNN2 on the existing corpus, round-6 self-play, policy and net retrain); see [`docs/designs/ai-training-todos.md`](../docs/designs/ai-training-todos.md) |
+| telemetry | `aiTelemetry` (depth, nodes, eval, threads, ponder, TT fill) written to Firebase `completed_games`. **Arriving** (checked 2026-11-03: every Rust-AI game since 11-01 03:35 UTC). The live rules lack the repo's validation block but accept the field. Median completed depth: Hard 9/5/4/5 and Medium 7/4/3/3 by game phase |
+| strength | **v35 is −24.3 Elo [−39.0, −9.7] vs v34** (core draws, 10 s, 2,160 games; 2026-11-03). Cause: `min_width` 32 and `DashCast` before `Dash` (depth bisection). Reverting both (branch `v35-fix`, now on `ai-training-plan`): +7.9 [−6.8, +22.6] vs v34, **+28.0 [+13.4, +42.7] vs v35**. The live site still runs v35 |
+| tactical gate | `engine/harness/tactical_gate.py` (2026-11-03): v35 9/12, v34 7/12, v35-fix 7/12. QJLGQR repetition checks pass on v35 and v35-fix. GWSMF5 G1 fails on every build: Red's search never values the `dash + Flourish` refutation (the Flourish resolution is found only with a 4,096-outcome cast window) |
+| pending | v35 -> v36 training plan. Steps 0 and 2 done (`ai-training-plan` = v35-fix search + `nnue_snn2_base`, +20.3 [+5.6, +35.0] on Fissure + Dividend draws); Step 1 human audit running; see [`docs/designs/ai-training-todos.md`](../docs/designs/ai-training-todos.md) |
 
 **2026-10-31: engine v35 (cache v89) -- Superhuman Desktop Engine Stage 1 & Stage 2 (PR #57).**
 Fixed interior-node `move + dash + cast` starvation by reordering `Stage::DashCast` ahead of non-key bare dashes;

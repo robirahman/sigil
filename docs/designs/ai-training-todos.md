@@ -69,10 +69,10 @@ Steps 0, 1 and 2 are independent and can run in parallel. Step 3 waits for Step 
 
 | # | Task | Depends on | Rough cost | Status |
 |---|---|---|---|---|
-| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **arenas done: v35 is −24.3 Elo [−39.0, −9.7] vs v34 on core draws**; bisected to `min_width` 32 and the TurnIter stage order; confirmation arenas for branch `v35-fix` running (`data/r6/step0b_runs.txt`) |
-| 1 | Human-game audit (deep_review scan/flag/probe/report) and relabelled human chunks | – | ~$35 | **running** (529 games / 15,002 positions since 10-07; scan runs in `data/deep_review/scan_runs_2026-11.txt`) |
-| 2 | Phase 3a: re-prep `nnue_mt256`'s corpus with walls/bank, train `snn2` + `ctrl`, arenas | – | ~$20 | **running** (prep run in `data/r6/prep_run.txt`) |
-| 3 | r6 self-play on the corrected v35 (16 Spot c3d-90, depth 4, ~300k games) | 0 (and 2, optionally) | ~$80 | **todo** |
+| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **done.** v35 is −24.3 Elo [−39.0, −9.7] vs v34 on core draws, bisected to `min_width` 32 and the TurnIter stage order. Branch `v35-fix` (both reverted) is +7.9 [−6.8, +22.6] vs v34 and **+28.0 [+13.4, +42.7] vs v35**: base r6 on `v35-fix` |
+| 1 | Human-game audit (deep_review scan/flag/probe/report) and relabelled human chunks | – | ~$35 | **running** (529 games / 15,002 positions since 10-07). Two scans discarded (see 1.2): the first ran the legacy `tfit` / policy-off search; the second could not finish whole games. Scan of branch `audit-r6` (v35-fix + `nnue_snn2_base`) in 8-position segments with a 10-minute cap started 2026-11-03 07:33 UTC on 6 VMs (`data/deep_review/scan_runs_2026-11.txt`); flag, probes and the human relabel follow automatically |
+| 2 | Phase 3a: re-prep `nnue_mt256`'s corpus with walls/bank, train `snn2` + `ctrl`, arenas | – | ~$20 | **done: passes.** `snn2` held-out outcome ll 0.57883 vs 0.58119 (`ctrl`); arenas vs `nnue_mt256` on v35-fix's search: Fissure + Dividend pooled **+20.3 [+5.6, +35.0]**, core +5.8 [−8.9, +20.4]. `SHIPPED_EVAL = "nnue_snn2_base"` on `ai-training-plan` (7c01638) |
+| 3 | r6 self-play on `ai-training-plan` as it now stands (v35-fix search + `nnue_snn2_base`; 16 Spot c3d-90, depth 4, ~300k games) | 0, 2 (both done) | ~$80 | **todo: ready to launch** |
 | 4 | Policy retrain on r6 (`r3_policy.sh`), policy arena | 3 | ~$15 | **todo** |
 | 5 | Final value net `nnue_r6` on corpus + r6 + human chunks, net arena | 1, 3 | ~$20 | **todo** |
 | 6 | Release gate: candidate vs live `main` (core + Fissure + Dividend), tactical gate, human regression set | 4, 5 | ~$20 | **todo** |
@@ -119,7 +119,16 @@ Open check (now resolved):
 | … − repetition-mate prepass | 5.24 | 156k |
 | … − TT-hint cap | 5.19 | 161k |
 
-Two changes account for the whole depth loss: `min_width` 32 and putting `DashCast` before `Dash`. Branch `v35-fix` reverts both and keeps everything else in v35, including the repetition-mate fix and the bank cap. It is being arena-tested against v34 and against v35 (4 VMs each, core draws).
+Two changes account for the whole depth loss: `min_width` 32 and putting `DashCast` before `Dash`. Branch `v35-fix` reverts both and keeps everything else in v35, including the repetition-mate fix and the bank cap.
+
+**`v35-fix` arenas (2026-11-03, `ab_version.py`, 10 s, core draws, 4 VMs each, `data/r6/step0b_runs.txt`):**
+
+| arena | games | Elo (arm vs base) | 95% interval |
+|---|---|---|---|
+| v35-fix vs v34 | 2,160 | +7.9 | [−6.8, +22.6] |
+| v35-fix vs v35 | 2,160 | **+28.0** | [+13.4, +42.7] |
+
+`v35-fix` recovers the whole loss: it is level with v34 and clearly stronger than the live v35. It also keeps v35's repetition fixes (tactical gate Q1/Q2 pass, below). **Verdict: build v36 on `v35-fix`.** Whether to hotfix the site with it before v36 is Robi's call.
 
 **Tactical gate on v35 (2026-11-03, `tactical_gate.py`, single thread, 9/12):**
 *   QJLGQR: all pass. At `r 25`, depths 2–6 and 10 s, Red never allows the 3rd repetition. At `b 26`, Blue finds the mate in 1. The repetition fixes work.
@@ -156,7 +165,7 @@ for i in 0 1 2 3; do SPOT=1 BRANCH=ai-training-plan BASE_BRANCH=base-v35-pol96 S
 python3 ../harness/pool_shards.py 'runs/v35ab/*/arm*.log'
 ```
 
-**0.3 Decide:**
+**0.3 Decide** (done, see the verdict above: `v35-fix`)**:**
 *   **If B favours 96** (lower bound > 0): set `SHIPPED_POLICY` back to `(true, 96)` on `ai-training-plan` before Step 3. Ship it to the site with v36, or sooner as a hotfix.
 *   **If A is negative on core or on Dividend draws:** find the cause before generating any data.
     *   B isolates `min_width`.
@@ -177,6 +186,14 @@ gcloud storage cp lines_2026-11.json $B/data/deep_review/lines_2026-11.json
 ```
 
 **1.2 Scan:** every position at depth 6, each game walked backwards. Use one VM per shard, Spot.
+
+The search must be the shipped one. `eval_games.py` and `deep_review.py` search with the legacy `tfit` eval and the generator policy off unless `SIGIL_AUDIT_ENGINE=shipped` is set. Before b9e94b0 `runner_deep_review.sh` never set it, so the 2026-11-03 first scan (runs `…T0343*Z-sigil-deep-s0..2`, stopped at 520/529 games after 3.3 h) audited an engine no build has shipped since v24. `launch_deep_review.sh` now passes `AUDIT_ENGINE` (default `shipped`), the runner log prints a `SEARCH CONFIG` line, and `deep_review.py flag` prints the `(eval, engine)` of its rows. Check both.
+
+Whole-game work items cannot finish with the shipped search. On the same positions it costs 3.3x the legacy scan's CPU (2.1x the nodes), and the legacy scan already left 9 games unfinished after 3.3 h (one position took 98 minutes). `eval_games.py eval --segment 8` walks each 8-position segment on its own table, starting `--warm 2` positions above it (on 3 test games this gave the whole-game walk's value at all 73 positions). `TIME_MS=600000` caps each position at 10 minutes; `flag` marks a case `shallow` when a capped row stopped short of depth 6. The scan and the probes run on branch `audit-r6` (11530fc: the v35-fix search with `nnue_snn2_base`, the engine r6 will use), so later pushes to `ai-training-plan` cannot mix engines between the two stages.
+```bash
+for k in 0 1 2 3 4 5; do MODE=scan CORPUS=data/deep_review/lines_2026-11.json DEPTH=6 TIME_MS=600000 SEGMENT=8 \
+  BRANCH=audit-r6 SHARD=$k/6 ./launch_deep_review.sh sigil-dscan-$k c3d-highcpu-90 <zone> 5; done
+```
 ```bash
 cd engine/gcp
 for k in 0 1 2; do MODE=scan CORPUS=data/deep_review/lines_2026-11.json DEPTH=6 BRANCH=ai-training-plan \
@@ -264,13 +281,34 @@ for i in 0 1 2 3; do SPOT=1 BRANCH=ai-training-plan SIGIL_AB_BASE=shipped SHARD_
 
 **Pass if** the pooled Fissure and Dividend arenas have a lower bound > 0, and core draws show no regression (interval not entirely below 0). Core draws contain no walls or banks, so they can only show harm, not benefit.
 
+**Results (2026-11-03).** Training (run `20261103T050310Z-sigil-r6-train3a`, 5.9M held-out positions):
+
+| net | held-out outcome log-loss |
+|---|---|
+| `snn2` (wall + bank rows) | **0.57883** |
+| `ctrl` (same run, no new rows) | 0.58119 |
+| shipped `nnue_mt256` | 0.58115 |
+
+The prep reproduced the original corpus exactly (27,010,137 positions). The preset's Rust and Python forward passes agree on 192 golden vectors (37 walled, 45 banked).
+
+Arenas ran on branch `v35-fix` rather than `ai-training-plan`, because v36 will be built on v35-fix's search (`data/r6/step2_arena_runs.txt`, 10 s per move):
+
+| draws | games | Elo (`nnue_snn2_base` vs `nnue_mt256`) | 95% interval |
+|---|---|---|---|
+| Fissure (39) | 1,078 | +20.0 | [−0.8, +40.8] |
+| Dividend (42) | 1,080 | +20.6 | [−0.1, +41.4] |
+| **Fissure + Dividend pooled** | 2,158 | **+20.3** | **[+5.6, +35.0]** |
+| core | 2,160 | +5.8 | [−8.9, +20.4] |
+
+**Passes.** `SHIPPED_EVAL = "nnue_snn2_base"` is set on `ai-training-plan` (7c01638). The preset is now in the wasm build too, because a `SHIPPED_EVAL` the browser cannot load would panic in `configure`. That costs ~257 KB of wasm until Step 5's net replaces it. `the_net_sees_a_walled_slot_as_blocked_for_both_sides` now names `nnue_mt256`, since it tests the dead mask of a net without wall inputs. `cargo test` 199/199, wasm32 `cargo check` clean.
+
 If it passes, set `SHIPPED_EVAL = "nnue_snn2_base"` on `ai-training-plan` so r6 self-play uses it. If Step 3 has to start before this verdict, r6 runs on `nnue_mt256`; that is fine.
 
 ### Step 3: r6 self-play (Phase 3b data)
 
 **Before launching:**
-*   Step 0's verdict is applied (`SHIPPED_POLICY`).
-*   `SHIPPED_EVAL` is decided.
+*   Step 0's verdict is applied (`SHIPPED_POLICY`). **Done:** 63d6c3d takes v35-fix's search.
+*   `SHIPPED_EVAL` is decided. **Done:** `nnue_snn2_base` (7c01638).
 *   The branch is pushed.
 *   `launch_s3_fleet.sh` defaults to the old `train-s3-data-v2` branch, so always pass `BRANCH`.
 

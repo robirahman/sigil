@@ -10,24 +10,19 @@
 
 | # | Task | Depends on | Status |
 |---|---|---|---|
-| 0 | **Measure v35 before using it to generate data.** Arenas: v35 vs v34 (core + Dividend draws), and `min_width` 32 vs 96. Write and run the tactical gate (C1). | – | todo |
-| 1 | Human-game audit with `deep_review.py` (scan / flag / probe / report) over games since 2026-10-07. Keep the cases as a regression set. Relabel the whole games at depth 4 as training chunks. | – | todo |
-| 2 | Phase 3a: re-prep `nnue_mt256`'s exact corpus with walls and bank, train `snn2` and `ctrl` (hidden 128, cap 256), arenas on Fissure, Dividend and core draws | – | todo |
-| 3 | r6 self-play: 16 Spot c3d-90, depth 4, about 300k games, `FIRST_VM=400` | 0 | todo |
+| 0 | **Measure v35 before using it to generate data.** Arenas: v35 vs v34 (core + Dividend draws), and `min_width` 32 vs 96. Write and run the tactical gate (C1). | – | **done 2026-11-03:** v35 −24.3 Elo vs v34; `v35-fix` +28.0 vs v35, level with v34; applied to `ai-training-plan` (63d6c3d) |
+| 1 | Human-game audit with `deep_review.py` (scan / flag / probe / report) over games since 2026-10-07. Keep the cases as a regression set. Relabel the whole games at depth 4 as training chunks. | – | **running** (segmented scan on 6 VMs since 07:33 UTC 11-03; probes and relabel follow) |
+| 2 | Phase 3a: re-prep `nnue_mt256`'s exact corpus with walls and bank, train `snn2` and `ctrl` (hidden 128, cap 256), arenas on Fissure, Dividend and core draws | – | **done 2026-11-03: passes** (+20.3 [+5.6, +35.0] Fissure + Dividend, +5.8 core); `SHIPPED_EVAL = nnue_snn2_base` (7c01638) |
+| 3 | r6 self-play: 16 Spot c3d-90, depth 4, about 300k games, `FIRST_VM=400` | 0 | todo: ready |
 | 4 | Policy retrain on r6 (`r3_policy.sh`), then a policy arena | 3 | todo |
 | 5 | Final value net `nnue_r6` (corpus + r6 + human chunks), then a net arena | 1, 3 | todo |
 | 6 | Release gate: candidate vs live `main`. Core 2,160 games with lower bound > 0; Fissure and Dividend not negative; C1 passes | 4, 5 | todo |
 | 7 | Release v36: wasm, version bumps from `main`'s values, tests, win-probability refit, PR. Robi deploys Functions. | 6 | todo |
 
-Code still to write:
-*   **C1:** `tactical_gate.py`.
-*   **C2:** SNN2 golden vectors that include positions with walls and bank stones.
-*   **C3:** a wall/bank coverage count printed by prep.
-*   **C4:** a preset for each new net.
-*   **C5** (optional): per-prefix sample weights.
+Code: C1–C4 done (`tactical_gate.py`, SNN2 golden vectors with walls and banks, prep coverage line, `add_net_preset.py`). C5 (per-prefix sample weights) is optional and not written.
+Also written for Step 1: `eval_games.py eval --segment` (segmented backward walk) and `AUDIT_ENGINE` for deep-review VMs (default `shipped`).
 
-Open check:
-*   **T1:** confirm that `aiTelemetry` reaches `completed_games` and that the live database rules allow it.
+Open check: none. **T1** resolved 2026-11-03: `aiTelemetry` is arriving and the live rules accept it (they lack the repo's validation block).
 
 ## Rules that are easy to break
 
