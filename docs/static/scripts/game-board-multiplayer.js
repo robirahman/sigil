@@ -104,6 +104,9 @@ document.addEventListener('alpine:init', () => {
 			// Export-game state
 			gameExportCopied: false,
 			_spellNamesForExport: [],
+			// The finished game's end reason ('time' | 'forfeit' | ...; null
+			// for a game played out on the board).
+			_lastEndReason: null,
 			_gameLogForExport: null,
 
 			// Rematch state — populated at game start from window._multiplayerState
@@ -185,6 +188,8 @@ document.addEventListener('alpine:init', () => {
 			// A room from a position the opponent opened from this game's
 			// review (rooms/<code>/rematch/positionRoom).
 			opponentPositionRoom: '',
+			// That room continues this game as Deathmatch (Play On).
+			opponentPositionRoomDeathmatch: false,
 
 			// Connection state (controller 'sync_status' / 'opponent_presence'):
 			// our own unsent moves, and since when the opponent has been gone
@@ -392,6 +397,29 @@ document.addEventListener('alpine:init', () => {
 							JSON.stringify({ code: this._roomCodeForReview, color: this.myColor }));
 					}
 				} catch (e) { /* sessionStorage blocked */ }
+				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
+			},
+
+			// Play On as Deathmatch: a regular game played out on the board
+			// (stone lead or sixth spell; not a timeout or forfeit) continues
+			// from its final position under the Deathmatch rules. A new room
+			// (same sides and time control) is offered to the opponent through
+			// this room's rematch node, as "Play online from here" does.
+			get canPlayOnDeathmatch() {
+				if (!this.winner || this.isSpectator || this._lastEndReason || !this._roomCodeForReview) return false;
+				const n = this.reviewSfns.length;
+				return n > 0 && typeof deathmatchPlayOnSfn === 'function' && !!deathmatchPlayOnSfn(this.reviewSfns[n - 1]);
+			},
+			playOnDeathmatch() {
+				if (!this.canPlayOnDeathmatch) return;
+				const sfn = deathmatchPlayOnSfn(this.reviewSfns[this.reviewSfns.length - 1]);
+				try {
+					sessionStorage.setItem('sigil_playon', JSON.stringify({
+						sfn, side: this.myColor, timeControl: this._rematchTimeControl || null,
+					}));
+					sessionStorage.setItem('sigil_position_from_room',
+						JSON.stringify({ code: this._roomCodeForReview, color: this.myColor, deathmatch: true }));
+				} catch (e) { /* sessionStorage blocked: the lobby asks for the side */ }
 				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
 			},
 
@@ -1090,6 +1118,7 @@ document.addEventListener('alpine:init', () => {
 						_this.rematchPending = !!r.newRoomCode;
 						const pr = r.positionRoom;
 						_this.opponentPositionRoom = (pr && pr.code && pr.by !== myColor) ? pr.code : '';
+						_this.opponentPositionRoomDeathmatch = !!(_this.opponentPositionRoom && pr.deathmatch);
 					}
 					else if (type === 'rematch_room_ready') {
 						window.location.href = 'multiplayer.html?id=' + encodeURIComponent(rest.newRoomCode);
@@ -1146,6 +1175,7 @@ document.addEventListener('alpine:init', () => {
 						if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);
 						_this.showReset = false;
+						_this._lastEndReason = rest.endReason || null;
 						_this.winner = rest.winner;
 						_this._openAfterGameEmotes();
 						if (rest.gameLog && rest.gameLog.length > 0) {

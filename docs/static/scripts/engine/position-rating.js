@@ -224,3 +224,38 @@ function makeStartPos(model, sfn, info, source) {
 		engineVersion: typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : null,
 	};
 }
+
+/**
+ * "Play On as Deathmatch": the final position of a regular game (decided by
+ * the stone lead or the sixth spell) re-tagged as Deathmatch, so play
+ * continues from it until one side is eliminated. The spell counters are
+ * zeroed (Deathmatch has none); stones, spells, locks, springlocks, the turn
+ * and Providence banks carry over. Null when there is nothing to play on:
+ * an unreadable SFN, a Deathmatch or Scramble game (not the regular end
+ * condition), a side with no stones left, or a next mover who holds the Seal
+ * of Destruction (which loses under every rule set).
+ */
+function deathmatchPlayOnSfn(sfn) {
+	if (!sfn) return null;
+	let d;
+	try { d = sfnToDict(String(sfn).trim()); } catch (e) { return null; }
+	const variant = normalizeVariant(d.variant);
+	if (variantHasDeathmatch(variant) || variantHasScramble(variant)) return null;
+	const dm = composeVariant(variantHasCompetitive(variant), true, variantHasDuplicates(variant),
+		false, variantHasPentagon(variant));
+	const p = String(sfn).trim().split(/\s+/);
+	if (p.length < 7) return null;
+	p[3] = '0:0';
+	const out = p.slice(0, 7).concat([dm], p.slice(7).filter((t) => t.startsWith('pm:'))).join(' ');
+	try {
+		// The game hands the move out by parity (positionTurnSfn).
+		const b = new SigilBoard(null, dm);
+		b.loadFromSfn(out);
+		b.turnCounter++;
+		b.whoseTurn = b.turnCounter % 2 === 1 ? 'red' : 'blue';
+		b.update();
+		if (b.gameover || !b.totalStones.red || !b.totalStones.blue) return null;
+		if ((b.chargedSpells[b.whoseTurn] || []).includes('Seal_of_Destruction')) return null;
+	} catch (e) { return null; }
+	return out;
+}
