@@ -91,3 +91,17 @@ default), colourblind markers on every theme and the Cataclysm board, node `aria
 focused button, "Confirm before ending a turn", the `?` overlay, the win-modal focus and 375 px
 layout. With a screenshot dir it saves the marked boards. A failed Firebase SDK download from
 gstatic is reported as a note, not a failure.
+
+## Live analysis
+
+```sh
+(cd docs && python3 -m http.server 8812) &
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/live-analysis-emulator-test.js http://localhost:8812'
+```
+
+Checks the "Live analysis" panel (live-analysis.js) with the real wasm engine: a
+developer account spectating an online game gets it and it deepens and follows
+new turns; a spectator without the flag and the players do not; the review of
+the finished game offers it to anyone and follows the reviewed position; game.html
+offers it in review only. `LIVE_ANALYSIS_SHOTS=<dir>` also saves screenshots.
