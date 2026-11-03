@@ -170,8 +170,10 @@ document.addEventListener('alpine:init', () => {
 				let fatLog = null;
 				try {
 					fatLog = await reconstructGameLog(spellNames, variant, h.Setup || null, parsed.turns);
-					const last = fatLog.length ? fatLog[fatLog.length - 1].sfnAfter : (h.Setup || null);
-					if (h.FinalSfn && !sfnSamePosition(last, h.FinalSfn)) {
+					const lastTurn = fatLog.length ? fatLog[fatLog.length - 1] : null;
+					const last = lastTurn ? lastTurn.sfnAfter : (h.Setup || null);
+					if (h.FinalSfn && !finalSfnMatchesReplay(last, lastTurn && lastTurn.color,
+							h.FinalSfn, h.Result)) {
 						throw new Error('replayed final position does not match FinalSfn');
 					}
 				} catch (e) {

@@ -184,7 +184,7 @@
 						if (log.some(t => !t.sfnAfter)) {
 							try {
 								log = await hydrateGameLog(
-									g.spellNames, g.variant, g.setupSfn, g.finalSfn, log);
+									g.spellNames, g.variant, g.setupSfn, g.finalSfn, log, g.winner);
 							} catch (e) {
 								continue; // unreplayable record; sample another
 							}

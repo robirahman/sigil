@@ -578,7 +578,7 @@ document.addEventListener('alpine:init', () => {
 				// legacy fat records pass through it untouched.
 				try {
 					gameLog = await hydrateGameLog(
-						spellNames, variant, setupSfn, finalSfn, gameLog);
+						spellNames, variant, setupSfn, finalSfn, gameLog, winner);
 				} catch (e) {
 					console.warn('Room transcript replay failed:', e);
 					if (finalSfn) {

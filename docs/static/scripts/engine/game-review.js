@@ -1081,7 +1081,7 @@ function turnToNotation(turn) {
  * @throws on replay failure or integrity mismatch — callers degrade to a
  *   final-position-only view (finalSfn), never a broken scrub.
  */
-async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
+async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns, winner) {
 	const gameLog = turns || [];
 	if (!gameLog.length) return gameLog;
 	// Fully-fat records pass through untouched. Anything else — slim
@@ -1090,31 +1090,43 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 	if (!gameLog.some(t => !(t.sfnAfter && t.sfnBefore))) return gameLog;
 	const rebuilt = await reconstructGameLog(
 		spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
-	const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
-	if (finalSfn && !sfnSamePosition(last, finalSfn)) {
+	const lastTurn = rebuilt.length ? rebuilt[rebuilt.length - 1] : null;
+	if (finalSfn && !finalSfnMatchesReplay(
+			lastTurn && lastTurn.sfnAfter, lastTurn && lastTurn.color, finalSfn, winner)) {
 		throw new Error('replayed final position does not match record');
 	}
 	return rebuilt;
 }
 
 /**
- * True when a replay's last position (`replayed`) is the record's final
- * position (`recorded`). A record's finalSfn is the live board when the
- * game ended, and that is not always the instant the last turn finished:
- *  - a normal win: the winner's token, same counter -- byte-identical;
- *  - a forfeit during the loser's own turn (local games vs the AI): the
- *    token already names the loser, counter unchanged;
- *  - a forfeit/flag/abandon after the next turn's preamble ran (online
- *    rooms): the loser's token and the counter one past the last turn.
- * Accept exactly those; the stones, banks, locks and the rest must match.
+ * Integrity check: is `recorded` (a record's finalSfn) the position the
+ * replay ended on (`replayed`, after `lastColor`'s turn)?
+ *
+ * finalSfn is the live board when the game ended. After a normal win that
+ * is the instant the winner's turn finished, so it must match the replay
+ * byte-for-byte. A forfeit, flag or abandon by the LOSER happens after the
+ * turn passed to them: their (unrecorded) turn had begun, so the token is
+ * the loser's and, once the next turn's preamble ran (online rooms), the
+ * counter is one higher. Only that shape is relaxed, and only with
+ * evidence it IS that ending — the record names a `winner` who made the
+ * last replayed turn, and the token names the other side. Without a
+ * winner (resumed games, arbitrary SGN-T imports) the check stays exact,
+ * so a transcript missing a final no-op turn (a plain pass looks
+ * identical apart from token and counter) is still rejected.
  */
-function sfnSamePosition(replayed, recorded) {
+function finalSfnMatchesReplay(replayed, lastColor, recorded, winner) {
 	if (!replayed || !recorded) return false;
-	const pa = normalizeSfnString(replayed).trim().split(/\s+/);
-	const pb = normalizeSfnString(recorded).trim().split(/\s+/);
+	const a = normalizeSfnString(replayed);
+	const b = normalizeSfnString(recorded);
+	if (a === b) return true;
+	if ((winner !== 'red' && winner !== 'blue') || winner !== lastColor) return false;
+	const pa = a.trim().split(/\s+/);
+	const pb = b.trim().split(/\s+/);
 	if (pa.length !== pb.length || pa.length < 3) return false;
+	const loserToken = winner === 'red' ? 'b' : 'r';
+	if (pa[1] !== winner[0] || pb[1] !== loserToken) return false;
 	const counterStep = Number(pb[2]) - Number(pa[2]);
-	if (counterStep !== 0 && !(counterStep === 1 && pb[1] !== pa[1])) return false;
+	if (counterStep !== 0 && counterStep !== 1) return false;
 	for (let i = 0; i < pa.length; i++) {
 		if (i !== 1 && i !== 2 && pa[i] !== pb[i]) return false;
 	}
