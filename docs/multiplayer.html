@@ -1138,6 +1138,7 @@
 				// review's "from here"): the start, its engine price and the
 				// creator's side; and the joiner's confirmation of such a room.
 				positionSfn: '',
+				_positionOffer: null,  // { ref, code }: our room offered through a finished room's rematch node
 				positionOffer: null,   // { loading, evalText, oddsText, payoffs, note, startPos, hist }
 				joinOffer: null,       // { code, side, evalText, oddsText, payoffs, note }
 				// Rated / Casual for the room code typed in (or offered), and
@@ -1551,13 +1552,22 @@
 					ref.on('value', keep);
 					try {
 						await ref.once('value');
-						const res = await ref.transaction((cur) => {
-							if (cur && cur.deathmatch === true && cur.code && cur.by !== offer.by) return; // theirs stands
-							return offer;
-						});
-						if (res && res.committed) return null;
-						const cur = res && res.snapshot && res.snapshot.val();
-						return (cur && cur.code) || null;
+						for (let attempt = 0; attempt < 3; attempt++) {
+							const res = await ref.transaction((cur) => {
+								if (cur && cur.deathmatch === true && cur.code && cur.by !== offer.by) return; // theirs stands
+								return offer;
+							});
+							if (res && res.committed) return null;
+							const cur = res && res.snapshot && res.snapshot.val();
+							if (!cur || !cur.code) continue;
+							// Theirs stands only while its room still waits for us.
+							const status = await firebase.database().ref('rooms/' + cur.code + '/status').once('value')
+								.then((x) => x.val(), () => null);
+							if (status === 'waiting') return cur.code;
+							const replaced = await ref.transaction((now) => (now && now.code === cur.code ? offer : undefined));
+							if (replaced && replaced.committed) return null;
+						}
+						return null;
 					} finally {
 						ref.off('value', keep);
 					}
@@ -1693,6 +1703,8 @@
 									} else {
 										ref.set(offer).catch(() => {});
 									}
+									// Cancelling the waiting room takes the offer back.
+									this._positionOffer = { ref, code: this.roomCode };
 								}
 							} catch (e) { /* sessionStorage blocked */ }
 						}
@@ -2084,6 +2096,17 @@
 					} catch (e) {
 						this.lobbyError = e.message;
 						return;
+					}
+					const po = this._positionOffer;
+					this._positionOffer = null;
+					if (po && po.code === code) {
+						// Listen first: a transaction starts from the local cache.
+						const keep = () => {};
+						po.ref.on('value', keep);
+						po.ref.once('value')
+							.then(() => po.ref.transaction((cur) => (cur && cur.code === code ? null : undefined)))
+							.catch(() => {})
+							.then(() => po.ref.off('value', keep));
 					}
 					this.roomCode = '';
 					this.shareUrl = '';

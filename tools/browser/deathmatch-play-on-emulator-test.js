@@ -181,6 +181,41 @@ const BOARD = '[x-data^="gameBoard"]';
 		const r1 = await until(pageA, (c) => firebase.database().ref('rooms/' + c + '/rematch/positionRoom').once('value').then((s) => s.val()), code1, 10000);
 		check('offered to Bob through the old room', r1 && r1.code === code2 && r1.by === 'blue' && r1.deathmatch === true, r1);
 
+		// ---- 2b. Alice cancels: the offer is taken back and Bob gets his own
+		// Play On again; then Alice offers again (as the button would).
+		await until(pageB, () => [...document.querySelectorAll('.win-modal__btn')].some((b) => b.offsetParent !== null && /Opponent offers/.test(b.textContent)), null, 15000);
+		await pageA.evaluate((s) => Alpine.$data(document.querySelector(s)).cancelWaiting(), LOBBY);
+		await phaseIs(pageA, 'lobby');
+		const gone = await until(pageA, (c) => firebase.database().ref('rooms/' + c + '/rematch/positionRoom').once('value').then((x) => x.val() === null), code1, 10000);
+		check('cancelling takes the offer back', gone);
+		const back = await until(pageB, () => {
+			const vis = (re) => [...document.querySelectorAll('.win-modal__btn')].some((b) => b.offsetParent !== null && re.test(b.textContent));
+			return !vis(/Opponent offers/) && vis(/^Play On \(Deathmatch\)$/);
+		}, null, 15000);
+		check('Bob\'s offer link goes and his Play On returns', back);
+		// A stale offer (a room no longer waiting) does not hide Play On either.
+		await pageA.evaluate((a) => firebase.database().ref('rooms/' + a[0] + '/rematch/positionRoom')
+			.set({ code: a[1], by: 'blue', deathmatch: true }), [code1, code2]);
+		await sleep(1500);
+		check('a withdrawn room is not offered', await pageB.evaluate(() => {
+			const vis = (re) => [...document.querySelectorAll('.win-modal__btn')].some((b) => b.offsetParent !== null && re.test(b.textContent));
+			return !vis(/Opponent offers/) && vis(/^Play On \(Deathmatch\)$/);
+		}));
+		// Bob's stale offer: Alice's new offer must not defer to it.
+		await pageA.evaluate((a) => firebase.database().ref('rooms/' + a[0] + '/rematch/positionRoom')
+			.set({ code: a[1], by: 'red', deathmatch: true }), [code1, code2]);
+		await pageA.evaluate((a) => {
+			sessionStorage.setItem('sigil_playon', JSON.stringify({ sfn: a.sfn, side: 'blue', timeControl: { type: 'realtime', initialTime: 300000, increment: 3000 } }));
+			sessionStorage.setItem('sigil_position_from_room', JSON.stringify({ code: a.code, color: 'blue', deathmatch: true }));
+		}, { sfn: PLAYON, code: code1 });
+		await openLobby(pageA, '?sfn=' + encodeURIComponent(PLAYON));
+		await phaseIs(pageA, 'waiting');
+		const code2b = (await lobby(pageA)).roomCode;
+		const re = await until(pageA, (a) => firebase.database().ref('rooms/' + a[0] + '/rematch/positionRoom').once('value')
+			.then((x) => x.val() && x.val().code === a[1]), [code1, code2b], 10000);
+		check('the opponent\'s stale offer is replaced, not joined', re && code2b !== code2);
+		const code2final = code2b;
+
 		// ---- 3. Bob follows the offer.
 		const label = await until(pageB, () => {
 			const a = [...document.querySelectorAll('.win-modal__btn')].find((b) => b.offsetParent !== null && /Opponent offers/.test(b.textContent));
@@ -188,7 +223,7 @@ const BOARD = '[x-data^="gameBoard"]';
 		}, null, 15000);
 		check('Bob sees the Deathmatch offer', label === 'Opponent offers to play on as Deathmatch', label);
 		check('and no Play On of his own', !(await btn(pageB, 'Play On (Deathmatch)')));
-		await openLobby(pageB, '?id=' + code2);
+		await openLobby(pageB, '?id=' + code2final);
 		await phaseIs(pageB, 'confirmJoin');
 		const jo = (await lobby(pageB)).joinOffer;
 		check('join offer: Bob plays Red, unrated Deathmatch', jo && jo.side === 'red' && /Deathmatch games do not affect rating/.test(jo.note), jo);
@@ -206,7 +241,7 @@ const BOARD = '[x-data^="gameBoard"]';
 
 		// ---- 4. Both press Play On at once (the new game, ended again).
 		for (const p of [pageA, pageB]) {
-			await until(p, (a) => { const el = document.querySelector(a[0]); return el && el._x_dataStack && Alpine.$data(el)._roomCodeForReview === a[1]; }, [BOARD, code2], 30000);
+			await until(p, (a) => { const el = document.querySelector(a[0]); return el && el._x_dataStack && Alpine.$data(el)._roomCodeForReview === a[1]; }, [BOARD, code2final], 30000);
 		}
 		await finish(pageA, null);
 		await finish(pageB, null);
@@ -220,7 +255,7 @@ const BOARD = '[x-data^="gameBoard"]';
 		const settled = await until(pageA, async (c) => {
 			const pr = (await firebase.database().ref('rooms/' + c + '/rematch/positionRoom').once('value')).val();
 			return pr && pr.code ? pr : null;
-		}, code2, 20000);
+		}, code2final, 20000);
 		const winnerPage = settled && settled.by === 'blue' ? pageA : pageB;
 		const loserPage = winnerPage === pageA ? pageB : pageA;
 		await phaseIs(winnerPage, 'waiting');
