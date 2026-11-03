@@ -10,6 +10,10 @@ also with the browser's interactive rules (tools/check-mate-cert.js, --js).
     python3 bench/tools/certs.py bench/dev/dev_set_v2.json --tool <target>/release/examples/cert_tool \
         --out certs.jsonl [--jobs 4] [--time-ms 600000] [--ids a,b] [--max-n 4] [--js]
 
+With --js, the browser-rules check runs on every certificate with N <= --js-max-n
+(default 3) and on a deterministic --js-sample fraction (default 10%) of the
+rest: a full JS check of a mate-in-4 certificate takes hours.
+
 Writes one JSON line per puzzle: id, n, make (ok, nodes, seconds, sizes),
 check (ok, and/or nodes, seconds) and the certificate itself under "cert".
 Certificates for private (test-set) puzzles belong in the private bucket only.
@@ -54,6 +58,15 @@ def check_js(cert):
     return json.loads(out)
 
 
+def js_sampled(pid, fraction, seed):
+    """Deterministic sample: the puzzles whose hash of (seed, id) falls below
+    `fraction` (V3_PLAN: the JS check runs on every N <= 3 certificate and on
+    a 10% sample above)."""
+    import hashlib
+    h = int(hashlib.sha256(f'{seed}:{pid}'.encode()).hexdigest()[:8], 16)
+    return h < fraction * 0x100000000
+
+
 def one(a, p, rep):
     res = {'id': p['id'], 'n': p['n']}
     if not rep.get('ok'):
@@ -69,7 +82,7 @@ def one(a, p, rep):
         res['make']['internal'] = len(c['internal'])
         res['make']['leaves'] = len(c['leaves'])
         res['check'] = check(a.tool, c)
-        if a.js and p['n'] <= a.js_max_n:
+        if a.js and (p['n'] <= a.js_max_n or js_sampled(p['id'], a.js_sample, a.js_seed)):
             res['check_js'] = check_js(c)
         res['cert'] = c
     return res
@@ -87,13 +100,19 @@ def main():
     ap.add_argument('--max-n', type=int, default=6)
     ap.add_argument('--leaves', action='store_true', help='also store leaf mates (needed by the JS checker)')
     ap.add_argument('--js', action='store_true', help='also check with tools/check-mate-cert.js')
-    ap.add_argument('--js-max-n', type=int, default=6, help='JS-check only puzzles with N at most this')
+    ap.add_argument('--js-max-n', type=int, default=3, help='JS-check every puzzle with N at most this')
+    ap.add_argument('--js-sample', type=float, default=0.1, help='... and this fraction of the rest (deterministic by id)')
+    ap.add_argument('--js-seed', default='20261103')
+    ap.add_argument('--list-js-sample', action='store_true', help='print the sampled ids above --js-max-n and exit')
     a = ap.parse_args()
     ps = json.load(open(a.puzzles))['puzzles']
     if a.ids:
         want = set(a.ids.split(','))
         ps = [p for p in ps if p['id'] in want]
     ps = [p for p in ps if p['n'] <= a.max_n]
+    if a.list_js_sample:
+        print(','.join(p['id'] for p in ps if p['n'] > a.js_max_n and js_sampled(p['id'], a.js_sample, a.js_seed)))
+        return
     reps = after_sfns(ps)
     with open(a.out, 'a') as f, cf.ThreadPoolExecutor(a.jobs) as ex:
         futs = [ex.submit(one, a, p, r) for p, r in zip(ps, reps)]
