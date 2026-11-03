@@ -819,6 +819,68 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], m
             (crate::search::now_ms() - t0) / 1000.0)
 }
 
+/// The whole line for a proven mate-in-4 first turn, for "show solution"
+/// (SigilBench dev set v2, whose mate-in-4 puzzles were mined and never had
+/// stored lines). `after_sfn` is the position after the first turn. The
+/// defence is the hardest reply classified: one leaving the mover no
+/// mate-in-1 and no mate-in-2 the solver finds, else one needing a mate-in-2,
+/// else any; the defender's best material first, at most `probe` replies
+/// classified. The rest of the line is `solve`'s mate-in-<=3 line against
+/// it, so the JSON nests like a mate-in-3 line one level deeper:
+/// `{actions, after, defence, replies, defence_needs, continuations: [line]}`.
+pub fn mate4_line_json(sfn: &str, after_sfn: &str, budget: u64, time_ms: u64, probe: usize) -> String {
+    match mate4_line(sfn, after_sfn, budget, time_ms, probe) {
+        Ok(s) => s,
+        Err(e) => format!("{{\"ok\":false,\"error\":{:?}}}", e),
+    }
+}
+
+fn mate4_line(sfn: &str, after_sfn: &str, budget: u64, time_ms: u64, probe: usize) -> Result<String, String> {
+    let merr = |e: MateError| format!("{:?}", e);
+    let b = Board::from_sfn(sfn).map_err(|e| format!("{:?}", e))?;
+    let want = key(&Board::from_sfn(after_sfn).map_err(|e| format!("{:?}", e))?);
+    let c = b.to_move;
+    let o = c.other();
+    let t0 = crate::search::now_ms();
+    let mut s = Solver::new(budget, 0);
+    let root = s.successors(&b, c).map_err(merr)?;
+    let (t, n) = *root.iter().find(|(_, n)| key(n) == want).ok_or("the first turn is not a legal successor")?;
+    let replies = s.successors(&n, o).map_err(merr)?;
+    if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Err("a reply wins for the defender".into()); }
+    let mut idx: Vec<usize> = (0..replies.len()).filter(|&i| replies[i].1.outcome == Outcome::Ongoing).collect();
+    idx.sort_by_key(|&i| -(replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32));
+    let mut level: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for &i in idx.iter().take(probe.max(1)) {
+        let rb = replies[i].1;
+        let l = if s.has_mate_in_1(&rb, c).map_err(merr)? { 0 }
+                else if s.has_mate_in_le2(&rb, c).map_err(merr)? { 1 } else { 2 };
+        level[l].push(i);
+        if level[2].len() >= 4 { break; }
+    }
+    let order: Vec<usize> = level[2].iter().chain(level[1].iter()).chain(level[0].iter()).copied().collect();
+    if order.is_empty() {
+        // Every reply loses on the spot: the first turn is the whole line.
+        let (acts, _) = b.emit_actions(&t, c);
+        return Ok(format!("{{\"ok\":true,\"actions\":{},\"after\":{:?},\"replies\":{},\"seconds\":{:.3}}}",
+                          crate::actions::acts_to_json(&acts), n.to_sfn(), replies.len(),
+                          (crate::search::now_ms() - t0) / 1000.0));
+    }
+    for &i in &order {
+        let (rt, rb) = replies[i];
+        let sol = match solve(&rb, budget, time_ms, &[], 3) { Ok(x) => x, Err(_) => continue };
+        let (need, l) = if let Some(l) = sol.mate1.first() { (1, l) }
+            else if let Some(l) = sol.mate2.first() { (2, l) }
+            else if let Some(l) = sol.mate3.first() { (3, l) } else { continue };
+        let (acts, _) = b.emit_actions(&t, c);
+        let (dacts, _) = n.emit_actions(&rt, o);
+        return Ok(format!("{{\"ok\":true,\"actions\":{},\"after\":{:?},\"defence\":{{\"actions\":{},\"after\":{:?}}},\"replies\":{},\"defence_needs\":{},\"continuations\":[{}],\"seconds\":{:.3}}}",
+                          crate::actions::acts_to_json(&acts), n.to_sfn(),
+                          crate::actions::acts_to_json(&dacts), rb.to_sfn(), replies.len(), need,
+                          line_json(&rb, l, c), (crate::search::now_ms() - t0) / 1000.0));
+    }
+    Err(format!("no line found against {} classified replies", order.len()))
+}
+
 // ---------------------------------------------------------------------------
 // SigilBench grading (`bench/`): judge ONE submitted turn by proof.
 // ---------------------------------------------------------------------------
