@@ -588,6 +588,10 @@ class GameController {
 			// Invalid - own stone
 			return this._promptMove(color, standardMove);
 		}
+		// A Fissure wall is not a move target: clicking one used to fall
+		// through every branch below and spend the move (or the dash's move)
+		// without placing a stone (SigilBench v3 rules differential test).
+		if (board.stones[node] === DESTROYED) return this._promptMove(color, standardMove);
 
 		// Seal of Stone (enemy-held): the opening move must be soft.
 		if (violatesSealOfStone(board, color, node, standardMove)) {
