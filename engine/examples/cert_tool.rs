@@ -9,6 +9,9 @@
 //!   cert_tool within < reqs     k \t sfn [\t budget \t time_ms \t threads]: forced win within k?
 //!                                (k = 1, 2; "none" is a proof; shortest-mate labels)
 //!
+//!   cert_tool nomake < reqs     sfn [\t budget \t time_ms]: refutation certificate, no win within 2
+//!   cert_tool nocheck < reqs    k \t sfn (\t after \t reply)*: check one (k = 1 needs no pairs)
+//!
 //! All run the full browser rules (cast_enum::set_full_rules). `check` uses
 //! sigil_engine::cert (no search) and the certificate's `internal` entries as
 //! hints; leaves are re-found by exhaustive mate-in-1 scans.
@@ -52,7 +55,25 @@ fn main() {
                 if let Some(t) = f.get(4) { sigil_engine::mate::set_resolve_threads(t.parse().expect("threads")); }
                 println!("{}", sigil_engine::mate::mate_within_json(f[1], k, budget, time_ms));
             }
-            _ => { eprintln!("usage: cert_tool make|check|within"); std::process::exit(2); }
+            "nomake" => {
+                // sfn [\t budget \t time_ms]: refutation certificate for "no forced win within 2"
+                let f: Vec<&str> = line.split('\t').collect();
+                let budget: u64 = f.get(1).map(|x| x.parse().expect("budget")).unwrap_or(200_000_000_000);
+                let time_ms: u64 = f.get(2).map(|x| x.parse().expect("time")).unwrap_or(3_600_000);
+                println!("{}", sigil_engine::mate::no_mate2_cert_json(f[0], budget, time_ms));
+            }
+            "nocheck" => {
+                // k \t sfn (\t after \t reply)*: check a "no forced win within k" certificate
+                let t0 = std::time::Instant::now();
+                let f: Vec<&str> = line.split('\t').collect();
+                let k: u8 = f[0].parse().expect("k");
+                let refs: Vec<(String, String)> = f[2..].chunks(2).map(|p| (p[0].to_string(), p[1].to_string())).collect();
+                match sigil_engine::cert::check_no_mate(f[1], k, &refs, 2_000_000_000_000) {
+                    Ok(s) => println!("{{\"ok\":true,\"replies_checked\":{},\"turns\":{},\"seconds\":{:.3}}}", s.and_nodes, s.turns, t0.elapsed().as_secs_f64()),
+                    Err(e) => println!("{{\"ok\":false,\"error\":{:?},\"seconds\":{:.3}}}", e, t0.elapsed().as_secs_f64()),
+                }
+            }
+            _ => { eprintln!("usage: cert_tool make|check|within|nomake|nocheck"); std::process::exit(2); }
         }
     }
 }

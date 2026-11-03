@@ -1331,3 +1331,48 @@ impl Solver {
         Ok(false)
     }
 }
+
+/// Refutation certificate for "no forced win within 2" at `sfn` (side to move
+/// = the mover): for every distinct first turn that does not end the game, a
+/// reply after which the mover has no mate-in-1 (or which wins outright for the
+/// defender). JSON: {"ok", "sfn", "k": 2, "refutations": [{"after", "reply"}],
+/// "nodes", "seconds"}, or {"ok": false, "result": "mate"|"budget"|...}. Checked
+/// by `cert::check_no_mate` (cert_tool nocheck).
+pub fn no_mate2_cert_json(sfn: &str, budget: u64, time_ms: u64) -> String {
+    let t0 = std::time::Instant::now();
+    let b = match Board::from_sfn(sfn) { Ok(b) => b, Err(e) => return format!("{{\"ok\":false,\"error\":{:?}}}", e) };
+    let c = b.to_move;
+    let o = c.other();
+    let mut s = Solver::new(budget, time_ms);
+    let run = |s: &mut Solver| -> Result<Option<Vec<(Board, Board)>>, MateError> {
+        let mut out = Vec::new();
+        for (_, n) in s.successors(&b, c)? {
+            if won_by(n.outcome, c) { return Ok(None); }
+            if n.outcome != Outcome::Ongoing { continue; }
+            let replies = s.successors(&n, o)?;
+            let mut idx: Vec<usize> = (0..replies.len()).collect();
+            idx.sort_by_key(|&i| {
+                let t = &replies[i].0;
+                let is_killer = s.killers.iter().any(|k| k.slice() == t.slice());
+                (if is_killer { 0 } else { 1 }, -(replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32))
+            });
+            let mut refuted = None;
+            for &i in &idx {
+                let (rt, rb) = replies[i];
+                if won_by(rb.outcome, c) { continue; }
+                if won_by(rb.outcome, o) || !s.has_mate_in_1(&rb, c)? { s.remember_killer(rt); refuted = Some(rb); break; }
+            }
+            match refuted { Some(rb) => out.push((n, rb)), None => return Ok(None) }
+        }
+        Ok(Some(out))
+    };
+    let r = run(&mut s);
+    let secs = t0.elapsed().as_secs_f64();
+    match r {
+        Ok(Some(v)) => format!("{{\"ok\":true,\"sfn\":{:?},\"k\":2,\"refutations\":[{}],\"nodes\":{},\"seconds\":{:.3}}}", sfn,
+                               v.iter().map(|(n, r)| format!("{{\"after\":{:?},\"reply\":{:?}}}", n.to_sfn(), r.to_sfn())).collect::<Vec<_>>().join(","),
+                               s.stats.nodes, secs),
+        Ok(None) => format!("{{\"ok\":false,\"result\":\"mate\",\"nodes\":{},\"seconds\":{:.3}}}", s.stats.nodes, secs),
+        Err(e) => format!("{{\"ok\":false,\"result\":{:?},\"nodes\":{},\"seconds\":{:.3}}}", format!("{:?}", e), s.stats.nodes, secs),
+    }
+}

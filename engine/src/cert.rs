@@ -138,3 +138,42 @@ pub fn check(after_sfn: &str, n: u8, hints: &[(String, String)], budget: u64) ->
     ch.and(&a, n - 1)?;
     Ok(ch.stats)
 }
+
+/// Check "the side to move at `sfn` has no forced win within `k`" (k = 1 or
+/// 2). k = 1: no legal turn wins outright (full enumeration). k = 2: every
+/// legal turn either ends the game (a mover win fails the check) or has its
+/// hinted refuting reply in `refutations` (first-turn position -> reply
+/// position), which must be legal and either win for the defender or leave the
+/// mover no winning turn (full enumeration).
+pub fn check_no_mate(sfn: &str, k: u8, refutations: &[(String, String)], budget: u64) -> Result<CheckStats, String> {
+    let b = Board::from_sfn(sfn)?;
+    let c = b.to_move;
+    let mut ch = Checker::new(c, &[], budget);
+    let no_m1 = |ch: &mut Checker, x: &Board| -> Result<bool, String> {
+        let turns = ch.turns(x, c)?;
+        Ok(!turns.iter().any(|t| wins(after(x, t, c).outcome, c)))
+    };
+    match k {
+        1 => { if !no_m1(&mut ch, &b)? { return Err("a mate-in-1 exists".into()); } }
+        2 => {
+            let mut refs = HashMap::new();
+            for (n, r) in refutations { refs.insert(fkey(&Board::from_sfn(n)?), fkey(&Board::from_sfn(r)?)); }
+            let firsts = ch.succ(&b, c)?;
+            for n in firsts {
+                if wins(n.outcome, c) { return Err(format!("first turn wins outright: {}", n.to_sfn())); }
+                if n.outcome != Outcome::Ongoing { continue; }
+                let target = *refs.get(&fkey(&n)).ok_or_else(|| format!("no refutation for {}", n.to_sfn()))?;
+                let rturns = ch.turns(&n, c.other())?;
+                let r = rturns.iter().map(|t| after(&n, t, c.other())).find(|r| fkey(r) == target)
+                    .ok_or_else(|| format!("refuting reply not legal after {}", n.to_sfn()))?;
+                ch.stats.and_nodes += 1;
+                if wins(r.outcome, c) { return Err(format!("refuting reply loses on the spot after {}", n.to_sfn())); }
+                if r.outcome == Outcome::Ongoing && !no_m1(&mut ch, &r)? {
+                    return Err(format!("mover mates after the refuting reply {}", r.to_sfn()));
+                }
+            }
+        }
+        _ => return Err("k must be 1 or 2".into()),
+    }
+    Ok(ch.stats)
+}
