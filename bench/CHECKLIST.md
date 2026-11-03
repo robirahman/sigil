@@ -53,6 +53,10 @@ benchmark's test set.
 
 - [x] **Scope.** Forced mates only, with N ∈ {1, 2, 3, 4}.
   - No engine-judged "winning turn" puzzles.
+  - **Revised 2026-11-03 for v3 (Robi):** keep mate-in-1, add longer mates (N = 5, 6 if
+    affordable) and Lichess-style winning-turn puzzles (one turn much better than every
+    other); harder positions in every category; target Haiku-tier models below 10%.
+    Every "correct" mate verdict is certified. Plan and progress: `bench/V3_PLAN.md`.
 - [x] **Answer format.** A single move: one complete Sigil turn, i.e. the turn's full action list.
 - [x] **Grading.** An answer is correct if and only if it leads to a forced mate in N. Correctness is
   checked by proof, not by matching a key:
@@ -120,6 +124,13 @@ match the rules.
     sampled position, and any mismatch is fixed in the engine and re-run.
   - *Finding 2026-10-31 (bench/prompt/VERIFICATION.md):* the Rust enumerator is NARROWER than the JS rules for **Rock Slide** (only best-net push assignments), **Corrupt** (only the largest conversion set; JS allows "up to 3", including 0), **Comet** (never sacrifices the stone it just blinked) and probably **Erupt** (fixed spell order). Consequences: a legal answer can be graded illegal, and a mate proof can miss a defender's escape. Until the enumerator is widened, the dev set excludes puzzles with these spells on the board.
   - *Fixed 2026-10-31:* `cast_enum::set_full_rules(true)` makes all four resolvers rules-complete (every Rock Slide assignment, every Corrupt set of 0-3, Comet may sacrifice the blinked stone, Erupt moves in any order). Off by default, so the shipped strength engine is unchanged; `bench_grade`, `children` and Python `set_full_rules` turn it on, and the test-set generator must too. The four discrepancy cases now grade legal, and `bench/tools/full_rules_superset.py` checks the full enumeration contains the narrow one. The dev set keeps its exclusion so runs already in progress stay comparable; the test set will include these spells.
+  - *v3 (2026-11-03):* `tools/rules-enum.js` enumerates through the browser's interactive
+    GameController (the code humans play, not sim-board's AI enumerator) and
+    `tools/rules-diff.py` compares it with `engine/examples/rules_children` (post end-of-turn
+    effects). First VM run on 3,000 positions found a browser bug: clicking a Fissure wall
+    spent the move (or the dash's move) without placing a stone, in all three controllers.
+    Fixed in `_doMove`. Positions whose mover holds a charged Seal of Destruction end before
+    the first prompt and are reported as `terminal`.
 - [ ] **Targeted fuzzing of the special mechanics:**
   - cast keep-choice, dash sacrifices, Rock Slide, Fissure walls;
   - the Seal burn (stored puzzle lines are post-burn, `endOfTurn` mode);

@@ -50,6 +50,11 @@ def one(binary, sfn, max_children):
     if len(rr['children']) > max_children:
         return {'sfn': sfn, 'status': 'skipped', 'why': f"{len(rr['children'])} children"}
     jr = js_children(sfn)
+    if jr['stats']['runs'] == 1 and len(jr['children']) == 1 and jr['children'][0]['tokens'] == []:
+        # The controller ended the game before the mover's first prompt (the
+        # mover holds a charged Seal of Destruction). Not a turn position:
+        # mate::child marks such children finished, so a proof never expands one.
+        return {'sfn': sfn, 'status': 'terminal', 'winner': jr['children'][0]['winner']}
     rk = {norm(c['sfn']): c for c in rr['children']}
     jk = {c['key']: c for c in jr['children']}
     only_r = sorted(set(rk) - set(jk))
