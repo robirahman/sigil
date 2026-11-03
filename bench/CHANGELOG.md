@@ -6,6 +6,8 @@
 - Mate-in-4 grading: AND-OR prover with mover/defender killers and a proof memo; the resolver adds a deep parallel scan of every mover turn at the outermost choice. Dev-v2 reference answers proven: 20/25 first pass (was ~12), 24/25 with the resolver.
 
 ## Unreleased
+- Human-expert baseline on dev set v2: 88/100 (95% CI 80-93%). Robi Rahman (the game's developer) and Andy Voellmer (its creator) each played half of the set without an engine. Only the combined score was recorded, with no per-N breakdown. On the leaderboard.
+- Try panel: "Show solution" walks the whole solution line. The next turn is ringed on the board, the AI answers with the stored defence, and this repeats to the mate. If you play another turn, the engine replies as before. Dev set v2's mined mate-in-4s now carry full lines (`dev/dev_set_v2_lines.json`, built by `tools/build_m4_lines.py` from `mate::mate4_line_json`). The walk works on the Puzzles page too.
 - Site: SigilBench in the main menu, and a password-protected "Try the dev set" panel: people play the dev puzzles on the board with the first turn graded (`puzzles.html?bench=<id>`); for AIs it copies the harness's exact prompts and grades a pasted answer in the browser (stored proven solutions, wins on the spot, otherwise the in-browser engine's search, which does not check legality).
 
 ## 0.1.1-dev (2026-11-01)

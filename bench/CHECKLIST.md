@@ -260,6 +260,7 @@ match the rules.
   - Use a bench-mode page that never exposes answers or puzzle metadata.
   - Note in the methodology that Robi saw the generation pipeline, but not these positions.
   - **done when:** both sets of 100 answers are graded by the same grader.
+  - *Progress 2026-11-03:* dev set v2 measured at 88/100 (Robi and Andy, 50 puzzles each, no engine, combined score only). This is on the dev set, not the test set.
 
 ## 6. Report and leaderboard
 

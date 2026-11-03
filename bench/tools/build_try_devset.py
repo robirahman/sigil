@@ -36,6 +36,10 @@ ITERATIONS = 310_000
 # The set the site offers. The page only accepts a cached payload whose `set`
 # matches its own SET_ID, so bump both together.
 DEV_SET = os.path.join(BENCH, 'dev', 'dev_set_v2.json')
+# Full solution lines (stored defences to the mate) for puzzles the Puzzles
+# set does not hold, i.e. v2's mined mate-in-4s; built by
+# bench/tools/build_m4_lines.py. Shown by "Show solution" in bench mode.
+LINES = os.path.join(BENCH, 'dev', 'dev_set_v2_lines.json')
 SET_ID = 'dev_v2'
 
 # Appended to the system prompt in the "one message" copy, for chat
@@ -46,10 +50,12 @@ NO_TOOL_NOTE = (
     'is final.')
 
 
-def payload(path=DEV_SET, set_id=SET_ID):
+def payload(path=DEV_SET, set_id=SET_ID, lines_path=LINES):
     dev = load_json(path)
+    lines = load_json(lines_path)['lines'] if lines_path and os.path.exists(lines_path) else {}
     puzzles = []
     for p in dev['puzzles']:
+        extra = {'solution_line': lines[p['id']]} if p['id'] in lines else {}
         puzzles.append({
             'id': p['id'],
             'n': p['n'],
@@ -60,6 +66,7 @@ def payload(path=DEV_SET, set_id=SET_ID):
             'solution_keys': p['solution_keys'],
             'reference_solution': p['reference_solution'],
             'user_prompt': P.user_prompt(p),
+            **extra,
         })
     return {
         'canary': CANARY,
@@ -94,6 +101,7 @@ def main():
     ap.add_argument('--out', default=OUT)
     ap.add_argument('--dev-set', default=DEV_SET)
     ap.add_argument('--set-id', default=SET_ID)
+    ap.add_argument('--lines', default=LINES, help='solution lines file (empty string: none)')
     ap.add_argument('--check', action='store_true', help='decrypt the existing file with the password and report')
     a = ap.parse_args()
     pw = os.environ.get('SIGILBENCH_TRY_PASSWORD')
@@ -107,7 +115,7 @@ def main():
                                                           base64.b64decode(e['ciphertext']), None)))
         print(f"ok: set {d.get('set')}, {len(d['puzzles'])} puzzles, benchmark {d['benchmark']}")
         return
-    raw = json.dumps(payload(a.dev_set, a.set_id), separators=(',', ':')).encode()
+    raw = json.dumps(payload(a.dev_set, a.set_id, a.lines), separators=(',', ':')).encode()
     enc = encrypt(gzip.compress(raw, mtime=0), pw)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, 'w') as f:

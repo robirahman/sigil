@@ -17,7 +17,7 @@
   "4": 25
  },
  "resolver": "applied",
- "generated": "2026-11-01",
+ "generated": "2026-11-03",
  "entries": [
   {
    "id": "engine_vh_v2",
@@ -107,8 +107,20 @@
    "id": "humans",
    "kind": "baseline",
    "label": "Human experts (Robi, Andy)",
-   "config": "pending",
-   "pending": true
+   "config": "50 puzzles each, no engine",
+   "date": "2026-11-03",
+   "git_commit": "9a1241e",
+   "overall": {
+    "correct": 88,
+    "total": 100,
+    "accuracy": 0.88,
+    "ci95": [
+     0.8019,
+     0.93
+    ]
+   },
+   "by_n": {},
+   "status_counts": {}
   }
  ]
 }

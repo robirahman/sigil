@@ -449,12 +449,14 @@
 				g.appendChild(el('text', { class: 'row-label', x: 0, y: y0 + lab.l }, e.label));
 				g.appendChild(el('text', { class: 'row-config', x: 0, y: y0 + lab.c },
 					(e.kind === 'baseline' ? 'baseline · ' : '') + e.config));
-				if (e.pending) {
-					g.appendChild(el('text', { class: 'pending', x: x(0) + (narrow ? 0 : 6), y: y0 + lab.bar + 11 }, 'not run yet'));
+				const s = e.pending ? null : stat(e);
+				if (!s) {
+					// Not run, or (the human experts) an overall score with no per-N breakdown.
+					g.appendChild(el('text', { class: 'pending', x: x(0) + (narrow ? 0 : 6), y: y0 + lab.bar + 11 },
+						e.pending ? 'not run yet' : 'overall score only'));
 					svg.appendChild(g);
 					return;
 				}
-				const s = stat(e);
 				const barY = y0 + lab.bar, barH = 14;
 				const w = Math.max(0, x(s.accuracy) - x(0));
 				// Bar anchored at the baseline (square), rounded 4px data end.
@@ -519,7 +521,7 @@
 					(e.with_reminder && e.with_reminder.correct !== o.correct ? ' · ' + pct(e.with_reminder.accuracy) + ' with the old reminder' : '') +
 					'</span></td>' +
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
-					'<td>' + cell(e.by_n['1']) + '</td><td>' + cell(e.by_n['2']) + '</td><td>' + cell(e.by_n['3']) + '</td>' + m4(e) +
+					'<td>' + cell((e.by_n || {})['1']) + '</td><td>' + cell((e.by_n || {})['2']) + '</td><td>' + cell((e.by_n || {})['3']) + '</td>' + m4(e) +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
 					'<td>' + (e.tokens && e.tokens.output_per_puzzle ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
@@ -533,12 +535,16 @@
 			const engineNote = data.entries.some((e) => e.provider === 'engine')
 				? 'The engine plays one turn per puzzle with the site\'s Very Hard settings (60 s, shipped NNUE eval), graded by the same proof. '
 				: '';
+			const humanNote = data.entries.some((e) => e.id === 'humans' && !e.pending)
+				? 'Human experts: Robi Rahman (the game\'s developer) and Andy Voellmer (its creator) each played half of the set, ' +
+				  'without an engine; only the combined score is recorded, not a breakdown by mate length. '
+				: '';
 			const m4Note = data.split_counts['4']
 				? 'Mate-in-4 answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
 				: '';
 			document.getElementById('table-note').textContent =
 				data.set_label + ': benchmark ' + data.benchmark.version + ', updated ' + data.generated + '. ' +
-				engineNote + m4Note + reminderNote +
+				engineNote + humanNote + m4Note + reminderNote +
 				(data.resolver && data.resolver.indexOf('not applied') === 0
 					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
 					: '') +
@@ -781,8 +787,8 @@
 			'static/scripts/engine/constants.js', 'static/scripts/engine/notation.js', 'static/scripts/engine/board.js',
 			'static/scripts/engine/moves.js', 'static/scripts/engine/spells.js', 'static/scripts/engine/sim-board.js',
 			'static/scripts/engine/features.js', 'static/scripts/engine/enumerator.js', 'static/scripts/engine/ai-player.js',
-			'static/scripts/engine/game-controller.js', 'static/scripts/engine/game-review.js?v=36',
-			'static/scripts/engine/rust-ai.js?v=35', 'static/scripts/live-analysis.js?v=1', 'static/scripts/game-board-local.js?v=39',
+			'static/scripts/engine/game-controller.js', 'static/scripts/engine/game-review.js?v=39',
+			'static/scripts/engine/rust-ai.js?v=35', 'static/scripts/live-analysis.js?v=1', 'static/scripts/game-board-local.js?v=41',
 			'static/scripts/sigilbench-replay.js?v=1',
 		];
 		let engineReady = null;
