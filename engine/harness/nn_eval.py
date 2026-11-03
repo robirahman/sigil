@@ -570,6 +570,13 @@ def cmd_golden(a):
     rng = np.random.default_rng(1)
     ix = rng.choice(len(D['y']), size=min(a.n, len(D['y'])), replace=False)
     is_snn2 = bool(q.get('is_snn2'))
+    if is_snn2 and 'walls' in D and 'bank' in D and a.n_feature > 0:
+        # Uniform positions rarely carry a wall or a banked stone, so an SNN2
+        # net's wall / bank rows would go untested; add up to n_feature of each.
+        for mask in (D['walls'] != 0, D['bank'].any(axis=1)):
+            pool = np.setdiff1d(np.flatnonzero(mask), ix)
+            if len(pool):
+                ix = np.concatenate([ix, rng.choice(pool, size=min(a.n_feature, len(pool)), replace=False)])
     w_ix = D['walls'][ix] if ('walls' in D and is_snn2) else None
     b_ix = D['bank'][ix] if ('bank' in D and is_snn2) else None
     v = qforward(q, D['mine'][ix], D['theirs'][ix], D['spells'][ix], D['is_red'][ix], walls=w_ix, bank=b_ix)
@@ -591,7 +598,10 @@ def cmd_golden(a):
                 f.write(f"{int(D['mine'][i])} {int(D['theirs'][i])} "
                         f"{','.join(str(int(x)) for x in D['spells'][i])} "
                         f"{int(D['is_red'][i])} {int(cs)}\n")
-    print(f"WROTE {a.out}: {len(ix)} vectors, |cs| mean {np.mean(np.abs(v)):.1f}")
+    extra = ''
+    if w_ix is not None and b_ix is not None:
+        extra = f", {int(np.count_nonzero(w_ix))} with walls, {int(np.count_nonzero(b_ix.any(axis=1)))} with banked stones"
+    print(f"WROTE {a.out}: {len(ix)} vectors{extra}, |cs| mean {np.mean(np.abs(v)):.1f}")
 
 
 def main():
@@ -629,6 +639,8 @@ def main():
     p = sub.add_parser('golden')
     p.add_argument('net'); p.add_argument('prep'); p.add_argument('out')
     p.add_argument('--n', type=int, default=64)
+    p.add_argument('--n-feature', type=int, default=32,
+                   help='SNN2: also this many positions with walls and this many with banked stones')
     a = ap.parse_args()
     {'prep': cmd_prep, 'train': cmd_train, 'golden': cmd_golden}[a.cmd](a)
 

@@ -41,7 +41,21 @@ def main():
     ap.add_argument('lines'); ap.add_argument('out'); ap.add_argument('evals', nargs='+')
     ap.add_argument('--depth', type=int, default=5)
     ap.add_argument('--per-chunk', type=int, default=2000)
+    ap.add_argument('--name', default='human_e9',
+                    help='chunk file prefix; give each set its own (prep flattens every DATA prefix into one dir)')
+    ap.add_argument('--exclude-games', default='',
+                    help='a .npz chunk directory (or a text file of game ids): skip games already in it, '
+                         'so two human sets never hold the same game')
     a = ap.parse_args()
+    exclude = set()
+    if a.exclude_games:
+        if os.path.isdir(a.exclude_games):
+            for f in os.listdir(a.exclude_games):
+                if f.endswith('.npz'):
+                    exclude.update(int(x) for x in np.unique(np.load(os.path.join(a.exclude_games, f))['game']))
+        else:
+            exclude.update(int(x) for x in open(a.exclude_games).read().split())
+        print(f'excluding {len(exclude)} games already in {a.exclude_games}', flush=True)
     rows = {}
     for path in a.evals:
         for line in open(path):
@@ -67,7 +81,7 @@ def main():
                'game': np.array(buf['game'], np.int64), 'ply': np.array(buf['ply'], np.int16),
                'kind': np.array(buf['kind'], np.uint8), 'full': np.array(buf['full'], np.float32),
                'score': np.array(buf['score'], np.int32)}
-        np.savez_compressed(os.path.join(a.out, f'human_e9_d{a.depth}_{n_chunk:04d}.npz'), **out)
+        np.savez_compressed(os.path.join(a.out, f'{a.name}_d{a.depth}_{n_chunk:04d}.npz'), **out)
         n_chunk += 1
         for v in buf.values():
             v.clear()
@@ -77,6 +91,8 @@ def main():
 
     for code in sorted(lines):
         g = lines[code]
+        if game_id(code) in exclude:
+            skip('already in --exclude-games'); continue
         var = g.get('variant', 'standard')
         if var not in ('standard', 'competitive'):
             skip(f'variant {var}'); continue
