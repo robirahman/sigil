@@ -352,7 +352,7 @@ _PAGE = r'''<!DOCTYPE html>
 <script src="../static/scripts/engine/moves.js"></script>
 <script src="../static/scripts/engine/spells.js"></script>
 <script src="../static/scripts/engine/ai-player.js"></script>
-<script src="../static/scripts/engine/game-controller.js"></script>
+<script src="../static/scripts/engine/game-controller.js?v=1"></script>
 <script src="../static/scripts/engine/game-review.js?v=__ENGINE_V__"></script>
 <script>
 const DATA = __DATA__;
