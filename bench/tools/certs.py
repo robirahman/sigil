@@ -69,7 +69,7 @@ def one(a, p, rep):
         res['make']['internal'] = len(c['internal'])
         res['make']['leaves'] = len(c['leaves'])
         res['check'] = check(a.tool, c)
-        if a.js:
+        if a.js and p['n'] <= a.js_max_n:
             res['check_js'] = check_js(c)
         res['cert'] = c
     return res
@@ -87,6 +87,7 @@ def main():
     ap.add_argument('--max-n', type=int, default=6)
     ap.add_argument('--leaves', action='store_true', help='also store leaf mates (needed by the JS checker)')
     ap.add_argument('--js', action='store_true', help='also check with tools/check-mate-cert.js')
+    ap.add_argument('--js-max-n', type=int, default=6, help='JS-check only puzzles with N at most this')
     a = ap.parse_args()
     ps = json.load(open(a.puzzles))['puzzles']
     if a.ids:

@@ -1265,3 +1265,69 @@ pub fn cert_json(after_sfn: &str, n: u8, budget: u64, time_ms: u64, leaves: bool
         Err(e) => format!("{{\"ok\":false,\"error\":{:?},\"nodes\":{},\"seconds\":{:.3}}}", format!("{:?}", e), s.stats.nodes, secs),
     }
 }
+
+/// SigilBench shortest-mate proofs: does the side to move at `sfn` have a
+/// forced win within `k` turns? k = 1: a full enumeration; k = 2:
+/// `has_mate_in_le2_exhaustive`; k = 3: `has_mate_in_le3_exhaustive` (all
+/// three are proofs both ways). JSON:
+/// {"k", "result": "mate"|"none"|"budget"|"incomplete", "nodes", "seconds"}.
+/// "none" is a proof that no forced win within k exists.
+pub fn mate_within_json(sfn: &str, k: u8, budget: u64, time_ms: u64) -> String {
+    let t0 = std::time::Instant::now();
+    let b = match Board::from_sfn(sfn) { Ok(b) => b, Err(e) => return format!("{{\"error\":{:?}}}", e) };
+    let c = b.to_move;
+    let mut s = Solver::new(budget, time_ms);
+    let r = match k {
+        1 => s.mate_in_1_turn(&b, c).map(|t| t.is_some()),
+        2 => s.has_mate_in_le2_exhaustive(&b, c),
+        3 => s.has_mate_in_le3_exhaustive(&b, c),
+        _ => return "{\"error\":\"k must be 1, 2 or 3\"}".into(),
+    };
+    let res = match r {
+        Ok(true) => "mate", Ok(false) => "none",
+        Err(MateError::Budget) => "budget", Err(MateError::Incomplete(..)) => "incomplete",
+    };
+    format!("{{\"k\":{},\"result\":{:?},\"nodes\":{},\"seconds\":{:.3}}}", k, res, s.stats.nodes, t0.elapsed().as_secs_f64())
+}
+
+impl Solver {
+    /// Exhaustive: does `c` have a forced win within 3 turns at `b`? Cheap
+    /// proofs first (exhaustive within-2, the nominated mate-in-3 prover);
+    /// then EVERY distinct first turn needs a refutation -- a reply after
+    /// which `has_mate_in_le2_exhaustive` is false -- or it is a mate-in-3.
+    /// Replies are tried killer-first, then by the defender's material; a reply
+    /// the mover answers with a quick mate-in-1 or nominated mate-in-2 is
+    /// skipped cheaply before any exhaustive decision. `false` is a proof.
+    fn has_mate_in_le3_exhaustive(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
+        if self.has_mate_in_le2_exhaustive(b, c)? { return Ok(true); }
+        if self.prove_le(b, c, 3, false)? { return Ok(true); }
+        let o = c.other();
+        let firsts: Vec<Board> = self.successors(b, c)?.into_iter().map(|(_, n)| n)
+            .filter(|n| n.outcome == Outcome::Ongoing).collect();
+        'first: for n in &firsts {
+            let replies = self.successors(n, o)?;
+            if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { continue; }
+            let mut idx: Vec<usize> = (0..replies.len()).filter(|&i| replies[i].1.outcome == Outcome::Ongoing).collect();
+            idx.sort_by_key(|&i| {
+                let t = &replies[i].0;
+                let is_killer = self.killers.iter().any(|k| k.slice() == t.slice());
+                let mat = replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32;
+                (if is_killer { 0 } else { 1 }, -mat)
+            });
+            // Pass 1: replies with no quick answer are the likely refutations.
+            let mut slow = Vec::new();
+            for &i in &idx {
+                let rb = replies[i].1;
+                if self.has_mate_in_1(&rb, c)? { continue; }
+                if self.has_mate_in_le2(&rb, c)? { continue; }
+                slow.push(i);
+            }
+            for &i in &slow {
+                let (rt, rb) = replies[i];
+                if !self.has_mate_in_le2_exhaustive(&rb, c)? { self.remember_killer(rt); continue 'first; }
+            }
+            return Ok(true);   // every reply leaves a (proven) win within 2
+        }
+        Ok(false)
+    }
+}
