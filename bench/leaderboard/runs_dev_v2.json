@@ -15,8 +15,11 @@
   {
    "id": "humans",
    "label": "Human experts (Robi, Andy)",
-   "config": "pending",
-   "pending": true
+   "config": "50 puzzles each, no engine",
+   "date": "2026-11-03",
+   "git_commit": "9a1241e",
+   "correct": 88,
+   "total": 100
   }
  ]
 }

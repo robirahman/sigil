@@ -447,7 +447,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
-		<script src="static/scripts/game-board-local.js?v=38"></script>
+		<script src="static/scripts/game-board-local.js?v=39"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->
@@ -646,8 +646,9 @@
 				// Dev puzzles from the Puzzles set use its puzzle (with the proven
 				// defences and continuations); mined ones (v2's mate in 4) were never
 				// published, so they get a puzzle built from the dev entry: its
-				// winning first turns and one reference line, no stored defences --
-				// the engine picks every reply.
+				// winning first turns and its full solution line (bench/dev/
+				// dev_set_v2_lines.json: stored defences to the mate, so Show
+				// solution can walk it), else the reference first turn alone.
 				const src = all.find(p => p.id === bp.source_puzzle_id && p.sfn === bp.sfn);
 				// The browser derives the side to move from the turn counter (Red on
 				// odd turns). Self-play SFNs can be off by one (the parity trap the
@@ -659,11 +660,17 @@
 					if (!isNaN(tc) && (t[1] === 'r') !== (tc % 2 === 1)) t[2] = String(tc + 1);
 					return t.join(' ');
 				};
+				// Line nodes as the Puzzles set stores them: each with its position key.
+				const withKeys = (node) => node && Object.assign({}, node, {
+					key: node.key || (node.after ? puzzleSfnKey(node.after) : undefined),
+					continuations: (node.continuations || []).map(withKeys),
+				});
 				const puzzle = src ? Object.assign({}, src, { bench: bp.id, tags: [] }) : {
 					id: bp.id, bench: bp.id, kind: 'mate', mate: bp.n, mover: bp.mover, sfn: browserSfn(bp.sfn),
 					variant: bp.variant || 'competitive', turn: parseInt(String(bp.sfn).split(/\s+/)[2], 10) || null,
 					tags: [], game: {}, solution_keys: bp.solution_keys || [],
-					solutions: bp.reference_solution ? [{ actions: bp.reference_solution }] : [],
+					solutions: bp.solution_line ? [withKeys(bp.solution_line)]
+						: bp.reference_solution ? [{ actions: bp.reference_solution }] : [],
 				};
 				const readResults = () => { try { return JSON.parse(localStorage.getItem(BENCH_RESULTS_KEY) || '{}') || {}; } catch (e) { return {}; } };
 				const results = readResults();

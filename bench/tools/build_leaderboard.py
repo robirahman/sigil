@@ -93,8 +93,10 @@ def main():
         entries.append({'id': b['id'], 'kind': 'baseline', 'label': b['label'], 'config': b['config'],
                         'date': b['date'], 'git_commit': b['git_commit'],
                         'overall': acc(b['correct'], b['total']),
-                        'by_n': {k: acc(*v) for k, v in b['by_n'].items()},
-                        'status_counts': b['status_counts']})
+                        # A baseline may report an overall score only (the human
+                        # experts' 2026-11 run): no per-N cells, no outcome counts.
+                        'by_n': {k: acc(*v) for k, v in (b.get('by_n') or {}).items()},
+                        'status_counts': b.get('status_counts') or {}})
     doc = {
         'canary': CANARY,
         'benchmark': bench_version(),
