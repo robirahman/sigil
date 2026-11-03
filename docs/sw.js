@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v98';
+const CACHE_VERSION = 'v99';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -179,8 +179,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/scripts/engine/vacation-bank.js?v=35',
-	'./static/scripts/game-board-local.js?v=42',
-	'./static/scripts/game-board-multiplayer.js?v=41',
+	'./static/scripts/game-board-local.js?v=43',
+	'./static/scripts/game-board-multiplayer.js?v=42',
 	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/help.js?v=35',
 	'./static/scripts/profile-stats.js?v=35',
