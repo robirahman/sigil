@@ -172,3 +172,10 @@ Target: Haiku-tier models below 10% while keeping mate-in-1.
 - Never commit the dev password.
 - Reuse no existing GCP resource.
 - Work in a fresh clone off `/home` (for example `/var/tmp/sbv3/`).
+
+## Progress log
+
+- **2026-11-03: phase 0 spikes and the first rules differential run.** Results and the decisions they raise are in `bench/analysis/v3-phase0.md`.
+  - One browser rules bug was found and fixed: a click on a Fissure wall spent the move.
+  - The dev v2 labels are wrong for 6 puzzles (each has a shorter mate).
+  - Mining at scale waits for Robi's decisions.
