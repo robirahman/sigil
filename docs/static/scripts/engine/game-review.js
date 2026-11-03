@@ -1091,10 +1091,34 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 	const rebuilt = await reconstructGameLog(
 		spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
 	const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
-	if (finalSfn && last !== normalizeSfnString(finalSfn)) {
+	if (finalSfn && !sfnSamePosition(last, finalSfn)) {
 		throw new Error('replayed final position does not match record');
 	}
 	return rebuilt;
+}
+
+/**
+ * True when a replay's last position (`replayed`) is the record's final
+ * position (`recorded`). A record's finalSfn is the live board when the
+ * game ended, and that is not always the instant the last turn finished:
+ *  - a normal win: the winner's token, same counter -- byte-identical;
+ *  - a forfeit during the loser's own turn (local games vs the AI): the
+ *    token already names the loser, counter unchanged;
+ *  - a forfeit/flag/abandon after the next turn's preamble ran (online
+ *    rooms): the loser's token and the counter one past the last turn.
+ * Accept exactly those; the stones, banks, locks and the rest must match.
+ */
+function sfnSamePosition(replayed, recorded) {
+	if (!replayed || !recorded) return false;
+	const pa = normalizeSfnString(replayed).trim().split(/\s+/);
+	const pb = normalizeSfnString(recorded).trim().split(/\s+/);
+	if (pa.length !== pb.length || pa.length < 3) return false;
+	const counterStep = Number(pb[2]) - Number(pa[2]);
+	if (counterStep !== 0 && !(counterStep === 1 && pb[1] !== pa[1])) return false;
+	for (let i = 0; i < pa.length; i++) {
+		if (i !== 1 && i !== 2 && pa[i] !== pb[i]) return false;
+	}
+	return true;
 }
 
 /**

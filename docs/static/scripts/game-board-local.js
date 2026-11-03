@@ -171,7 +171,7 @@ document.addEventListener('alpine:init', () => {
 				try {
 					fatLog = await reconstructGameLog(spellNames, variant, h.Setup || null, parsed.turns);
 					const last = fatLog.length ? fatLog[fatLog.length - 1].sfnAfter : (h.Setup || null);
-					if (h.FinalSfn && last !== normalizeSfnString(h.FinalSfn)) {
+					if (h.FinalSfn && !sfnSamePosition(last, h.FinalSfn)) {
 						throw new Error('replayed final position does not match FinalSfn');
 					}
 				} catch (e) {
