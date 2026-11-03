@@ -1,1 +1,1 @@
-6,10000,nnue_mt256,policy_weights,1,0
+6,10000,nnue_snn2_base,policy_weights,1,0
