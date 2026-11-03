@@ -2344,6 +2344,17 @@ document.addEventListener('alpine:init', () => {
 					sols.forEach(s => walk(s, 1));
 					return hit;
 				}
+				// The line node (a mover turn) that reaches position `key`, if any.
+				function _puzzleLineNodeAt(key) {
+					let hit = null;
+					const walk = (node) => {
+						if (hit || !node) return;
+						if (_guideKey(node) === key) { hit = node; return; }
+						(node.continuations || []).forEach(walk);
+					};
+					(puzzle.solutions || []).forEach(walk);
+					return hit;
+				}
 				function _puzzleGuideStop() {
 					_this._puzzleGuiding = false;
 					_this._puzzleGuideNode = null;
@@ -2362,8 +2373,18 @@ document.addEventListener('alpine:init', () => {
 					_puzzleGuideStop();
 					_this._puzzleGuiding = true;
 					const last = _this._puzzleLastTurn;
-					// The opponent is still to move: the guide resumes after its turn.
-					if (last && last.color === puzzle.mover) return;
+					// The opponent is still to move: if the mover's last turn is on the
+					// line, have the AI replay its stored defence (revealing ends the
+					// 'playing' state that would otherwise pick it); the guide resumes
+					// after the reply.
+					if (last && last.color === puzzle.mover) {
+						const node = _puzzleLineNodeAt(last.key);
+						if (node && node.defence) {
+							_this._puzzleGuideDefence = node.defence;
+							_this._puzzleGuideFrom = last.key;
+						}
+						return;
+					}
 					const g = _puzzleGuideAt(last ? last.key : puzzleSfnKey(puzzle.sfn));
 					if (g) { _puzzleGuideShow(g); return; }
 					_this._puzzleGuiding = false;

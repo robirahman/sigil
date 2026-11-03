@@ -5,6 +5,9 @@
 //          next turn is ringed, to the mate.
 // deviate: Show solution, then play a different first move and check the
 //          walk stops and the engine replies.
+// midreveal: play the first solution turn, click Show solution before the
+//          AI replies, and check the stored defence is still played and the
+//          walk resumes at turn 2.
 // Exits non-zero on a failed check or a page error.
 const puppeteer = require('puppeteer');
 const { spawn } = require('child_process');
@@ -52,7 +55,22 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
     };
     let st = await state();
     console.log(`puzzle ${P}: mate in ${st.mate}, ${st.mover} to move (${MODE})`);
-    await page.evaluate(() => window.Alpine.$data(document.querySelector('#puzzle-root [x-data]')).puzzleShowSolution());
+    const reveal = () => page.evaluate(() => window.Alpine.$data(document.querySelector('#puzzle-root [x-data]')).puzzleShowSolution());
+    if (MODE === 'midreveal') {
+      const first = await page.evaluate(() => JSON.parse(JSON.stringify(window.Alpine.raw(
+        window.Alpine.$data(document.querySelector('#puzzle-root [x-data]')).puzzle).solutions[0].actions)));
+      const acts = first.filter(a => a.type !== 'pass');
+      await play(acts[0].node);
+      await reveal();
+      st = await waitFor(s => s.guide || !s.guiding, 30000);
+      check(st.status === 'revealed' && st.guiding && !!st.guide, 'revealed during the AI turn: the stored defence was played and the walk resumed');
+      check(/your turn 2 of /.test(st.msg), 'message: ' + st.msg);
+      check(logs.length === 0, 'no page errors' + (logs.length ? ':\n  ' + logs.join('\n  ') : ''));
+      await browser.close();
+      srv.kill();
+      process.exit(failures ? 1 : 0);
+    }
+    await reveal();
     await sleep(300);
     st = await state();
     check(st.status === 'revealed' && st.guiding && !!st.guide, 'Show solution starts the walk');
