@@ -9,6 +9,8 @@
 //   3. Bob's menu shows "Opponent offers to play on as Deathmatch" (and no
 //      Play On of his own); following it, the join offer says Deathmatch is
 //      unrated, and both boards open on the position under Deathmatch rules.
+//   4. Both players press Play On at once: one offer wins, the other player's
+//      room is withdrawn and they land on the winner's join offer.
 //
 //   (cd docs && python3 -m http.server 8767) &
 //   cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
@@ -201,6 +203,37 @@ const BOARD = '[x-data^="gameBoard"]';
 			check(who + '\'s board: Deathmatch, ' + color + ', on the final position', st && st.dm && st.me === color && !st.winner
 				&& st.sfn.split(' ')[0] === PLAYON.split(' ')[0] && / 0:0 /.test(st.sfn), st);
 		}
+
+		// ---- 4. Both press Play On at once (the new game, ended again).
+		for (const p of [pageA, pageB]) {
+			await until(p, (a) => { const el = document.querySelector(a[0]); return el && el._x_dataStack && Alpine.$data(el)._roomCodeForReview === a[1]; }, [BOARD, code2], 30000);
+		}
+		await finish(pageA, null);
+		await finish(pageB, null);
+		await sleep(300);
+		check('both are offered Play On', await btn(pageA, 'Play On (Deathmatch)') && await btn(pageB, 'Play On (Deathmatch)'));
+		await Promise.all([pageA, pageB].map((p) => Promise.all([
+			p.waitForNavigation({ waitUntil: 'load', timeout: 90000 }),
+			p.evaluate(() => [...document.querySelectorAll('.win-modal__btn')]
+				.find((b) => b.textContent.trim() === 'Play On (Deathmatch)').click()),
+		])));
+		const settled = await until(pageA, async (c) => {
+			const pr = (await firebase.database().ref('rooms/' + c + '/rematch/positionRoom').once('value')).val();
+			return pr && pr.code ? pr : null;
+		}, code2, 20000);
+		const winnerPage = settled && settled.by === 'blue' ? pageA : pageB;
+		const loserPage = winnerPage === pageA ? pageB : pageA;
+		await phaseIs(winnerPage, 'waiting');
+		const wl = await lobby(winnerPage);
+		check('one offer stands, from the winner\'s waiting room', settled && wl.roomCode === settled.code, { settled, room: wl.roomCode });
+		const landed = await until(loserPage, (a) => {
+			const l = Alpine.$data(document.querySelector(a[0]));
+			return new URLSearchParams(location.search).get('id') === a[1] && l.phase === 'confirmJoin' && l.joinOffer && l.joinOffer.code;
+		}, [LOBBY, settled && settled.code], 30000);
+		check('the other player lands on its join offer', landed === (settled && settled.code), landed);
+		const all = await fetch(`http://${DB_HOST}/rooms.json?ns=${NS}`, { headers: { Authorization: 'Bearer owner' } }).then((r) => r.json());
+		const rooms = Object.keys(all || {}).filter((k) => all[k].status === 'waiting');
+		check('only one waiting room is left', rooms && rooms.length === 1 && rooms[0] === (settled && settled.code), rooms);
 	} catch (e) {
 		console.log('ERROR', e.stack || e.message);
 		ok = false;

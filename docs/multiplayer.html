@@ -1539,6 +1539,30 @@
 					this.tcPreset = preset;
 				},
 
+				/**
+				 * Offer a Play On room through the finished room's rematch node,
+				 * unless the opponent's Play On offer is already there: resolves
+				 * that offer's room code, or null once ours is written.
+				 */
+				async _claimPlayOn(ref, offer) {
+					// A transaction starts from the local cache: listen first so it
+					// sees the server's value, not null.
+					const keep = () => {};
+					ref.on('value', keep);
+					try {
+						await ref.once('value');
+						const res = await ref.transaction((cur) => {
+							if (cur && cur.deathmatch === true && cur.code && cur.by !== offer.by) return; // theirs stands
+							return offer;
+						});
+						if (res && res.committed) return null;
+						const cur = res && res.snapshot && res.snapshot.val();
+						return (cur && cur.code) || null;
+					} finally {
+						ref.off('value', keep);
+					}
+				},
+
 				/** Set the lobby's time-control fields from a room's timeControl. */
 				_applyTimeControl(tc) {
 					if (!tc || !tc.type) return;
@@ -1655,9 +1679,20 @@
 								sessionStorage.removeItem('sigil_position_from_room');
 								if (old && /^[A-Z0-9]{4,10}$/.test(old.code || '') && (old.color === 'red' || old.color === 'blue')) {
 									const offer = { code: this.roomCode, by: old.color };
-									if (old.deathmatch === true) offer.deathmatch = true;
-									firebase.database().ref('rooms/' + old.code + '/rematch/positionRoom')
-										.set(offer).catch(() => {});
+									const ref = firebase.database().ref('rooms/' + old.code + '/rematch/positionRoom');
+									if (old.deathmatch === true) {
+										// Play On: both players may press it at once. The first
+										// offer wins; the other withdraws its room and joins it.
+										offer.deathmatch = true;
+										const theirs = await this._claimPlayOn(ref, offer).catch(() => null);
+										if (theirs && await _firebaseSync.withdrawRoom(this.roomCode).catch(() => false)) {
+											this.roomCode = '';
+											window.location.href = 'multiplayer.html?id=' + encodeURIComponent(theirs);
+											return;
+										}
+									} else {
+										ref.set(offer).catch(() => {});
+									}
 								}
 							} catch (e) { /* sessionStorage blocked */ }
 						}
