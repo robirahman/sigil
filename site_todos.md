@@ -122,6 +122,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add a board editor** to set up a position and play it against the AI or a friend.
 - [x] **Add live engine analysis to game reviews and spectating.**
   Done: live-analysis.js, a "Live analysis" switch on game.html and multiplayer.html: eval, win odds, depth, best turn (ringed on the board), expected reply and how the assessment changed, deepening for ~2 minutes per position ("Go deeper" for more). Anyone in the review of a finished game; while a game is in progress only developer accounts spectating it, never its players.
+  A spectator who joins mid-game replays the room's turns so far, so its repetition counts and the engine's history match a spectator who watched from the start.
 - [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
 - [x] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
   Done: `analyzeGame` task queue (functions/analysis.js), enqueued by `rateGame`, writes `game_evals/{room}` at the Quick preset.

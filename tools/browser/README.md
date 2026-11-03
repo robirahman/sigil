@@ -102,6 +102,7 @@ cd functions && firebase emulators:exec --only auth,database --project demo-sigi
 
 Checks the "Live analysis" panel (live-analysis.js) with the real wasm engine: a
 developer account spectating an online game gets it and it deepens and follows
-new turns; a spectator without the flag and the players do not; the review of
+new turns; a late joiner rebuilds the game's repetition counts and history from the
+room's turns (and falls back with a warning when they do not replay); a spectator without the flag and the players do not; the review of
 the finished game offers it to anyone and follows the reviewed position; game.html
 offers it in review only. `LIVE_ANALYSIS_SHOTS=<dir>` also saves screenshots.

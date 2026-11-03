@@ -1167,6 +1167,10 @@ function recordEnding(rec) {
  *   result — an object to receive how the transcript ends: { gameover,
  *            winner }, counting a Seal of Destruction still held when the
  *            next turn would start (the rating function's result check).
+ *   onBoard — called at the end with the replay board, whose
+ *            allLoopingSnapshotCounts hold the threefold-repetition counts of
+ *            every turn-start position (a spectator joining mid-game seeds
+ *            its own board with them).
  */
 async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
@@ -1291,5 +1295,6 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 		opts.result.gameover = !!board.gameover;
 		opts.result.winner = board.winner || null;
 	}
+	if (opts && typeof opts.onBoard === 'function') opts.onBoard(board);
 	return rebuilt;
 }

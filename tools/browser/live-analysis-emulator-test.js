@@ -3,6 +3,10 @@
 //   1. Two guests play an online game. A developer account spectating it
 //      gets the panel; switched on, the eval, best turn and expected reply
 //      appear and the search deepens; a new turn moves it to the new position.
+//      A developer who joins after four turns rebuilds the game so far from
+//      the room (repetition counts and the engine's history), as a spectator
+//      who watched from the start has them; an unreplayable transcript falls
+//      back to the current position with a warning.
 //   2. A spectator without the developer flag, and the two players, get no
 //      panel and cannot switch it on; neither can a developer who is seated.
 //   3. After the game ends, the review offers it to anyone (a player, a
@@ -128,6 +132,8 @@ const LOBBY = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			sdk(u).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }), () => req.continue());
 		});
 		page.on('pageerror', (e) => { errors.push(who + ': ' + e.message); console.log('pageerror (' + who + '):', e.message); });
+		page._warnings = [];
+		page.on('console', (m) => { if (m.type() === 'warning' || m.type() === 'warn') page._warnings.push(m.text()); });
 		return page;
 	}
 	// Signed in by email, then on to `url` (the session persists in the context).
@@ -185,6 +191,11 @@ const LOBBY = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		const uidOf = (p) => p.evaluate(() => firebase.auth().currentUser && firebase.auth().currentUser.uid);
 		const redP = room.red.uid === await uidOf(pageA) ? pageA : pageB;
 		const blueP = redP === pageA ? pageB : pageA;
+		// A spectator who watches from the start: the reference for the
+		// history a late joiner rebuilds.
+		const early = await newPage('early');
+		await early.goto(`${BASE}/multiplayer.html?id=${code}`, { waitUntil: 'load', timeout: 90000 });
+		await ready(early);
 		await play(redP, 'a2');
 
 		// 1. The developer spectates.
@@ -210,6 +221,53 @@ const LOBBY = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		await waitLive(dev, (s) => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]')); return g.liveAna.searchSfn && g.liveAna.searchSfn !== s && g.liveAna.text; }, first.searchSfn);
 		const next = await live(dev);
 		check('a new turn restarts it on the new position', next.label === 'Red 2' && !!next.text && next.lines >= 1, next);
+
+		// 1b. Two more turns, then a developer joins late: the game so far is
+		// replayed from the room, so its repetition counts and live-analysis
+		// history match the spectator who watched from the start.
+		const playAny = async (p) => {
+			await p.waitForFunction(() => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+				return g.actionList.length > 0 && Object.keys(g.validMoves || {}).length > 0; }, { timeout: 30000, polling: 500 });
+			await p.evaluate(() => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+				g.sendEvent(Object.keys(g.validMoves).sort()[0]); });
+			await p.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).actionList.includes('pass'), { timeout: 30000, polling: 500 });
+			await p.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleEndTurn());
+		};
+		await playAny(redP);
+		await playAny(blueP);
+		const seenBy = (p) => p.evaluate(() => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+			return { sfn: g.currentSfn, positions: g._liveAnaPositions.slice(), counts: Object.assign({}, g._engine.board.allLoopingSnapshotCounts),
+				earlier: (g._liveAnalysisTarget() || {}).earlier }; });
+		const settled = (p, n) => p.waitForFunction((n) => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+			return g._liveAnaPositions.length === n && Object.keys(g._engine.board.allLoopingSnapshotCounts).length === n; }, { timeout: 30000, polling: 250 }, n);
+		await settled(early, 5);
+		const late = await openAs('dev', `multiplayer.html?id=${code}`);
+		await ready(late);
+		await settled(late, 5).catch(() => {});
+		const [e5, l5] = [await seenBy(early), await seenBy(late)];
+		check('late joiner: the same positions as a spectator from the start', l5.sfn === e5.sfn && JSON.stringify(l5.positions) === JSON.stringify(e5.positions),
+			{ early: e5.positions.length, late: l5.positions.length });
+		check('late joiner: the same repetition counts', JSON.stringify(l5.counts) === JSON.stringify(e5.counts) && Object.keys(l5.counts).length === 5,
+			{ early: Object.keys(e5.counts).length, late: Object.keys(l5.counts).length });
+		check('late joiner: live analysis gets the 4 earlier positions', l5.earlier && l5.earlier.length === 4, l5.earlier && l5.earlier.length);
+		check('late joiner: no warning', late._warnings.filter((w) => /Spectator/.test(w)).length === 0, late._warnings);
+		// A transcript that does not replay to the room's position: today's
+		// behaviour (history from now on), with a warning, no error.
+		const turnKeys = Object.keys((await rest('GET', 'rooms/' + code + '/turns')) || {});
+		const k0 = turnKeys.sort()[0];
+		const saved = await rest('GET', 'rooms/' + code + '/turns/' + k0 + '/actions');
+		await rest('PUT', 'rooms/' + code + '/turns/' + k0 + '/actions', ['pass']);
+		const broken = await newPage('broken');
+		await broken.goto(`${BASE}/multiplayer.html?id=${code}`, { waitUntil: 'load', timeout: 90000 });
+		await ready(broken);
+		await sleep(1500);
+		await rest('PUT', 'rooms/' + code + '/turns/' + k0 + '/actions', saved);
+		const b5 = await seenBy(broken);
+		check('unreplayable transcript: falls back to the current position, with a warning', b5.sfn === e5.sfn && b5.positions.length === 1
+			&& Object.keys(b5.counts).length === 1 && broken._warnings.some((w) => /Spectator/.test(w)), { positions: b5.positions.length, warnings: broken._warnings });
+		await late.close();
+		await broken.close();
+		await early.close();
 
 		// 2. Nobody else in a game in progress.
 		const plain = await openAs('plain', `multiplayer.html?id=${code}`);

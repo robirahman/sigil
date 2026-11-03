@@ -1124,6 +1124,15 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${baseSpellName(v)}.png`; }); }
 					else if (type === 'spelltextsetup') { _this.spells.text = rest; }
+					else if (type === 'history') {
+						// A spectator who joined mid-game: the positions before
+						// the one it opened on (spectator-controller.js).
+						const seen = _this._liveAnaPositions;
+						const earlier = (rest.sfns || []).filter((x) => x && !seen.includes(x));
+						seen.splice(0, 0, ...earlier);
+						if (seen.length > 200) seen.splice(0, seen.length - 200);
+						if (_this.liveAnaOn) _this.liveAnalysisRefresh();
+					}
 					else if (type === 'sfn_update') {
 						_this.currentSfn = rest.sfn;
 						_this._noteLiveAnalysisPosition(rest.sfn);
