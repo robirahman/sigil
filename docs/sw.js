@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v97';
+const CACHE_VERSION = 'v100';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -110,7 +110,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/wasm/sigil_engine_bg.wasm?v=35',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
-	'./static/scripts/engine/game-controller.js',
+	// v=1: the Fissure-wall fix (a stale controller would still let a wall
+	// click spend the move on a returning user's first game).
+	'./static/scripts/engine/game-controller.js?v=1',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/position-rating.js?v=36',
 	'./static/images/game-board.webp',
@@ -174,8 +176,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
 	'./static/scripts/engine/firebase-sync.js?v=35',
-	'./static/scripts/engine/game-review.js?v=39',
-	'./static/scripts/engine/multiplayer-controller.js?v=35',
+	'./static/scripts/engine/game-review.js?v=41',
+	'./static/scripts/engine/multiplayer-controller.js?v=36',
 	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/scripts/engine/vacation-bank.js?v=35',

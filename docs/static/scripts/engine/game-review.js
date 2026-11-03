@@ -1178,7 +1178,9 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const normToken = tok => typeof tok === 'string' ? normalizeSpellName(tok) : tok;
 	const normAction = a => (a && a.spell)
 		? Object.assign({}, a, { spell: normalizeSpellName(a.spell) }) : a;
-	const gc = new GameController(emit, { variant });
+	// legacyReplay: a record replays the way the controller that recorded it
+	// played it (game-controller.js, the 2026-11 Fissure-wall fix).
+	const gc = new GameController(emit, { variant, legacyReplay: true });
 	const board = new SigilBoard(spellNames, variant || 'standard');
 	if (setupSfn) {
 		board.loadFromSfn(setupSfn);
