@@ -959,8 +959,8 @@ pub fn legal_successor(b: &Board, claimed: &Board, budget: u64, time_ms: u64)
 ///   `NotMate`; otherwise each reply without a mate-in-1 needs a mate-in-2,
 ///   found by nominate-then-prove (`has_mate_in_le2`). A miss there is NOT a
 ///   refutation, so it returns `Unproven` rather than `NotMate`.
-/// * n >= 4 is not supported yet (`Unproven` unless decided by the cheap
-///   checks).
+/// * n >= 4 (up to `MAX_K`): every reply without a mate-in-1 needs a
+///   proven win within n-1 (`prove_le`); a miss is `Unproven`.
 pub fn judge_turn(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
     -> (Result<TurnVerdict, MateError>, MateStats)
 {
@@ -1076,24 +1076,25 @@ impl Solver {
             need_m2.push(*rb);
         }
         if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
-        if n == 4 {
-            // Every reply without a mate-in-1 needs a proven win within 3 more
-            // turns (nominate-then-prove; a miss is unproven, not wrong).
+        if n >= 4 {
+            // Every reply without a mate-in-1 needs a proven win within n-1
+            // more turns (nominate-then-prove; a miss is unproven, not wrong).
             // Fast pass over every reply first (killers, memo, nominations),
             // then -- resolver mode -- the deep search on what is left.
+            if n as usize > MAX_K { return Ok(TurnVerdict::Unproven); }
+            let j = n - 1;
             let mut hard: Vec<Board> = Vec::new();
             for rb in &need_m2 {
-                if !self.prove_le(rb, c, 3, false)? {
+                if !self.prove_le(rb, c, j, false)? {
                     if !exhaustive { return Ok(TurnVerdict::Unproven); }   // first-pass grading: stop at the first miss
                     hard.push(*rb);
                 }
             }
             for rb in &hard {
-                if !self.prove_le(rb, c, 3, true)? { return Ok(TurnVerdict::Unproven); }
+                if !self.prove_le(rb, c, j, true)? { return Ok(TurnVerdict::Unproven); }
             }
             return Ok(TurnVerdict::Mate { immediate: false });
         }
-        if n > 4 { return Ok(TurnVerdict::Unproven); }
         if exhaustive {
             // Cheap proofs first: a reply whose mate-in-2 the nominator finds
             // never needs the exhaustive walk. The rest are decided exactly;
