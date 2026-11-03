@@ -1245,8 +1245,9 @@ impl Solver {
 /// Positions are SFNs (`at`: mover to move; `to`: as `child` builds it).
 pub fn cert_json(after_sfn: &str, n: u8, budget: u64, time_ms: u64, leaves: bool) -> String {
     let t0 = std::time::Instant::now();
-    let after = match Board::from_sfn(after_sfn) { Ok(b) => b, Err(e) => return format!("{{\"ok\":false,\"error\":{:?}}}", e) };
+    let mut after = match Board::from_sfn(after_sfn) { Ok(b) => b, Err(e) => return format!("{{\"ok\":false,\"error\":{:?}}}", e) };
     let c = after.to_move.other();
+    after.destruction_start_of_turn(after.to_move);   // as mate::child would have
     let mut s = Solver::new(budget, time_ms);
     let mut cert = Cert { internal: Vec::new(), leaves: Vec::new(), done: HashMap::new() };
     let r = if n == 0 || (n as usize) > MAX_K { Ok(false) }

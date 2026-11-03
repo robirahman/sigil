@@ -35,6 +35,7 @@ fn after(b: &Board, t: &Turn, c: Color) -> Board {
     n
 }
 
+
 fn wins(o: Outcome, c: Color) -> bool {
     matches!((o, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue))
 }
@@ -45,6 +46,10 @@ pub struct CheckStats {
     pub or_nodes: u64,
     pub turns: u64,
     pub hints_used: u64,
+    /// Mover nodes whose full enumeration hit a cap, where the hinted turn was
+    /// found in the engine's ordered generator instead: legal by that
+    /// generator only (tools/check-mate-cert.js confirms these independently).
+    pub ordered_legality: u64,
 }
 
 pub struct Checker {
@@ -105,8 +110,20 @@ impl Checker {
         let kb = fkey(b);
         if let Some(&kk) = self.or_ok.get(&kb) { if kk <= k { return Ok(()); } }
         self.stats.or_nodes += 1;
-        let turns = self.turns(b, c)?;
-        if let Some(target) = self.hints.get(&kb).copied() {
+        let hint = self.hints.get(&kb).copied();
+        let turns = match (self.turns(b, c), hint) {
+            (Ok(t), _) => t,
+            (Err(e), Some(target)) if e.starts_with("enumeration capped") => {
+                // Too wide to enumerate: look for the hinted turn in the ordered generator.
+                let found = b.turns_ordered(c).take(1 << 20).map(|t| after(b, &t, c)).find(|n| fkey(n) == target);
+                match found {
+                    Some(n) => { self.stats.ordered_legality += 1; return self.finish_or(b, k, kb, n); }
+                    None => return Err(e),
+                }
+            }
+            (Err(e), _) => return Err(e),
+        };
+        if let Some(target) = hint {
             let n = turns.iter().map(|t| after(b, t, c)).find(|n| fkey(n) == target)
                 .ok_or_else(|| format!("hinted turn is not legal at {}", b.to_sfn()))?;
             self.stats.hints_used += 1;
@@ -123,14 +140,30 @@ impl Checker {
         Ok(())
     }
 
+    fn finish_or(&mut self, b: &Board, k: u8, kb: FKey, n: Board) -> Result<(), String> {
+        let c = self.mover;
+        self.stats.hints_used += 1;
+        self.used.insert(kb);
+        if !wins(n.outcome, c) {
+            if n.outcome != Outcome::Ongoing { return Err(format!("hinted turn loses at {}", b.to_sfn())); }
+            if k <= 1 { return Err(format!("hinted turn does not mate with 1 turn left at {}", b.to_sfn())); }
+            self.and(&n, k - 1)?;
+        }
+        self.or_ok.insert(kb, k);
+        Ok(())
+    }
+
     pub fn unused_hints(&self) -> usize { self.hints.len() - self.used.len() }
 }
 
 /// Check that the mover's turn producing `after_sfn` forces a win within `n`
 /// mover turns (counting it), given hint pairs of SFNs.
 pub fn check(after_sfn: &str, n: u8, hints: &[(String, String)], budget: u64) -> Result<CheckStats, String> {
-    let a = Board::from_sfn(after_sfn)?;
+    let mut a = Board::from_sfn(after_sfn)?;
     let mover = a.to_move.other();
+    // The defender holding a charged Seal of Destruction loses at the start of
+    // its turn (mate::child applies this to every child; an SFN does not).
+    a.destruction_start_of_turn(a.to_move);
     let mut hs = Vec::new();
     for (x, y) in hints { hs.push((Board::from_sfn(x)?, Board::from_sfn(y)?)); }
     let mut ch = Checker::new(mover, &hs, budget);

@@ -41,8 +41,8 @@ fn main() {
                 let r = sigil_engine::cert::check(f[1], n, &hints, 200_000_000_000);
                 let secs = t0.elapsed().as_secs_f64();
                 match r {
-                    Ok(s) => println!("{{\"ok\":true,\"and_nodes\":{},\"or_nodes\":{},\"turns\":{},\"hints_used\":{},\"hints\":{},\"seconds\":{:.3}}}",
-                                      s.and_nodes, s.or_nodes, s.turns, s.hints_used, hints.len(), secs),
+                    Ok(s) => println!("{{\"ok\":true,\"and_nodes\":{},\"or_nodes\":{},\"turns\":{},\"hints_used\":{},\"hints\":{},\"ordered_legality\":{},\"seconds\":{:.3}}}",
+                                      s.and_nodes, s.or_nodes, s.turns, s.hints_used, hints.len(), s.ordered_legality, secs),
                     Err(e) => println!("{{\"ok\":false,\"error\":{:?},\"seconds\":{:.3}}}", e, secs),
                 }
             }
