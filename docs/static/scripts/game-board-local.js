@@ -425,6 +425,26 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Live engine analysis (live-analysis.js) in the review of a
+			// finished game; never during play, the puzzles or the tutorial
+			// (the analysis board has its own engine panel).
+			...((!analysis && typeof liveAnalysisMixin === 'function') ? liveAnalysisMixin() : {}),
+			get canLiveAnalyse() {
+				if (analysis || this.puzzle || this.tutorial || typeof liveAnalysisMixin !== 'function') return false;
+				return this.reviewMode && this.reviewSfns.length > 0;
+			},
+			_liveAnalysisTarget() {
+				const i = this.reviewIndex;
+				const sfns = this.reviewSfns;
+				if (!this.reviewMode || !sfns[i]) return null;
+				// Position 0 is a pre-turn SFN, the rest after-turn ones;
+				// rematchSfnAt gives every one in the after-turn form.
+				const at = (j) => (typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, j) : sfns[j]);
+				const earlier = [];
+				for (let j = 0; j < i; j++) earlier.push(at(j));
+				return { sfn: at(i), earlier, winner: (this.winner && i === sfns.length - 1) ? this.winner : null };
+			},
+
 			// Map-control readout: how many nodes each side's stones are
 			// strictly closer to (multi-source BFS; Fissure walls impassable
 			// and excluded — see features.js mapControl). Cheap and
@@ -1912,6 +1932,11 @@ document.addEventListener('alpine:init', () => {
 					for (const prop of analysis ? ['anaCur', 'anaMode'] : ['reviewMode', 'reviewIndex']) _this.$watch(prop, follow);
 					follow();
 				}
+				// Live analysis follows the reviewed position.
+				if (!analysis && typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
@@ -3373,38 +3398,8 @@ function puzzleImportSfn(sfn) {
 	return p.join(' ');
 }
 
-/** Human-readable rendering of an applyAITurn action list. */
-function describePuzzleActions(actions) {
-	if (!Array.isArray(actions)) return '';
-	const disp = (n) => (typeof displaySpellName === 'function' ? displaySpellName(n) : String(n || '').replace(/_/g, ' '));
-	const out = [];
-	for (const a of actions) {
-		if (!a || a.type === 'pass') continue;
-		switch (a.type) {
-			case 'move': out.push('move to ' + a.node); break;
-			case 'blink': out.push('blink to ' + a.node); break;
-			case 'hard_move':
-				out.push('move to ' + a.node + (a.pushed_to ? ' pushing to ' + a.pushed_to : ' crushing'));
-				break;
-			case 'dash':
-			case 'dash_lightning':
-				out.push('dash sacrificing ' + (a.sacrificed || []).join(', '));
-				break;
-			case 'cast':
-				out.push('cast ' + disp(a.spell) + ((a.kept && a.kept.length) ? ' keeping ' + a.kept.join(', ') : ''));
-				break;
-			case 'sacrifice': out.push('sacrifice ' + a.node); break;
-			case 'bewitch': out.push('bewitch ' + a.node + (a.node2 ? ', ' + a.node2 : '')); break;
-			case 'corrupt': out.push('corrupt ' + (a.converted || []).join(', ')); break;
-			case 'starfall': out.push('starfall ' + [a.node, a.node2].filter(Boolean).join(', ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'gust': out.push('gust' + ((a.kept && a.kept.length) ? ' placing at ' + a.kept.join(', ') : '') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'meteor_destroy': out.push('destroy ' + a.node); break;
-			default:
-				out.push(String(a.type).replace(/_/g, ' ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : (a.node ? ' ' + a.node : '')));
-		}
-	}
-	return out.join(', ');
-}
+// describePuzzleActions (an engine action list as text) lives in
+// live-analysis.js, which every page loading this file loads too.
 
 /**
  * The puzzle's opponent. On a stored line it plays the precomputed defence.

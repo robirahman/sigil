@@ -6,6 +6,7 @@
 	<link href="static/css/global.css?v202305191" rel="stylesheet" />
 	<link href="static/css/layout.css" rel="stylesheet" />
 	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/live-analysis.css?v=1" rel="stylesheet" />
 	<link href="static/css/help.css?v=35" rel="stylesheet" />
 	<link href="static/css/ladder.css" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -914,7 +915,7 @@
 							<svg class="push-arrows" x-ref="pushArrows" aria-hidden="true"></svg>
 							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }" x-bind:style="scoreStyle()"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
+								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node], 'stone-node--engine-hint': liveAnalysisHint(node) }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
 							</template>
 						</div>
 					</div>
@@ -1048,6 +1049,50 @@
 						</div>
 					</div>
 				</div>
+				<!-- Live engine analysis (live-analysis.js): the switch, then the
+				     eval, depth and best line as the search deepens. -->
+				<section class="live-analysis" x-show="canLiveAnalyse" x-cloak aria-label="Live engine analysis">
+					<div class="live-analysis__head">
+						<label class="live-analysis__toggle">
+							<input type="checkbox" x-bind:checked="liveAnaOn" x-on:change="toggleLiveAnalysis()" />
+							Live analysis
+						</label>
+						<span class="live-analysis__label" x-show="liveAnaOn && liveAna.label" x-text="liveAna.label + ' to play'"></span>
+						<button type="button" class="live-analysis__more" x-show="liveAnaOn && liveAna.status === 'done'"
+							x-on:click="liveAnalysisDeeper()" title="Search this position for another two minutes">Go deeper</button>
+					</div>
+					<div class="live-analysis__body" x-show="liveAnaOn" aria-live="polite">
+						<div class="live-analysis__bar" x-show="liveAna.text" aria-hidden="true">
+							<div class="live-analysis__bar-red" x-bind:style="'width:' + liveAnalysisBarRed() + '%'"></div>
+						</div>
+						<div class="live-analysis__eval">
+							<span class="live-analysis__score"
+								x-bind:class="{ 'live-analysis__score--red': liveAna.side === 'red', 'live-analysis__score--blue': liveAna.side === 'blue' }"
+								x-text="liveAna.text || (liveAna.status === 'searching' ? '…' : '')"></span>
+							<span class="live-analysis__odds" x-show="liveAna.odds && liveAna.status !== 'decided'" x-text="liveAna.odds"></span>
+							<span class="live-analysis__detail" x-text="liveAnalysisDetail()"></span>
+						</div>
+						<div class="live-analysis__note" x-show="liveAna.note" x-text="liveAna.note"></div>
+						<div class="live-analysis__line" x-show="liveAna.bestText">
+							<span class="live-analysis__key">Best turn:</span> <span x-text="liveAna.bestText"></span>
+						</div>
+						<div class="live-analysis__line" x-show="liveAna.bestText && liveAna.replyText">
+							<span class="live-analysis__key">Expected reply:</span> <span x-text="liveAna.replyText"></span>
+						</div>
+						<details class="live-analysis__history" x-show="liveAna.lines.length > 1">
+							<summary>How the assessment changed</summary>
+							<ol>
+								<template x-for="(ln, i) in liveAna.lines" x-bind:key="i + ':' + ln.depth + ':' + ln.text">
+									<li>
+										<span class="live-analysis__hdepth" x-text="'d' + ln.depth"></span>
+										<span x-bind:class="{ 'live-analysis__score--red': ln.side === 'red', 'live-analysis__score--blue': ln.side === 'blue' }" x-text="ln.text"></span>
+										<span x-text="ln.bestText"></span>
+									</li>
+								</template>
+							</ol>
+						</details>
+					</div>
+				</section>
 			</div>
 		</template>
 	</div>
@@ -2275,20 +2320,21 @@
 	<script src="static/scripts/engine/rust-ai.js?v=35"></script>
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js"></script>
-	<script src="static/scripts/engine/game-review.js?v=39"></script>
+	<script src="static/scripts/engine/game-review.js?v=40"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/engine/position-rating.js?v=36"></script>
 	<script src="static/scripts/engine/room-clock.js?v=35"></script>
-	<script src="static/scripts/engine/firebase-sync.js?v=35"></script>
+	<script src="static/scripts/engine/firebase-sync.js?v=36"></script>
 	<script src="static/scripts/engine/multiplayer-controller.js?v=35"></script>
-	<script src="static/scripts/engine/spectator-controller.js?v=35"></script>
+	<script src="static/scripts/engine/spectator-controller.js?v=36"></script>
 	<script src="static/scripts/sound-manager.js"></script>
 	<script src="static/scripts/spell-effects.js"></script>
 	<script src="static/scripts/board-marks.js?v=35"></script>
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js?v=35"></script>
-	<script src="static/scripts/game-board-multiplayer.js?v=40"></script>
+	<script src="static/scripts/live-analysis.js?v=1"></script>
+	<script src="static/scripts/game-board-multiplayer.js?v=41"></script>
 	<script src="static/scripts/rules-reference.js?v=35"></script>
 	<script src="static/scripts/help.js?v=35"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

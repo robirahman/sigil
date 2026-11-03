@@ -559,6 +559,52 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Live engine analysis (live-analysis.js): anyone in the review
+			// of a finished game; while a game is in progress, only a
+			// developer account spectating it (not one of its players).
+			...(typeof liveAnalysisMixin === 'function' ? liveAnalysisMixin() : {}),
+			// Positions the board has shown this session (loadable SFNs from
+			// sfn_update), for the live search's repetition history.
+			_liveAnaPositions: [],
+			get canLiveAnalyse() {
+				if (typeof liveAnalysisAccess !== 'function') return false;
+				const am = this._authManager;
+				return liveAnalysisAccess({
+					reviewMode: this.reviewMode,
+					isSpectator: this.isSpectator,
+					isDeveloper: this.isDeveloper,
+					viewerUid: (am && am.uid) || null,
+					playerUids: [this.redUid, this.blueUid].filter(Boolean),
+				});
+			},
+			_liveAnalysisTarget() {
+				if (this.reviewMode) {
+					const i = this.reviewIndex;
+					const sfns = this.reviewSfns;
+					if (!sfns[i]) return null;
+					// Position 0 is a pre-turn SFN, the rest after-turn ones;
+					// rematchSfnAt gives every one in the after-turn form.
+					const at = (j) => (typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, j) : sfns[j]);
+					const earlier = [];
+					for (let j = 0; j < i; j++) earlier.push(at(j));
+					return { sfn: at(i), earlier, winner: (this.winner && i === sfns.length - 1) ? this.winner : null };
+				}
+				if (!this.currentSfn) return null;
+				const seen = this._liveAnaPositions;
+				const k = seen.lastIndexOf(this.currentSfn);
+				return { sfn: this.currentSfn, earlier: k > 0 ? seen.slice(0, k) : [], winner: this.winner || null };
+			},
+			_noteLiveAnalysisPosition(sfn) {
+				if (!sfn) return;
+				// SFNs carry the turn counter, so the same string again means
+				// the board was rebuilt (a takeback): drop what came after it.
+				const seen = this._liveAnaPositions;
+				const k = seen.indexOf(sfn);
+				if (k >= 0) seen.length = k + 1;
+				else seen.push(sfn);
+				if (seen.length > 200) seen.splice(0, seen.length - 200);
+			},
+
 			// Map-control readout: how many nodes each side's stones are
 			// strictly closer to (multi-source BFS; Fissure walls impassable
 			// and excluded — see features.js mapControl). Same pattern as
@@ -995,6 +1041,12 @@ document.addEventListener('alpine:init', () => {
 					_this.$watch('reviewIndex', follow);
 					follow();
 				}
+				// Live analysis follows the reviewed position and the access
+				// (entering or leaving review, the game ending).
+				if (typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
 
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller
@@ -1072,7 +1124,20 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${baseSpellName(v)}.png`; }); }
 					else if (type === 'spelltextsetup') { _this.spells.text = rest; }
-					else if (type === 'sfn_update') { _this.currentSfn = rest.sfn; }
+					else if (type === 'history') {
+						// A spectator who joined mid-game: the positions before
+						// the one it opened on (spectator-controller.js).
+						const seen = _this._liveAnaPositions;
+						const earlier = (rest.sfns || []).filter((x) => x && !seen.includes(x));
+						seen.splice(0, 0, ...earlier);
+						if (seen.length > 200) seen.splice(0, seen.length - 200);
+						if (_this.liveAnaOn) _this.liveAnalysisRefresh();
+					}
+					else if (type === 'sfn_update') {
+						_this.currentSfn = rest.sfn;
+						_this._noteLiveAnalysisPosition(rest.sfn);
+						if (_this.liveAnaOn) _this.liveAnalysisRefresh();
+					}
 					else if (type === 'boardstate') {
 						const changed = Object.keys(rest).reduce((acc, c) => { if (rest[c] !== _this.previousBoardState[c]) acc[c] = rest[c]; return acc; }, {});
 						// Non-node payload fields must be destructured out or the

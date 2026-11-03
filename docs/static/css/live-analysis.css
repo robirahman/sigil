@@ -1,0 +1,91 @@
+/* Live engine analysis panel (static/scripts/live-analysis.js) on the game
+   pages, and the board highlight of the engine's best turn. */
+.live-analysis {
+	box-sizing: border-box;
+	max-width: min(540px, calc(100vw - 24px));
+	/* The last thing on the page: clear the Rules button, and in review the
+	   fixed review bar (three rows at phone width). */
+	margin: 14px auto 80px;
+	padding: 10px 14px;
+	background: var(--color-review-bar-bg, #1a1a2e);
+	border: 2px solid var(--color-border, #555);
+	border-radius: 10px;
+	box-shadow: 0 2px 8px #000;
+	color: var(--color-text-warm, #ddd);
+	font-size: 0.92em;
+	text-align: left;
+}
+.review-with-ai-active .live-analysis { margin-bottom: 170px; }
+.live-analysis__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+}
+.live-analysis__toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	user-select: none;
+	font-weight: bold;
+}
+.live-analysis__label { color: var(--color-text-muted, #999); }
+.live-analysis__more {
+	margin-left: auto;
+	padding: 2px 10px;
+	border: 1px solid var(--color-border, #555);
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+.live-analysis__more:hover,
+.live-analysis__more:focus-visible { border-color: var(--color-text-bright, #f0e0c0); }
+.live-analysis__body { margin-top: 6px; }
+.live-analysis__bar {
+	height: 6px;
+	margin-bottom: 6px;
+	border-radius: 3px;
+	background: #3d6fd0;
+	overflow: hidden;
+}
+.live-analysis__bar-red {
+	height: 100%;
+	background: #e0604a;
+	transition: width 0.4s ease;
+}
+.live-analysis__eval {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+}
+.live-analysis__score { font-family: 'Arvo', serif; font-size: 1.35em; }
+.live-analysis__score--red { color: #e0604a; }
+.live-analysis__score--blue { color: #5aa0e6; }
+.live-analysis__odds { color: var(--color-text-bright, #f0e0c0); }
+.live-analysis__detail,
+.live-analysis__note { color: var(--color-text-muted, #999); font-size: 0.9em; }
+.live-analysis__note { margin-top: 4px; }
+.live-analysis__line { margin-top: 4px; word-break: break-word; }
+.live-analysis__key { color: var(--color-text-muted, #999); }
+.live-analysis__history { margin-top: 6px; font-size: 0.9em; }
+.live-analysis__history summary { cursor: pointer; color: var(--color-text-muted, #999); }
+.live-analysis__history ol { margin: 4px 0 0; padding-left: 1.2em; list-style: none; }
+.live-analysis__history li { margin: 2px 0; word-break: break-word; }
+.live-analysis__history li > span + span { margin-left: 6px; }
+.live-analysis__hdepth {
+	display: inline-block;
+	min-width: 2.4em;
+	color: var(--color-text-muted, #999);
+	font-family: 'Source Code Pro', monospace;
+}
+
+/* The nodes the engine's best turn plays on. An outline, so it stacks with
+   the last-play ring (a box-shadow) and the stone art. */
+.stone-node--engine-hint {
+	outline: 3px dashed #f5c518;
+	outline-offset: 3px;
+}
