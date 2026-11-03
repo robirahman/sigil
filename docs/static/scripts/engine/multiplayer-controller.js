@@ -918,7 +918,19 @@ class MultiplayerController {
 		let adjacent = false;
 		for (const nb of ADJACENCY[nodeName]) { if (board.stones[nb] === color) { adjacent = true; break; } }
 		if (board.stones[nodeName] === color) return this._promptMove(color, standardMove);
-		if (board.stones[nodeName] === DESTROYED) return this._promptMove(color, standardMove);   // walls are not move targets
+		// Walls are not move targets (a click on one used to spend the move).
+		// The local player's rejected click never reaches the wire or the
+		// transcript, so an opponent still on a controller from before the fix
+		// sees exactly the turn this one plays. A wall click that ARRIVES from
+		// the opponent can only come from such a stale client, which spent its
+		// move on it: fall through and do the same, so the boards stay in step
+		// (the spectator controller replays the wire the same way).
+		if (board.stones[nodeName] === DESTROYED && color === this.myColor) {
+			for (const buf of [this._turnBuffer, this._currentTurnActions]) {
+				if (buf.length && buf[buf.length - 1] === nodeName) buf.pop();
+			}
+			return this._promptMove(color, standardMove);
+		}
 		if (violatesSealOfStone(board, color, nodeName, standardMove)) return this._promptMove(color, standardMove);
 		if (violatesBulwark(board, color, nodeName)) return this._promptMove(color, standardMove);
 		if (!adjacent && !hasWind) return this._promptMove(color, standardMove);

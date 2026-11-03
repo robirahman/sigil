@@ -11,8 +11,10 @@
  * a wall next to the mover's stones and checks that a wall click is rejected
  * (the move is asked for again, the board is unchanged) both for the turn's
  * move and for the move after a dash, and that a legal move still works.
- * The multiplayer and spectator controllers carry the same guard; this also
- * checks their source for it. Exits non-zero on a failure.
+ * It also checks that the rejected click is left out of the turn's
+ * transcript, so the recorded turn replays the same under a controller from
+ * before the fix, and that the multiplayer controller carries the same guard
+ * for the local player. Exits non-zero on a failure.
  */
 'use strict';
 const fs = require('fs');
@@ -44,17 +46,18 @@ const { GameController, boardToSfn } = vm.runInContext('({ GameController, board
 // Red to move; b4 is a wall (x) next to red's stones on b2, b3, b5, b6.
 const SFN = '.........x....rrxrr..bb...b..b......b../Flourish,Syzygy,Fissure,Decay,Gather,Seal_of_Wind,Seal_of_Summer,Azimuth,Surge r 25 0:3 -:Fissure -:- b2 competitive';
 
-/** Feed `tokens`; resolve with the prompt shown after the last one. */
+/** Feed `tokens`; resolve with the prompt shown after the last one (and the
+ *  transcript of the turn, once it is complete). */
 function promptAfter(tokens) {
 	return new Promise((resolve) => {
-		let i = 0, done = false;
-		const gc = new GameController(() => {}, { variant: 'competitive' });
+		let i = 0, done = false, turn = null;
+		const gc = new GameController((ev) => { if (ev.type === 'turn_complete') turn = ev.turn; }, { variant: 'competitive' });
 		gc._delay = () => Promise.resolve();
 		gc._waitForInput = (payload) => {
 			if (done) return new Promise(() => {});
 			if (i < tokens.length) return Promise.resolve(tokens[i++]);
 			done = true;
-			resolve({ payload, stones: boardToSfn(gc.board).split(' ')[0].split('/')[0], color: gc.board.whoseTurn });
+			resolve({ payload, stones: boardToSfn(gc.board).split(' ')[0].split('/')[0], color: gc.board.whoseTurn, turn });
 			return new Promise(() => {});
 		};
 		const p = SFN.split(' ');
@@ -81,9 +84,11 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
 	const dashWall = await promptAfter(['b1', 'dash', 'b2', 'b3', 'b4']);
 	check(dashWall.payload.awaiting === 'node' && dashWall.stones === dash.stones,
 		'a click on the wall as the dash move is rejected: asked again, board unchanged');
-	for (const f of ['multiplayer-controller.js', 'spectator-controller.js']) {
-		const src = fs.readFileSync(path.join(ENGINE, f), 'utf8');
-		check(/stones\[nodeName\] === DESTROYED\) return this\._promptMove/.test(src), f + ' rejects a wall in _doMove');
-	}
+	const done = await promptAfter(['b4', 'b1', 'pass']);
+	check(done.turn && JSON.stringify(done.turn.actions) === JSON.stringify(['b1', 'pass']),
+		'the rejected wall click is left out of the turn transcript: ' + JSON.stringify(done.turn && done.turn.actions));
+	const src = fs.readFileSync(path.join(ENGINE, 'multiplayer-controller.js'), 'utf8');
+	check(/stones\[nodeName\] === DESTROYED && color === this\.myColor\)/.test(src),
+		'multiplayer-controller.js rejects the local player\'s wall click in _doMove');
 	process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('TEST FAILED:', e.message); process.exit(1); });

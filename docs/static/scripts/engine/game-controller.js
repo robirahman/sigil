@@ -591,7 +591,14 @@ class GameController {
 		// A Fissure wall is not a move target: clicking one used to fall
 		// through every branch below and spend the move (or the dash's move)
 		// without placing a stone (SigilBench v3 rules differential test).
-		if (board.stones[node] === DESTROYED) return this._promptMove(color, standardMove);
+		// The rejected click is also dropped from the turn transcript, so a
+		// recorded game replays the same under a controller from before the
+		// fix (which would have spent the move on it).
+		if (board.stones[node] === DESTROYED) {
+			const log = this._currentTurnActions;
+			if (log.length && log[log.length - 1] === node) log.pop();
+			return this._promptMove(color, standardMove);
+		}
 
 		// Seal of Stone (enemy-held): the opening move must be soft.
 		if (violatesSealOfStone(board, color, node, standardMove)) {
