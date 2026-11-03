@@ -11,6 +11,8 @@
  * a wall next to the mover's stones and checks that a wall click is rejected
  * (the move is asked for again, the board is unchanged) both for the turn's
  * move and for the move after a dash, and that a legal move still works.
+ * The competitive opening's free placement (a mover with no stones yet) had
+ * the same hole for any click off the empty nodes, and is checked too.
  * It also checks that the rejected click is left out of the turn's
  * transcript, so the recorded turn replays the same under a controller from
  * before the fix, and that the multiplayer controller carries the same guard
@@ -48,7 +50,7 @@ const SFN = '.........x....rrxrr..bb...b..b......b../Flourish,Syzygy,Fissure,Dec
 
 /** Feed `tokens`; resolve with the prompt shown after the last one (and the
  *  transcript of the turn, once it is complete). */
-function promptAfter(tokens) {
+function promptAfter(tokens, sfn = SFN) {
 	return new Promise((resolve) => {
 		let i = 0, done = false, turn = null;
 		const gc = new GameController((ev) => { if (ev.type === 'turn_complete') turn = ev.turn; }, { variant: 'competitive' });
@@ -60,7 +62,7 @@ function promptAfter(tokens) {
 			resolve({ payload, stones: boardToSfn(gc.board).split(' ')[0].split('/')[0], color: gc.board.whoseTurn, turn });
 			return new Promise(() => {});
 		};
-		const p = SFN.split(' ');
+		const p = sfn.split(' ');
 		p[2] = String(parseInt(p[2], 10) - 1);   // the loop advances the counter before the turn
 		gc.startGame(p.join(' '));
 	});
@@ -84,11 +86,25 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
 	const dashWall = await promptAfter(['b1', 'dash', 'b2', 'b3', 'b4']);
 	check(dashWall.payload.awaiting === 'node' && dashWall.stones === dash.stones,
 		'a click on the wall as the dash move is rejected: asked again, board unchanged');
+	// Competitive opening: blue has no stones yet; only an empty node places.
+	const OPEN = 'r...x' + '.'.repeat(34) + '/Flourish,Syzygy,Fissure,Decay,Gather,Seal_of_Wind,Seal_of_Summer,Azimuth,Surge b 2 0:0 -:- -:- tied competitive';
+	const o0 = await promptAfter([], OPEN);
+	check(o0.color === 'blue' && o0.payload.awaiting === 'node', 'competitive opening: blue is asked to place its first stone');
+	for (const bad of ['a5', 'a1']) {
+		const o = await promptAfter([bad], OPEN);
+		check(o.payload.awaiting === 'node' && o.stones === o0.stones,
+			'competitive opening: a click on ' + (bad === 'a5' ? 'the wall' : "red's stone") + ' is rejected, asked again');
+	}
+	const oDone = await promptAfter(['a5', 'a1', 'a9', 'pass'], OPEN);
+	check(oDone.turn && JSON.stringify(oDone.turn.actions) === JSON.stringify(['a9', 'pass']),
+		'competitive opening: rejected clicks are left out of the transcript: ' + JSON.stringify(oDone.turn && oDone.turn.actions));
 	const done = await promptAfter(['b4', 'b1', 'pass']);
 	check(done.turn && JSON.stringify(done.turn.actions) === JSON.stringify(['b1', 'pass']),
 		'the rejected wall click is left out of the turn transcript: ' + JSON.stringify(done.turn && done.turn.actions));
 	const src = fs.readFileSync(path.join(ENGINE, 'multiplayer-controller.js'), 'utf8');
 	check(/stones\[nodeName\] === DESTROYED && color === this\.myColor\)/.test(src),
 		'multiplayer-controller.js rejects the local player\'s wall click in _doMove');
+	check(/if \(moveoptions\[resp\] \|\| !isMyTurn\) break;/.test(src),
+		'multiplayer-controller.js re-asks the local player\'s competitive-opening placement');
 	process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('TEST FAILED:', e.message); process.exit(1); });

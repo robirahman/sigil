@@ -248,14 +248,14 @@ def main():
 
 
 def _engine_version():
-    """RUST_ENGINE_VERSION from rust-ai.js: the page loads game-review.js with it as a
-    cache-buster, like the site's own pages, so a returning visitor's old service
-    worker cannot serve a stale copy (PR #25 review). Read, never restated."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'static',
-                        'scripts', 'engine', 'rust-ai.js')
-    m = re.search(r'const RUST_ENGINE_VERSION = (\d+);', open(path, encoding='utf-8').read())
+    """The game-review.js cache-buster the site's own pages use (docs/game.html),
+    so a returning visitor's old service worker cannot serve a stale copy
+    (PR #25 review). Read, never restated: it used to be RUST_ENGINE_VERSION,
+    which stopped tracking game-review.js once that file was versioned on its own."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'game.html')
+    m = re.search(r'engine/game-review\.js\?v=(\d+)', open(path, encoding='utf-8').read())
     if not m:
-        raise SystemExit('RUST_ENGINE_VERSION not found in rust-ai.js')
+        raise SystemExit('game-review.js?v= not found in docs/game.html')
     return m.group(1)
 
 

@@ -584,14 +584,26 @@ class MultiplayerController {
 				if (board.stones[n] === null) moveoptions[n] = color;
 			}
 			const isMyTurn = color === this.myColor;
-			const resp = await this.getInput({
-				type: 'message',
-				message: isMyTurn
-					? 'Place your first stone (Competitive opening).'
-					: 'Opponent is placing their first stone...',
-				awaiting: 'node',
-				moveoptions: isMyTurn ? moveoptions : {},
-			});
+			// Only an empty node is a placement. The local player's click
+			// anywhere else is asked for again and never reaches the wire or the
+			// transcript; one that ARRIVES from the opponent can only come from a
+			// pre-fix client, which skipped its placement on it, so it is
+			// replayed that way (as _doMove does for wall clicks).
+			let resp;
+			for (;;) {
+				resp = await this.getInput({
+					type: 'message',
+					message: isMyTurn
+						? 'Place your first stone (Competitive opening).'
+						: 'Opponent is placing their first stone...',
+					awaiting: 'node',
+					moveoptions: isMyTurn ? moveoptions : {},
+				});
+				if (moveoptions[resp] || !isMyTurn) break;
+				for (const buf of [this._turnBuffer, this._currentTurnActions]) {
+					if (buf.length && buf[buf.length - 1] === resp) buf.pop();
+				}
+			}
 			if (moveoptions[resp]) {
 				board.stones[resp] = color;
 				board.lastPlay = resp;

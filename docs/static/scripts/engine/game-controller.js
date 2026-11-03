@@ -18,6 +18,13 @@ class GameController {
 		this._inputResolve = null;
 		this._resetRequested = false;
 		this.aiColor = (options && options.aiColor) || null;
+		// Replaying a RECORDED transcript (game-review.js reconstructGameLog):
+		// keep the pre-2026-11 handling of a move click on a Fissure wall and
+		// of an opening placement off the empty nodes, which spent the move.
+		// Records from before the fix carry such clicks (room S8VFHM, an
+		// opening click on the opponent's stone); live play never does now,
+		// and a rejected click is never recorded.
+		this.legacyReplay = !!(options && options.legacyReplay);
 		this.ai = (options && options.ai) || null;
 		this.variant = normalizeVariant(options && options.variant);
 		const slotCount = boardLayoutDef(variantBoardLayout(this.variant)).positionCount;
@@ -377,12 +384,22 @@ class GameController {
 			for (const n of NODE_ORDER) {
 				if (board.stones[n] === null) moveoptions[n] = color;
 			}
-			const resp = await this.getInput({
-				type: 'message',
-				message: 'Place your first stone (Competitive opening).',
-				awaiting: 'node',
-				moveoptions,
-			});
+			// Only an empty node is a placement. A click anywhere else (a
+			// Fissure wall, the opponent's stone) used to skip the placement and
+			// spend the turn; it is asked for again, and the rejected click is
+			// kept out of the transcript (a pre-fix replay would spend the turn).
+			let resp;
+			for (;;) {
+				resp = await this.getInput({
+					type: 'message',
+					message: 'Place your first stone (Competitive opening).',
+					awaiting: 'node',
+					moveoptions,
+				});
+				if (moveoptions[resp] || this.legacyReplay) break;
+				const log = this._currentTurnActions;
+				if (log.length && log[log.length - 1] === resp) log.pop();
+			}
 			if (moveoptions[resp]) {
 				board.stones[resp] = color;
 				board.lastPlay = resp;
@@ -594,7 +611,7 @@ class GameController {
 		// The rejected click is also dropped from the turn transcript, so a
 		// recorded game replays the same under a controller from before the
 		// fix (which would have spent the move on it).
-		if (board.stones[node] === DESTROYED) {
+		if (board.stones[node] === DESTROYED && !this.legacyReplay) {
 			const log = this._currentTurnActions;
 			if (log.length && log[log.length - 1] === node) log.pop();
 			return this._promptMove(color, standardMove);
