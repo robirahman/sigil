@@ -1,0 +1,1 @@
+6,10000,nnue_snn2_base:nnue_mt256,preset,1,0

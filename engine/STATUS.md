@@ -1,6 +1,6 @@
 # Engine status
 
-**Current as of 2026-11-02.** Everything below the "Phase 0 status" heading is
+**Current as of 2026-11-03.** Everything below the "Phase 0 status" heading is
 the original bitboard-port log and is kept for provenance; where it disagrees
 with this section, this section is right.
 
@@ -9,19 +9,23 @@ with this section, this section is right.
 | | |
 |---|---|
 | engine version | **v35** (`RUST_ENGINE_VERSION = 35`, cache `v89`) |
-| shipped config | eval `nnue_mt256`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `elastic` FULL + `adopt_partial`, `lmr` band x2 R=1, pondering on for >= 10 s tiers, `TurnIter` stage order `Moves -> MoveCast -> DashCast -> Dash`, bank cap <= 60, repetition-mate prepass ON, 8-slot `FoldRing` leaf cache |
+| shipped config | eval `nnue_mt256`, generator policy `SHIPPED_POLICY` (on, **min_width 32**: lowered from 96 in PR #57 with no arena; the 2026-10 sweep had 96 best), `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `elastic` FULL + `adopt_partial`, `lmr` band x2 R=1, pondering on for >= 10 s tiers, `TurnIter` stage order `Moves -> MoveCast -> DashCast -> Dash`, bank cap <= 60, repetition-mate prepass ON, 8-slot `FoldRing` leaf cache |
 | tests | **198/198** `cargo test --release --lib`, 49/49 Cloud Functions, wasm smoke 158 plies, nn-wasm parity 264/264 |
 | browser builds | `sigil_engine_bg.wasm` (1,193,083 bytes), `sigil_engine_mt_bg.wasm` (1,388,788 bytes; ~500 KB freed by gating legacy nets) |
-| telemetry | Live search telemetry (`aiTelemetry` with depth, nodes, eval, threads, ponder, TT fill) persisted to Firebase `completed_games` |
-| pending | Phase 3a/3b AI training campaign (SNN2 retrain on historical chunks + Round 4 GCP self-play fleet); see [`docs/designs/ai-training-todos.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/ai-training-todos.md) |
+| telemetry | `aiTelemetry` (depth, nodes, eval, threads, ponder, TT fill) written to Firebase `completed_games`; rules in `database.rules.json`. Arrival and the live rules deploy not yet confirmed. |
+| strength | **v35 has no arena result.** v35 vs v34, and min_width 32 vs 96, are Step 0 of the training plan |
+| pending | v35 -> v36 training plan (SNN2 on the existing corpus, round-6 self-play, policy and net retrain); see [`docs/designs/ai-training-todos.md`](../docs/designs/ai-training-todos.md) |
 
 **2026-10-31: engine v35 (cache v89) -- Superhuman Desktop Engine Stage 1 & Stage 2 (PR #57).**
 Fixed interior-node `move + dash + cast` starvation by reordering `Stage::DashCast` ahead of non-key bare dashes;
 deduplicated and capped Providence bank first steps to <= 60 variants; added spell-preserving dash sacrifice pairs;
 added offensive/defensive threefold-repetition mate prepass and TT invalidation; added 8-slot inline zero-allocation
 `FoldRing` in `nn.rs`; enabled `SNN2` binary format with 39 wall and 2x4 bank input rows; added live browser search
-telemetry to Firebase `completed_games`. Tactical benchmarks `GWSMF5` (Turn 26 parry) and `QJLGQR` (Turn 25–26 repetition)
-verified across depths 2..6. All 198 Cargo tests pass.
+telemetry to Firebase `completed_games`. Lowered `SHIPPED_POLICY` min_width 96 -> 32. All 198 Cargo tests pass. What the
+benchmark tests check (corrected 2026-11-03): `test_gwsmf5_spell_preserving_dash` checks only that Red's turn-27 dash +
+Flourish is generated (Blue's turn-26 decision is never searched); `test_qjlgqr_threefold_repetition_mate` checks Blue's
+mate in 1 on turn 26, and Red's turn 25 at depth 2 only. The depth 2..6 claim needs `tactical_gate.py` (plan code to-do C1).
+No arena was run for v35.
 
 **2026-09-18: `judge_move` (wasm) for the Puzzles page.** A move off the stored solution is judged
 live: with only the finishing mate left, `mate::judge_forced_after` decides exhaustively (every

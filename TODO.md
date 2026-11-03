@@ -1,79 +1,58 @@
-# Active Engineering TODOs & Campaign Roadmap
+# Active engineering to-do: AI training (engine v35 -> v36)
 
-*   **Branch:** `ai-training-plan`
-*   **Base Commit:** `c41464f` (Merge PR #57 on `main`)
-*   **Updated:** 2026-11-02
-*   **Current Engine Version:** v35 (`RUST_ENGINE_VERSION = 35`, Service Worker Cache `v89`)
-*   **Detailed Playbook:** [`docs/designs/ai-training-todos.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/ai-training-todos.md)
-*   **Design Document:** [`docs/designs/superhuman-desktop-engine.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/superhuman-desktop-engine.md)
-*   **GCP Campaign Ledger:** [`engine/gcp/CAMPAIGN.md`](file:///storage/emulated/10/Documents/sigil/engine/gcp/CAMPAIGN.md)
+*   **Branch:** `ai-training-plan` (main dcf9a94 merged in on 2026-11-03)
+*   **Updated:** 2026-11-03
+*   **Live engine:** v35 (`RUST_ENGINE_VERSION = 35`). `main` is at service worker cache `v97`.
+*   **Playbook with every command:** [`docs/designs/ai-training-todos.md`](docs/designs/ai-training-todos.md)
+*   **Design:** [`docs/designs/superhuman-desktop-engine.md`](docs/designs/superhuman-desktop-engine.md). Its "Round 4" is **round 6** here; the real round 4 is the v29 data in `data/r4/`.
 
----
+## Tasks
 
-## Quick-Start: Resuming on Another Machine
+| # | Task | Depends on | Status |
+|---|---|---|---|
+| 0 | **Measure v35 before using it to generate data.** Arenas: v35 vs v34 (core + Dividend draws), and `min_width` 32 vs 96. Write and run the tactical gate (C1). | – | todo |
+| 1 | Human-game audit with `deep_review.py` (scan / flag / probe / report) over games since 2026-10-07. Keep the cases as a regression set. Relabel the whole games at depth 4 as training chunks. | – | todo |
+| 2 | Phase 3a: re-prep `nnue_mt256`'s exact corpus with walls and bank, train `snn2` and `ctrl` (hidden 128, cap 256), arenas on Fissure, Dividend and core draws | – | todo |
+| 3 | r6 self-play: 16 Spot c3d-90, depth 4, about 300k games, `FIRST_VM=400` | 0 | todo |
+| 4 | Policy retrain on r6 (`r3_policy.sh`), then a policy arena | 3 | todo |
+| 5 | Final value net `nnue_r6` (corpus + r6 + human chunks), then a net arena | 1, 3 | todo |
+| 6 | Release gate: candidate vs live `main`. Core 2,160 games with lower bound > 0; Fissure and Dividend not negative; C1 passes | 4, 5 | todo |
+| 7 | Release v36: wasm, version bumps from `main`'s values, tests, win-probability refit, PR. Robi deploys Functions. | 6 | todo |
 
-```bash
-# 1. Clone & switch to active training branch
-git clone git@github.com:robirahman/sigil.git
-cd sigil
-git checkout ai-training-plan
+Code still to write:
+*   **C1:** `tactical_gate.py`.
+*   **C2:** SNN2 golden vectors that include positions with walls and bank stones.
+*   **C3:** a wall/bank coverage count printed by prep.
+*   **C4:** a preset for each new net.
+*   **C5** (optional): per-prefix sample weights.
 
-# 2. Set up Python venv with PyTorch & build native engine bindings
-python3 -m venv .venv
-source .venv/bin/activate
-pip install torch numpy maturin
-maturin develop --release --manifest-path engine/Cargo.toml
+Open check:
+*   **T1:** confirm that `aiTelemetry` reaches `completed_games` and that the live database rules allow it.
 
-# 3. Authenticate with Google Cloud
-gcloud auth login robi@intelligence.org
-gcloud config set project focus-surfer-494820-g0
-```
+## Rules that are easy to break
 
----
+*   **`teardown.sh` deletes every `sigil-*` VM and disk.** Delete your own VMs by name instead.
+*   **Never touch `spar-*` VMs** (including `spar-analysis-0`).
+*   **Give each VM in a fleet its own `SHARD_BASE`.** Check `COMMIT.txt` and `COMPLETE` with `collect.sh`.
+*   **Default arena draws are core-only.** Walls and bank stones appear only with `SIGIL_REQUIRE_SPELL` (39 Fissure; 42/43/44 bank spells).
+*   **Arena size:** 400 games is about ±34 Elo and 2,160 games about ±15.
+*   **No heavy local work on Cloud Shell** (about 360 MB free on `/home`). Training, prep, arenas and builds run on VMs.
 
-## Active Task Matrix
+## Tactical benchmark fixtures
 
-| ID | Task | Status | Target File / Script | Next Action |
-|---|---|---|---|---|
-| **ST1** | Stage 1 Pre-Training Engine Fixes | **COMPLETED (v35)** | [`engine/src/`](file:///storage/emulated/10/Documents/sigil/engine/src/) | Merged in PR #57 (bank cap, DashCast order, rep prepass, FoldRing, SNN2) |
-| **ST2** | Stage 2 Live Search Telemetry | **COMPLETED (v35)** | [`game-board-local.js`](file:///storage/emulated/10/Documents/sigil/docs/static/scripts/game-board-local.js) | Merged in PR #57 (`aiTelemetry` validated in `database.rules.json`) |
-| **AUD** | Stage 2 Human Game Surprise Audit | **PENDING** | [`engine/harness/deep_review.py`](file:///storage/emulated/10/Documents/sigil/engine/harness/deep_review.py) | Run deep review over Firebase games; export `surprise_positions.npz` |
-| **P3a** | Phase 3a: Historical Wall/Bank Prep & SNN2 Baseline | **PENDING** | [`engine/harness/nn_eval.py`](file:///storage/emulated/10/Documents/sigil/engine/harness/nn_eval.py) | Run `prep` on R1-R3 chunks, train `nnue_snn2_base.bin`, test SIMD128 parity |
-| **P3b-1** | Phase 3b: Round 4 Self-Play Fleet Launch | **PENDING** | [`engine/gcp/launch_s3_fleet.sh`](file:///storage/emulated/10/Documents/sigil/engine/gcp/launch_s3_fleet.sh) | Launch 60-worker C3D fleet for >= 5,000 games on v35 engine |
-| **P3b-2** | Phase 3b: Policy Retraining | **PENDING** | [`engine/harness/policy_train.py`](file:///storage/emulated/10/Documents/sigil/engine/harness/policy_train.py) | Extract with drop-rate check (< 1%); update `engine/src/policy_weights.rs` |
-| **P3b-3** | Phase 3b: Final SNN2 Co-Training | **PENDING** | [`engine/harness/nn_eval.py`](file:///storage/emulated/10/Documents/sigil/engine/harness/nn_eval.py) | Train on R1-R4 + 5x upsampled surprises; export `nnue_snn2_r4.bin` |
-| **GATE** | Verification & Arena Elo Gate | **PENDING** | [`tools/nn-wasm-parity.js`](file:///storage/emulated/10/Documents/sigil/tools/nn-wasm-parity.js) | 400-game match @ 2.5s/move vs v34 (>= +20 Elo); GWSMF5/QJLGQR benchmarks |
-| **DEP** | WASM Rebuild & Release Deploy | **PENDING** | [`docs/static/wasm/`](file:///storage/emulated/10/Documents/sigil/docs/static/wasm/) | Bump to v36, rebuild WASM, bump Service Worker cache, open PR |
+*   [`engine/data/benchmarks/gwsmf5_hydrated.json`](engine/data/benchmarks/gwsmf5_hydrated.json) and [`gwsmf5_evals.json`](engine/data/benchmarks/gwsmf5_evals.json): game GWSMF5, Blue's turn 26 (`b 26`). Blue must parry Red's `b6, dash (sac c3,c5), Flourish`.
+*   [`engine/data/benchmarks/qjlgqr_room.json`](engine/data/benchmarks/qjlgqr_room.json): game QJLGQR. On `r 25` Red must avoid the threefold-repetition loss; on `b 26` Blue must find mate in 1.
+*   The cargo tests `test_gwsmf5_spell_preserving_dash` and `test_qjlgqr_threefold_repetition_mate` cover less than this: generator reachability, and `r 25` at depth 2 only. C1 adds the full check.
 
----
-
-## Tactical Benchmark Suite
-
-Benchmark fixtures are preserved in the repository so regression checks run identically on any machine:
-*   [`engine/data/benchmarks/gwsmf5_hydrated.json`](file:///storage/emulated/10/Documents/sigil/engine/data/benchmarks/gwsmf5_hydrated.json): `GWSMF5` Turn 26 (`b 26`) parry of Red's `dash + Flourish`.
-*   [`engine/data/benchmarks/gwsmf5_evals.json`](file:///storage/emulated/10/Documents/sigil/engine/data/benchmarks/gwsmf5_evals.json): Server 1s reference evaluations.
-*   [`engine/data/benchmarks/qjlgqr_room.json`](file:///storage/emulated/10/Documents/sigil/engine/data/benchmarks/qjlgqr_room.json): `QJLGQR` Turn 25 (`r 25`) repetition avoidance and Turn 26 (`b 26`) mate execution.
-
----
-
-## Command Reference Cheat-Sheet
+## Local quick-start
 
 ```bash
-# Run unit & parity tests locally
+git clone https://github.com/robirahman/sigil.git && cd sigil && git checkout ai-training-plan
+gcloud auth login robi@intelligence.org && gcloud config set project focus-surfer-494820-g0
+export B=gs://focus-surfer-494820-g0-sigil
+# Tests (on a machine with disk to spare):
 cargo test --release --lib --manifest-path engine/Cargo.toml
-npm --prefix functions test
-node tools/wasm-smoke.js
-node tools/nn-wasm-parity.js
-
-# Launch Round 4 GCP Fleet (Engine v35)
-cd engine/gcp
-./buildtest.sh
-./launch_s3_fleet.sh r4-fleet 60 c3d-highcpu-90 us-central1-f
-./collect.sh r4-fleet
-./teardown.sh
-
-# Run head-to-head arena Elo match (400 games, 2.5s/move)
-cargo run --release --bin arena -- --games 400 --time 2500 --eval-a nnue_snn2_r4 --eval-b nnue_mt256
+npm --prefix functions test && node tools/wasm-smoke.js && node tools/nn-wasm-parity.js docs/static/wasm nnue_mt256
 ```
 
-See [`docs/designs/ai-training-todos.md`](file:///storage/emulated/10/Documents/sigil/docs/designs/ai-training-todos.md) for full documentation and command explanations.
+The wasm builds need `nightly-2026-09-15` with `rust-src`, `wasm-bindgen-cli` 0.2.127, and `CARGO_TARGET_DIR` unset.
