@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v97';
+const CACHE_VERSION = 'v99';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -169,7 +169,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/help.css?v=35',
 	'./static/css/rules.css?v=35',
 	'./static/css/styles.css?v=35',
-	'./static/scripts/analysis-board.js?v=35',
+	'./static/scripts/analysis-board.js?v=36',
 	'./static/scripts/auth-status.js?v=35',
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
@@ -179,15 +179,15 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/scripts/engine/vacation-bank.js?v=35',
-	'./static/scripts/game-board-local.js?v=41',
-	'./static/scripts/game-board-multiplayer.js?v=40',
+	'./static/scripts/game-board-local.js?v=43',
+	'./static/scripts/game-board-multiplayer.js?v=42',
 	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/help.js?v=35',
 	'./static/scripts/profile-stats.js?v=35',
 	'./static/scripts/puzzle-progress.js?v=35',
 	'./static/scripts/puzzle-rating.js?v=35',
 	'./static/scripts/report-dialog.js?v=35',
-	'./static/scripts/rules-reference.js?v=35',
+	'./static/scripts/rules-reference.js?v=36',
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
