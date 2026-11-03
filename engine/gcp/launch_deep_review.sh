@@ -25,6 +25,7 @@ PROJECT=${PROJECT:-focus-surfer-494820-g0}
 MODE=${MODE:-scan}; BRANCH=${BRANCH:-main}; SRC=${SRC:-}
 CORPUS=${CORPUS:?CORPUS=<gcs object of the hydrated lines.json>}; CASES=${CASES:-}
 DEPTH=${DEPTH:-6}; TIME_MS=${TIME_MS:-0}; SHARD=${SHARD:-}; RESUME=${RESUME:-}; WALK=${WALK:-backward}; KINDS=${KINDS:-}
+AUDIT_ENGINE=${AUDIT_ENGINE:-shipped}   # off = legacy tfit, policy off (see runner_deep_review.sh)
 SPOT=${SPOT:-1}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)-$NAME
@@ -32,7 +33,7 @@ SPOT_FLAGS=()
 if [ "$SPOT" = "1" ]; then
   SPOT_FLAGS=(--provisioning-model=SPOT --instance-termination-action=DELETE)
 fi
-echo "RUN=$RUN name=$NAME machine=$MACHINE zone=$ZONE cap=${MAXH}h mode=$MODE depth=$DEPTH time_ms=$TIME_MS shard=${SHARD:-all} src=${SRC:-$BRANCH}"
+echo "RUN=$RUN name=$NAME machine=$MACHINE zone=$ZONE cap=${MAXH}h mode=$MODE depth=$DEPTH time_ms=$TIME_MS shard=${SHARD:-all} src=${SRC:-$BRANCH} audit_engine=$AUDIT_ENGINE"
 gcloud compute instances create "$NAME" \
   --project="$PROJECT" --zone="$ZONE" \
   --machine-type="$MACHINE" "${SPOT_FLAGS[@]}" \
@@ -40,7 +41,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=deep-review \
-  --metadata="run-id=$RUN,mode=$MODE,branch=$BRANCH,src=$SRC,workers=$WORKERS,max-hours=$MAXH,corpus=$CORPUS,cases=$CASES,depth=$DEPTH,time-ms=$TIME_MS,shard=$SHARD,resume=$RESUME,walk=$WALK,kinds=$KINDS" \
+  --metadata="run-id=$RUN,mode=$MODE,branch=$BRANCH,src=$SRC,workers=$WORKERS,max-hours=$MAXH,corpus=$CORPUS,cases=$CASES,depth=$DEPTH,time-ms=$TIME_MS,shard=$SHARD,resume=$RESUME,walk=$WALK,kinds=$KINDS,audit-engine=$AUDIT_ENGINE" \
   --metadata-from-file="startup-script=$HERE/runner_deep_review.sh" \
   --format="value(name,status)"
 echo "$RUN"

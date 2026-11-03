@@ -17,7 +17,10 @@
 #
 # Metadata: run-id, mode, branch, src, workers, max-hours, corpus, cases,
 # depth, time-ms (per-search cap, 0 = untimed), shard (k/n), resume, walk (scan:
-# backward / backward-plain / fresh), kinds (probe: only these task kinds).
+# backward / backward-plain / fresh), kinds (probe: only these task kinds),
+# audit-engine (exported as SIGIL_AUDIT_ENGINE; `shipped` = search with the
+# build's SHIPPED_EVAL / SHIPPED_POLICY / SHIPPED_EXPLORE, `off` = eval_games'
+# legacy tfit search with the generator policy off, which no build since v24 ships).
 set -uo pipefail
 exec > >(tee -a /var/log/sigil-deep.log) 2>&1
 echo "=== sigil deep-review runner bootstrap $(date -u +%FT%TZ) ==="
@@ -30,8 +33,10 @@ DEPTH=$(md depth); TMS=$(md time-ms); SHARD=$(md shard); : "${SHARD:=}"
 RESUME=$(md resume); : "${RESUME:=}"
 WALK=$(md walk); : "${WALK:=backward}"
 KINDS=$(md kinds); : "${KINDS:=}"
+AUDIT=$(md audit-engine); : "${AUDIT:=shipped}"
+if [ "$AUDIT" != off ]; then export SIGIL_AUDIT_ENGINE="$AUDIT"; fi
 : "${RUN:=unknown}" "${MODE:=scan}" "${BRANCH:=main}" "${WORKERS:=$(nproc)}" "${MAXH:=4}" "${DEPTH:=6}" "${TMS:=0}"
-echo "run=$RUN mode=$MODE branch=$BRANCH src=${SRC:-git} workers=$WORKERS max_hours=$MAXH corpus=$CORPUS cases=$CASES depth=$DEPTH time_ms=$TMS shard=${SHARD:-all}"
+echo "run=$RUN mode=$MODE branch=$BRANCH src=${SRC:-git} workers=$WORKERS max_hours=$MAXH corpus=$CORPUS cases=$CASES depth=$DEPTH time_ms=$TMS shard=${SHARD:-all} audit_engine=$AUDIT"
 
 # WATCHDOG: nothing below is trusted to terminate (see runner.sh for why).
 ( sleep $((MAXH * 3600)); echo "WATCHDOG: ${MAXH}h cap hit, shutting down"; \
@@ -111,6 +116,11 @@ fi
 
 cd $WORK/repo
 H=engine/harness
+# What every search below will run with (eval_games.engine_eval is the one gate).
+$WORK/venv/bin/python -c "import sys; sys.path.insert(0, '$H'); import sigil_engine as se, eval_games as eg; \
+ev = eg.engine_eval(se); sh = eg.AUDIT_SHIPPED; \
+print('SEARCH CONFIG eval=%s policy=%s explore=%s' % (ev, se.SHIPPED_POLICY if sh else 'off', se.SHIPPED_EXPLORE if sh else 'off'))" \
+  || echo "WARNING: could not print the search config"
 SH=(); [ -n "$SHARD" ] && SH=(--shard "$SHARD")
 KI=(); [ -n "$KINDS" ] && KI=(--kinds "$KINDS")
 if [ "$MODE" = probe ]; then

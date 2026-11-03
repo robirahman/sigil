@@ -136,6 +136,9 @@ def telemetry_for(telem_obj, turn):
 def cmd_flag(a):
     lines = json.load(open(a.lines, encoding='utf-8'))
     rows, _err = load_rows(a.evals)
+    # The scan audits whichever search it ran: without SIGIL_AUDIT_ENGINE=shipped
+    # that is eval_games' legacy tfit / policy-off search, not the shipped engine.
+    print('scan rows by (eval, engine):', dict(Counter((r.get('eval'), r.get('engine')) for r in rows.values())))
     cases, stats = [], Counter()
     for gid, g in lines.items():
         ai = rust_color(g)
