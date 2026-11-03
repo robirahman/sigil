@@ -66,7 +66,7 @@
   {
    "id": "humans",
    "label": "Human experts (Robi, Andy)",
-   "config": "pending",
+   "config": "measured on dev set v2 only",
    "pending": true
   }
  ],

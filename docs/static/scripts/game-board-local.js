@@ -32,7 +32,7 @@ document.addEventListener('alpine:init', () => {
 			puzzleMessage: '',
 			puzzleDiagnostic: '',                    // engine/live-rules disagreement, if any
 			puzzleJudge: '',                         // last engine verdict on an off-line move
-			puzzleSolutionNodes: {},                 // nodes of the revealed solution's first turn (gold rings)
+			puzzleSolutionNodes: {},                 // nodes of the solution's next turn while walking it (gold rings)
 			puzzleMoves: 0,                          // mover turns played so far
 			puzzleSolutionText: [],
 			activeSpell: '',
@@ -173,8 +173,10 @@ document.addEventListener('alpine:init', () => {
 				let fatLog = null;
 				try {
 					fatLog = await reconstructGameLog(spellNames, variant, h.Setup || null, parsed.turns);
-					const last = fatLog.length ? fatLog[fatLog.length - 1].sfnAfter : (h.Setup || null);
-					if (h.FinalSfn && last !== normalizeSfnString(h.FinalSfn)) {
+					const lastTurn = fatLog.length ? fatLog[fatLog.length - 1] : null;
+					const last = lastTurn ? lastTurn.sfnAfter : (h.Setup || null);
+					if (h.FinalSfn && !finalSfnMatchesReplay(last, lastTurn && lastTurn.color,
+							h.FinalSfn, h.Result)) {
 						throw new Error('replayed final position does not match FinalSfn');
 					}
 				} catch (e) {
@@ -2137,6 +2139,8 @@ document.addEventListener('alpine:init', () => {
 
 				function _puzzleOnTurn(t) {
 					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
+					_this._puzzleLastTurn = { color: t.color, key: puzzleSfnKey(t.sfnAfter) };
+					if (_this._puzzleGuiding) _puzzleGuideOnTurn(t);
 					// A failed mate puzzle can still be corrected to solved while the
 					// mover is within the puzzle's turn count (see _puzzleOnGameOver);
 					// past it, the failure is final.
@@ -2274,6 +2278,8 @@ document.addEventListener('alpine:init', () => {
 					_this._puzzleLastDefence = null;
 					_this._puzzleLine = null;
 					_this._puzzleJudgePending = false;
+					_this._puzzleLastTurn = null;
+					_puzzleGuideStop();
 					_puzzleExpectGameOver = false;
 					_this.winner = '';
 					_this.messageHistory = [];
@@ -2347,17 +2353,127 @@ document.addEventListener('alpine:init', () => {
 					// node the first solution turn touches (gold, distinct from the
 					// game's own red/blue legal-move rings).
 					lines.forEach(l => _this.messageHistory.push('Solution: ' + l));
-					const ring = {};
-					const first = sols[0];
-					if (first && Array.isArray(first.actions)) {
-						first.actions.forEach(a => {
-							if (!a) return;
-							['node', 'node2', 'pushed_to'].forEach(k => { if (a[k]) ring[a[k]] = true; });
-							['sacrificed', 'destroyed', 'kept', 'converted'].forEach(k => (a[k] || []).forEach(n => { ring[n] = true; }));
-						});
-					}
-					_this.puzzleSolutionNodes = ring;
+					_puzzleGuideStart();
 				};
+
+				// ---------------------------------------------------------------
+				// Walking through the solution. After "Show solution" the board
+				// rings every node of the solution's next turn for the mover.
+				// Playing it makes the AI answer with the line's stored defence,
+				// and the next turn is ringed, to the mate. Any other turn leaves
+				// the line: the engine replies with its best move, as before.
+				// ---------------------------------------------------------------
+				function _puzzleRing(actions) {
+					const ring = {};
+					(Array.isArray(actions) ? actions : []).forEach(a => {
+						if (!a) return;
+						['node', 'node2', 'pushed_to'].forEach(k => { if (a[k]) ring[a[k]] = true; });
+						['sacrificed', 'destroyed', 'kept', 'converted'].forEach(k => (a[k] || []).forEach(n => { ring[n] = true; }));
+					});
+					return ring;
+				}
+				// A line node's position key (published lines store it; mined
+				// lines carry only the position after the turn).
+				const _guideKey = (node) => (node && (node.key || (node.after ? puzzleSfnKey(node.after) : ''))) || '';
+				// The mover's next solution turn from the position `key` (mover to
+				// move): the first solution at the start, else the first
+				// continuation (or finishing turn) after a stored defence.
+				function _puzzleGuideAt(key) {
+					const sols = puzzle.solutions || [];
+					if (key === puzzleSfnKey(puzzle.sfn)) return sols[0] ? { node: sols[0], turn: 1 } : null;
+					let hit = null;
+					const walk = (node, turn) => {
+						if (hit || !node) return;
+						if (node.defence && node.defence.after && puzzleSfnKey(node.defence.after) === key) {
+							const next = (node.continuations && node.continuations[0]) || node.finish || null;
+							if (next) hit = { node: next, turn: turn + 1 };
+							return;
+						}
+						(node.continuations || []).forEach(c => walk(c, turn + 1));
+					};
+					sols.forEach(s => walk(s, 1));
+					return hit;
+				}
+				// The line node (a mover turn) that reaches position `key`, if any.
+				function _puzzleLineNodeAt(key) {
+					let hit = null;
+					const walk = (node) => {
+						if (hit || !node) return;
+						if (_guideKey(node) === key) { hit = node; return; }
+						(node.continuations || []).forEach(walk);
+					};
+					(puzzle.solutions || []).forEach(walk);
+					return hit;
+				}
+				function _puzzleGuideStop() {
+					_this._puzzleGuiding = false;
+					_this._puzzleGuideNode = null;
+					_this._puzzleGuideDefence = null;
+					_this._puzzleGuideFrom = '';
+					_this.puzzleSolutionNodes = {};
+				}
+				function _puzzleGuideShow(g) {
+					_this._puzzleGuideNode = g.node;
+					_this.puzzleSolutionNodes = _puzzleRing(g.node.actions);
+					const total = puzzle.kind === 'winning' ? 1 : (puzzle.mate || 1);
+					_this.puzzleMessage = 'Solution, your turn ' + g.turn + ' of ' + total + ' (ringed): '
+						+ describePuzzleActions(g.node.actions) + '.';
+				}
+				function _puzzleGuideStart() {
+					_puzzleGuideStop();
+					_this._puzzleGuiding = true;
+					const last = _this._puzzleLastTurn;
+					// The opponent is still to move: if the mover's last turn is on the
+					// line, have the AI replay its stored defence (revealing ends the
+					// 'playing' state that would otherwise pick it); the guide resumes
+					// after the reply.
+					if (last && last.color === puzzle.mover) {
+						const node = _puzzleLineNodeAt(last.key);
+						if (node && node.defence) {
+							_this._puzzleGuideDefence = node.defence;
+							_this._puzzleGuideFrom = last.key;
+						}
+						return;
+					}
+					const g = _puzzleGuideAt(last ? last.key : puzzleSfnKey(puzzle.sfn));
+					if (g) { _puzzleGuideShow(g); return; }
+					_this._puzzleGuiding = false;
+					_this.puzzleMessage = 'This position is off the solution line. Retry, then Show solution, to step through it from the start.';
+				}
+				function _puzzleGuideOnTurn(t) {
+					const key = puzzleSfnKey(t.sfnAfter);
+					const over = !!(_engineRef && _engineRef.board && _engineRef.board.gameover);
+					if (t.color === puzzle.mover) {
+						const g = _this._puzzleGuideNode;
+						_this.puzzleSolutionNodes = {};
+						_this._puzzleGuideNode = null;
+						const onLine = g && (_guideKey(g) ? _guideKey(g) === key
+							: (g === (puzzle.solutions || [])[0] && puzzleKeys(puzzle).indexOf(key) >= 0));
+						if (!onLine) {
+							_puzzleGuideStop();
+							_this.puzzleMessage = 'That leaves the solution line, so the engine replies with the best move it finds. Retry to step through the solution again.';
+							return;
+						}
+						if (over) {
+							_puzzleGuideStop();
+							_this.puzzleMessage = 'That ends the game: the solution is complete.';
+							return;
+						}
+						// The opponent replays the stored defence (PuzzleOpponent.pickTurn).
+						_this._puzzleGuideDefence = g.defence || null;
+						_this._puzzleGuideFrom = key;
+						_this.puzzleMessage = g.defence ? 'On the solution line. The AI plays the stored defence…'
+							: 'That was the solution turn; the engine replies with the best move it finds.';
+						if (!g.defence) _this._puzzleGuiding = false;
+						return;
+					}
+					_this._puzzleGuideDefence = null;
+					if (over) { _puzzleGuideStop(); return; }
+					const g = _puzzleGuideAt(key);
+					if (g) { _puzzleGuideShow(g); return; }
+					_puzzleGuideStop();
+					_this.puzzleMessage = 'The reply left the stored line, so there is no solution turn to show from here. Retry to step through it again.';
+				}
 
 				// ---------------------------------------------------------------
 				// Tutorial (tutorial.html). A lesson is a start position and the
@@ -3307,7 +3423,8 @@ class PuzzleOpponent {
 		this._byKey = {};
 		const index = (sol) => {
 			if (!sol) return;
-			if (sol.key && sol.defence) this._byKey[sol.key] = sol.defence;
+			const k = sol.key || (sol.after ? puzzleSfnKey(sol.after) : '');
+			if (k && sol.defence) this._byKey[k] = sol.defence;
 			for (const c of (sol.continuations || [])) index(c);
 		};
 		for (const sol of (puzzle.solutions || [])) index(sol);
@@ -3317,6 +3434,15 @@ class PuzzleOpponent {
 		const comp = this.component;
 		const key = puzzleSfnKey(boardToSfn(board));
 		const stored = this._byKey[key];
+		// While "Show solution" walks the line, the guide names the defence to
+		// replay from this position (compared by key: the component's copy is
+		// a reactive proxy, never the same object).
+		if (comp && comp._puzzleGuiding && comp._puzzleGuideDefence && comp._puzzleGuideFrom === key) {
+			const d = comp._puzzleGuideDefence;
+			comp._puzzleLastDefence = d;
+			const sim = SimBoard.fromSigilBoard(board);
+			return rustActionsToTurn(sim, color, d.actions, d.after, { endOfTurn: true });
+		}
 		if (stored && comp && comp.puzzleStatus === 'playing' && !comp._puzzleJudgePending) {
 			comp._puzzleLastDefence = stored;
 			const sim = SimBoard.fromSigilBoard(board);
