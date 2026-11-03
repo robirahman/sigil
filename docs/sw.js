@@ -110,7 +110,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/wasm/sigil_engine_bg.wasm?v=35',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
-	'./static/scripts/engine/game-controller.js',
+	// v=1: the Fissure-wall fix (a stale controller would still let a wall
+	// click spend the move on a returning user's first game).
+	'./static/scripts/engine/game-controller.js?v=1',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/position-rating.js?v=36',
 	'./static/images/game-board.webp',
