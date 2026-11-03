@@ -31,6 +31,7 @@ pub mod policy;
 pub mod policy_lse;
 pub mod policy_weights;
 pub mod mate;
+pub mod cert;
 pub mod candidates;
 #[cfg(feature = "python")]
 pub mod py;

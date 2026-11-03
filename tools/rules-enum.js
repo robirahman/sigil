@@ -60,11 +60,21 @@ const FILES = [
 	'features.js', 'enumerator.js', 'ai-player.js', 'game-controller.js', 'game-review.js', 'rust-ai.js',
 ].map(f => path.join(ENGINE, f)).concat([path.join(REPO, 'docs', 'static', 'scripts', 'game-board-local.js')]);
 for (const f of FILES) vm.runInContext(fs.readFileSync(f, 'utf8'), sandbox, { filename: f });
-const G = vm.runInContext('({ GameController, puzzleImportSfn, boardToSfn, sfnToDict, NODE_ORDER: () => NODE_ORDER })', sandbox);
+const G = vm.runInContext('({ GameController, SigilBoard, puzzleImportSfn, boardToSfn, sfnToDict, NODE_ORDER: () => NODE_ORDER })', sandbox);
 
 const MAX_TOKENS = 64;
 const PROGRESS = !!process.env.RULES_ENUM_PROGRESS;
+const TRACE = !!process.env.RULES_ENUM_TRACE;
 const UI_BUTTONS = new Set(['dash', 'skip_providence', 'pass', 'submit']);
+
+/** The SFN with the turn handed over: side-to-move flipped, counter + 1
+ * (the form bench/grader/apply.js returns, ready to enumerate again). */
+function handOver(sfn) {
+	const p = String(sfn).trim().split(/\s+/);
+	p[1] = p[1] === 'r' ? 'b' : 'r';
+	p[2] = String(parseInt(p[2], 10) + 1);
+	return p.join(' ');
+}
 
 function normKey(sfn) {
 	const p = String(sfn).trim().split(/\s+/);
@@ -112,7 +122,7 @@ function run(sfn, tokens, variant) {
 		const realTake = G.GameController.prototype._takeTurn;
 		gc._takeTurn = function (...args) {
 			entryBoard = JSON.stringify(gc.board);
-			entryArgs = JSON.stringify(args);
+			entryArgs = args;
 			sinceEntry = [];
 			return realTake.apply(this, args);
 		};
@@ -127,13 +137,7 @@ function run(sfn, tokens, variant) {
 				sinceEntry.push(t);
 				return Promise.resolve(t);
 			}
-			const p = Object.assign({}, payload);
-			delete p.message;   // display text: Corrupt-style counters also show in board/args
-			finish({
-				kind: 'prompt', payload, now: G.boardToSfn(gc.board),
-				state: h(entryBoard + '|' + entryArgs + '|' + JSON.stringify(sinceEntry)),
-				board: h(JSON.stringify(gc.board) + '|' + JSON.stringify(payload)),
-			});
+			finish(promptResult(gc, payload, entryBoard, entryArgs, sinceEntry));
 			return new Promise(() => {});
 		};
 		const origCatch = (e) => finish({ kind: 'error', error: String((e && e.message) || e) });
@@ -143,29 +147,104 @@ function run(sfn, tokens, variant) {
 	});
 }
 
+/**
+ * Resume at a recorded _takeTurn entry instead of replaying from the start:
+ * restore the board as it was at that entry, call _takeTurn with the same
+ * arguments, feed `since`, and on return run the game loop's turn tail
+ * (_eotTriggers, update, then the next turn's opening Seal of Destruction
+ * check). Equivalent to run() because every _takeTurn call is a tail call;
+ * tools/rules-diff.py --check-resume compares the two on a sample.
+ */
+function runFrom(entry, since, variant) {
+	return new Promise((resolve) => {
+		let i = 0, done = false;
+		let entryBoard = null, entryArgs = null, sinceEntry = [];
+		const finish = (r) => { if (!done) { done = true; resolve(r); } };
+		const gc = new G.GameController(() => {}, { variant });
+		const saved = JSON.parse(entry.board);
+		const board = new G.SigilBoard(saved.spellNames, variant);
+		Object.assign(board, saved);
+		gc.board = board;
+		const realTake = G.GameController.prototype._takeTurn;
+		gc._takeTurn = function (...args) {
+			entryBoard = JSON.stringify(gc.board);
+			entryArgs = args;
+			sinceEntry = [];
+			return realTake.apply(this, args);
+		};
+		gc._waitForInput = function (payload) {
+			if (done) return new Promise(() => {});
+			if (i < since.length) {
+				const t = since[i++];
+				sinceEntry.push(t);
+				return Promise.resolve(t);
+			}
+			finish(promptResult(gc, payload, entryBoard, entryArgs, sinceEntry));
+			return new Promise(() => {});
+		};
+		const color = board.whoseTurn;
+		(async () => {
+			await gc._takeTurn(...entry.args);
+			if (done) return;
+			gc._eotTriggers(color);
+			board.update();
+			const sfn = G.boardToSfn(board);
+			let gameover = !!board.gameover, winner = board.winner || null;
+			const next = board.enemy(color);
+			if (!gameover && board.chargedSpells[next].includes('Seal_of_Destruction')) { gameover = true; winner = color; }
+			finish({ kind: 'end', sfn, gameover, winner });
+		})().catch((e) => finish({ kind: 'error', error: String((e && e.message) || e) }));
+	});
+}
+
+function promptResult(gc, payload, entryBoard, entryArgs, sinceEntry) {
+	return {
+		kind: 'prompt', payload, now: TRACE ? G.boardToSfn(gc.board) : undefined,
+		entry: { board: entryBoard, args: entryArgs }, since: sinceEntry.slice(),
+		state: h(entryBoard + '|' + JSON.stringify(entryArgs) + '|' + JSON.stringify(sinceEntry)),
+		board: h(JSON.stringify(gc.board) + '|' + JSON.stringify(payload)),
+	};
+}
+
 let currentError = null;
 process.on('unhandledRejection', (e) => { if (currentError) currentError(e); else throw e; });
 
-async function enumerate(sfn) {
+/**
+ * Every distinct position the mover can reach. Options:
+ *   resume (default true): runFrom for every prefix after the first prompt;
+ *     false replays each prefix from the start through run() (the reference);
+ *   target: a normKey -- stop as soon as that position is reached (a legality
+ *     check: reaching it through the controller proves the turn legal);
+ *   prefer: a Set of tokens explored first (e.g. the nodes and spells of the
+ *     action list that claims to reach `target`).
+ * Children carry `sfn` in handed-over form (opponent to move).
+ */
+async function enumerate(sfn, opts = {}) {
+	const resume = opts.resume !== undefined ? opts.resume : !process.env.RULES_ENUM_FULL_REPLAY;
 	const t0 = Date.now();
 	const variant = variantOf(sfn);
 	const nodes = G.NODE_ORDER().slice();
 	const children = new Map();
 	const seen = new Set();
-	const stack = [{ prefix: [], parent: null }];
+	const stack = [{ prefix: [], parent: null, entry: null, since: null }];
 	let runs = 0, pruned = 0, errors = 0;
 	while (stack.length) {
-		const { prefix, parent: parentBoard } = stack.pop();
+		const it = stack.pop();
+		const { prefix, parent: parentBoard } = it;
 		if (PROGRESS && runs % 20000 === 0) process.stderr.write(`runs ${runs} states ${seen.size} children ${children.size} stack ${stack.length} ${Date.now() - t0} ms\n`);
 		runs++;
 		let r;
 		try {
-			r = await new Promise((res) => { currentError = (e) => res({ kind: 'error', error: String((e && e.message) || e) }); run(sfn, prefix, variant).then(res); });
+			r = await new Promise((res) => {
+				currentError = (e) => res({ kind: 'error', error: String((e && e.message) || e) });
+				(resume && it.entry ? runFrom(it.entry, it.since, variant) : run(sfn, prefix, variant)).then(res);
+			});
 		} finally { currentError = null; }
-		if (r.kind === 'error') { errors++; continue; }
+		if (r.kind === 'error') { errors++; if (PROGRESS) process.stderr.write('error ' + r.error + ' ' + JSON.stringify(prefix) + '\n'); continue; }
 		if (r.kind === 'end') {
 			const k = normKey(r.sfn);
-			if (!children.has(k)) children.set(k, { sfn: r.sfn, key: k, tokens: prefix, gameover: r.gameover, winner: r.winner });
+			if (!children.has(k)) children.set(k, { sfn: handOver(r.sfn), key: k, tokens: prefix, gameover: r.gameover, winner: r.winner });
+			if (opts.target && k === opts.target) break;
 			continue;
 		}
 		if (r.kind !== 'prompt') continue;
@@ -173,12 +252,17 @@ async function enumerate(sfn) {
 		if (seen.has(r.state)) continue;
 		seen.add(r.state);
 		if (prefix.length >= MAX_TOKENS) { errors++; continue; }
-		for (const tok of alphabet(r.payload, nodes).reverse()) stack.push({ prefix: prefix.concat([tok]), parent: r.board });
+		let toks = alphabet(r.payload, nodes);
+		if (opts.prefer) toks = toks.filter(t => !opts.prefer.has(t)).concat(toks.filter(t => opts.prefer.has(t)));
+		else toks.reverse();
+		for (const tok of toks) {
+			stack.push({ prefix: prefix.concat([tok]), parent: r.board, entry: r.entry, since: r.since.concat([tok]) });
+		}
 	}
 	return { sfn, children: [...children.values()], stats: { runs, states: seen.size, pruned_noop: pruned, errors, ms: Date.now() - t0 } };
 }
 
-module.exports = { enumerate, normKey, run, variantOf, G };
+module.exports = { enumerate, normKey, handOver, run, runFrom, variantOf, G };
 
 if (require.main === module) {
 	const rl = readline.createInterface({ input: process.stdin });

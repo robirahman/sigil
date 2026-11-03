@@ -186,8 +186,15 @@ struct Solver {
     mk_gen: u64,
     /// Mover turns that completed a proof at each k (index k): the same mating
     /// turn often works against many defences, so it is tried first.
-    mkillers: [Vec<Turn>; 4],
+    mkillers: MKillers,
+    /// Witness turns for `prove_le` proofs, by (position, k): the turn after
+    /// which every reply leaves a proven win within k-1 (certificate extraction).
+    le_wit: HashMap<(Key, u8), Turn>,
 }
+
+/// Largest k (mover turns) the prover is asked about: mate in 6.
+pub const MAX_K: usize = 6;
+type MKillers = [Vec<Turn>; MAX_K + 1];
 
 impl Solver {
     fn new(budget: u64, time_ms: u64) -> Self {
@@ -201,7 +208,7 @@ impl Solver {
         se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
                  killers: Vec::new(), se, le_memo: HashMap::new(),
-                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default(), le_wit: HashMap::new() }
     }
 
     fn time_left_ms(&self) -> Option<f64> {
@@ -563,7 +570,7 @@ impl Solver {
         for kt in &killers {
             if let Some((_, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
                 let n = *n;
-                if or_ok(self.prove_forced(&n, c, k - 1, false, true))? { return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, true))? { self.le_wit.insert((key(b), k), *kt); return Ok(true); }
             }
         }
         Ok(false)
@@ -580,7 +587,7 @@ impl Solver {
             // new mover killers have been learned since, try them first.
             if self.le_miss_gen.get(&mk) == Some(&self.mk_gen) { return Ok(false); }
             let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
-            let r = self.try_mkillers(&root, c, k, &mut HashSet::new())?;
+            let r = self.try_mkillers(b, &root, c, k, &mut HashSet::new())?;
             self.le_memo.insert(mk, r);
             if r { self.le_miss_gen.remove(&mk); } else { self.le_miss_gen.insert(mk, self.mk_gen); }
             return Ok(r);
@@ -593,12 +600,16 @@ impl Solver {
     }
 
     /// Try the current mover killers at k (skipping children in `tried`).
-    fn try_mkillers(&mut self, root: &[(Turn, Board)], c: Color, k: u8, tried: &mut HashSet<Key>) -> Result<bool, MateError> {
+    fn try_mkillers(&mut self, b: &Board, root: &[(Turn, Board)], c: Color, k: u8, tried: &mut HashSet<Key>) -> Result<bool, MateError> {
         let killers = self.mkillers[k as usize].clone();
         for kt in &killers {
             if let Some(&(t, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
                 if !tried.insert(key(&n)) { continue; }
-                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? {
+                    self.remember_mkiller(k, t);
+                    self.le_wit.insert((key(b), k), t);
+                    return Ok(true);
+                }
             }
         }
         Ok(false)
@@ -610,7 +621,7 @@ impl Solver {
         let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
         let mut tried: HashSet<Key> = HashSet::new();
         // 1. Mover killers.
-        if self.try_mkillers(&root, c, k, &mut tried)? { return Ok(true); }
+        if self.try_mkillers(b, &root, c, k, &mut tried)? { return Ok(true); }
         // 2. Nominations (a short and a longer search).
         let depth = 2 * k as i32 - 1;
         let times = if k >= 3 {
@@ -623,7 +634,11 @@ impl Solver {
             for &(t, n) in &root {
                 let kn = key(&n);
                 if n.outcome != Outcome::Ongoing || !cands.contains(&kn) || !tried.insert(kn) { continue; }
-                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? {
+                    self.remember_mkiller(k, t);
+                    self.le_wit.insert((key(b), k), t);
+                    return Ok(true);
+                }
             }
         }
         if !deep || k < 3 { return Ok(false); }
@@ -635,7 +650,11 @@ impl Solver {
             .filter(|(_, n)| n.outcome == Outcome::Ongoing && !tried.contains(&key(n))).collect();
         rest.sort_by_key(|(_, n)| -(score.get(&key(n)).copied().unwrap_or(i32::MIN / 2) as i64));
         for cheap in [true, false] {
-            if let Some(t) = self.deep_or(&rest, c, k, cheap)? { self.remember_mkiller(k, t); return Ok(true); }
+            if let Some(t) = self.deep_or(&rest, c, k, cheap)? {
+                self.remember_mkiller(k, t);
+                self.le_wit.insert((key(b), k), t);
+                return Ok(true);
+            }
         }
         Ok(false)
     }
@@ -1024,12 +1043,12 @@ impl Solver {
     fn worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>) -> Self {
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
                  killers, se: crate::search::Search::new(10), le_memo: HashMap::new(),
-                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default(), le_wit: HashMap::new() }
     }
 
     /// A worker that may nominate (deep mate-in-4 search): a real, smaller
     /// strength engine with the shipped settings.
-    fn nominating_worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>, mkillers: [Vec<Turn>; 4]) -> Self {
+    fn nominating_worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>, mkillers: MKillers) -> Self {
         let mut se = crate::search::Search::new(16);
         se.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap_or_default();
         se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
@@ -1039,7 +1058,7 @@ impl Solver {
         se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
                  killers, se, le_memo: HashMap::new(),
-                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers }
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers, le_wit: HashMap::new() }
     }
 
     fn judge_turn(&mut self, after: &Board, c: Color, n: u8, exhaustive: bool) -> Result<TurnVerdict, MateError> {
@@ -1109,5 +1128,140 @@ impl Solver {
             if self.mate2_lines(rb, c, &cands, false, 1)?.is_empty() { return Ok(TurnVerdict::Unproven); }
         }
         Ok(TurnVerdict::Mate { immediate: false })
+    }
+}
+
+// ---- proof certificates (SigilBench v3) ----
+//
+// A certificate is the mover's STRATEGY for a proven forced win: for every
+// position the proof reaches with the mover to move (an OR node), the turn the
+// mover plays there. A checker that trusts nothing else -- it enumerates every
+// defender reply itself and confirms every leaf is a win -- re-verifies it:
+// `cert::check` (Rust, independent of this module's search) and
+// tools/check-mate-cert.js (the browser's interactive rules).
+//
+// Extraction re-walks the proof with the prover as a guide: at an AND node
+// (defender to move) every reply is enumerated; at an OR node with k turns
+// left, a mate-in-1 is taken when one exists, otherwise the `prove_le` witness
+// (re-proved here when the proof came from a parallel worker, whose witnesses
+// are lost). Nothing is assumed: a reply the walk cannot prove fails the
+// extraction, and the checker re-verifies whatever comes out.
+
+/// One OR node of a certificate.
+pub struct CertEntry {
+    /// The position, mover to move.
+    pub at: Board,
+    /// Turns the mover has left here (1 = must mate now).
+    pub k: u8,
+    pub turn: Turn,
+    /// `child(at, turn)`.
+    pub to: Board,
+}
+
+pub struct Cert {
+    pub internal: Vec<CertEntry>,
+    pub leaves: Vec<CertEntry>,
+    done: HashMap<Key, u8>,
+}
+
+impl Solver {
+    /// A mating turn for `c` at `b`, if any (ordered probe, then exhaustive).
+    fn mate_in_1_turn(&mut self, b: &Board, c: Color) -> Result<Option<Turn>, MateError> {
+        if let Some(&false) = self.m1_memo.get(&key(b)) { return Ok(None); }
+        for t in b.turns_ordered(c).take(PROBE) {
+            self.tick()?;
+            if won_by(child(b, &t, c).outcome, c) { return Ok(Some(t)); }
+        }
+        let turns = self.turns(b, c)?;
+        for t in &turns {
+            self.tick()?;
+            if won_by(child(b, t, c).outcome, c) { return Ok(Some(*t)); }
+        }
+        self.m1_memo.insert(key(b), false);
+        Ok(None)
+    }
+
+    /// Witness for "c wins within k from b": a turn whose child is a proven
+    /// forced win within k-1 (k >= 2, no mate-in-1 at b).
+    fn le_witness(&mut self, b: &Board, c: Color, k: u8) -> Result<Option<Turn>, MateError> {
+        if let Some(t) = self.le_wit.get(&(key(b), k)) { return Ok(Some(*t)); }
+        for deep in [false, true] {
+            if deep && k < 3 { break; }
+            // A cached miss is not a refutation: clear it so the witness
+            // search runs again with everything learned since.
+            self.le_memo.remove(&(key(b), k, deep));
+            if self.prove_le(b, c, k, deep)? {
+                if let Some(t) = self.le_wit.get(&(key(b), k)) { return Ok(Some(*t)); }
+            }
+        }
+        // Last resort: every mover turn, each tested with prove_forced.
+        let root = self.successors(b, c)?;
+        for (t, n) in root {
+            if n.outcome != Outcome::Ongoing { continue; }
+            if or_ok(self.prove_forced(&n, c, k - 1, false, false))? {
+                self.le_wit.insert((key(b), k), t);
+                return Ok(Some(t));
+            }
+        }
+        Ok(None)
+    }
+
+    fn cert_or(&mut self, b: &Board, c: Color, k: u8, cert: &mut Cert, leaves: bool) -> Result<bool, MateError> {
+        if let Some(&kk) = cert.done.get(&key(b)) { if kk <= k { return Ok(true); } }
+        if let Some(t) = self.mate_in_1_turn(b, c)? {
+            if leaves { cert.leaves.push(CertEntry { at: *b, k: 1, turn: t, to: child(b, &t, c) }); }
+            cert.done.insert(key(b), 1);
+            return Ok(true);
+        }
+        if k <= 1 { return Ok(false); }
+        let t = match self.le_witness(b, c, k)? { Some(t) => t, None => return Ok(false) };
+        let n = child(b, &t, c);
+        if !self.cert_and(&n, c, k - 1, cert, leaves)? { return Ok(false); }
+        cert.internal.push(CertEntry { at: *b, k, turn: t, to: n });
+        cert.done.insert(key(b), k);
+        Ok(true)
+    }
+
+    /// Every reply to `after` (defender to move) leaves `c` a certified win
+    /// within `j` more turns.
+    fn cert_and(&mut self, after: &Board, c: Color, j: u8, cert: &mut Cert, leaves: bool) -> Result<bool, MateError> {
+        if won_by(after.outcome, c) { return Ok(true); }
+        if after.outcome != Outcome::Ongoing { return Ok(false); }
+        let o = c.other();
+        for (_, rb) in self.successors(after, o)? {
+            if won_by(rb.outcome, c) { continue; }
+            if rb.outcome != Outcome::Ongoing { return Ok(false); }
+            if !self.cert_or(&rb, c, j, cert, leaves)? { return Ok(false); }
+        }
+        Ok(true)
+    }
+}
+
+/// Certificate that the mover's turn which produced `after` (defender to move)
+/// forces a win within `n` of the mover's turns, counting that turn. JSON:
+/// {"ok", "after", "mover", "n", "internal": [{"at","k","to","actions"}],
+///  "leaves": [...] (when `leaves`), "nodes", "seconds"} or {"ok": false, "error"}.
+/// Positions are SFNs (`at`: mover to move; `to`: as `child` builds it).
+pub fn cert_json(after_sfn: &str, n: u8, budget: u64, time_ms: u64, leaves: bool) -> String {
+    let t0 = std::time::Instant::now();
+    let after = match Board::from_sfn(after_sfn) { Ok(b) => b, Err(e) => return format!("{{\"ok\":false,\"error\":{:?}}}", e) };
+    let c = after.to_move.other();
+    let mut s = Solver::new(budget, time_ms);
+    let mut cert = Cert { internal: Vec::new(), leaves: Vec::new(), done: HashMap::new() };
+    let r = if n == 0 || (n as usize) > MAX_K { Ok(false) }
+            else { s.cert_and(&after, c, n - 1, &mut cert, leaves) };
+    let secs = t0.elapsed().as_secs_f64();
+    let ent = |e: &CertEntry| {
+        let (acts, _) = e.at.emit_actions(&e.turn, c);
+        format!("{{\"at\":{:?},\"k\":{},\"to\":{:?},\"actions\":{}}}", e.at.to_sfn(), e.k, e.to.to_sfn(),
+                crate::actions::acts_to_json(&acts))
+    };
+    match r {
+        Ok(true) => format!("{{\"ok\":true,\"after\":{:?},\"mover\":{:?},\"n\":{},\"internal\":[{}],\"leaves\":[{}],\"nodes\":{},\"seconds\":{:.3}}}",
+                            after_sfn, if c == Color::Red { "red" } else { "blue" }, n,
+                            cert.internal.iter().map(ent).collect::<Vec<_>>().join(","),
+                            cert.leaves.iter().map(ent).collect::<Vec<_>>().join(","), s.stats.nodes, secs),
+        Ok(false) => format!("{{\"ok\":false,\"error\":\"not proven\",\"nodes\":{},\"seconds\":{:.3}}}", s.stats.nodes, secs),
+        Err(e) => format!("{{\"ok\":false,\"error\":{:?},\"nodes\":{},\"seconds\":{:.3}}}", format!("{:?}", e), s.stats.nodes, secs),
     }
 }

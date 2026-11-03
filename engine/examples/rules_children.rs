@@ -12,6 +12,8 @@ use std::io::BufRead;
 
 fn main() {
     sigil_engine::cast_enum::set_full_rules(std::env::var("SIGIL_NARROW_RULES").is_err());
+    // RULES_CHILDREN_COUNT=1: only the turn count per position (sampling).
+    let count_only = std::env::var("RULES_CHILDREN_COUNT").is_ok();
     for line in std::io::stdin().lock().lines() {
         let sfn = line.expect("stdin");
         let sfn = sfn.trim();
@@ -22,6 +24,10 @@ fn main() {
         };
         let c = b.to_move;
         let (turns, st) = b.enumerate_turns(c);
+        if count_only {
+            println!("{{\"sfn\":{:?},\"turns\":{},\"truncated\":{}}}", sfn, turns.len(), st.truncated || st.resolver_truncated);
+            continue;
+        }
         let mut seen = HashSet::new();
         let mut kids = Vec::new();
         for t in &turns {
