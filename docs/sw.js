@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v89';
+const CACHE_VERSION = 'v97';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -38,6 +38,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./active-games.html',
 	'./profile.html',
 	'./puzzles.html',
+	'./sigilbench.html',
 	'./tutorial.html',
 	'./analysis.html',
 	'./annotate.html',
@@ -51,6 +52,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
+	'./static/data/sigilbench/leaderboard.json',
+	'./static/data/sigilbench/leaderboard_dev_v2.json',
+	'./static/data/sigilbench/devset.enc.json',
+	'./static/scripts/sigilbench-replay.js?v=1',
 	// spell.html's Try-it positions and game statistics.
 	'./static/data/spell-examples.json',
 	'./strategy/data/spell_position_winrates.json',
@@ -107,7 +112,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/position-rating.js?v=35',
+	'./static/scripts/engine/position-rating.js?v=36',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',
@@ -169,13 +174,13 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
 	'./static/scripts/engine/firebase-sync.js?v=35',
-	'./static/scripts/engine/game-review.js?v=35',
+	'./static/scripts/engine/game-review.js?v=39',
 	'./static/scripts/engine/multiplayer-controller.js?v=35',
 	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/scripts/engine/vacation-bank.js?v=35',
-	'./static/scripts/game-board-local.js?v=35',
-	'./static/scripts/game-board-multiplayer.js?v=35',
+	'./static/scripts/game-board-local.js?v=41',
+	'./static/scripts/game-board-multiplayer.js?v=40',
 	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/help.js?v=35',
 	'./static/scripts/profile-stats.js?v=35',

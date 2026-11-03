@@ -8,7 +8,7 @@
 // drift from what the site replays.
 //
 // Usage (after concatenation):  node <script> <in.json> <out.json>
-//   in.json:  [{spellNames, variant, setupSfn, finalSfn, turns}, ...]
+//   in.json:  [{spellNames, variant, setupSfn, finalSfn, turns, winner?, endReason?, forfeitedBy?}, ...]
 //   out.json: [{ok: true, turns: [{color, turnNumber, sfnBefore,
 //              sfnAfter}]} | {ok: false, error}, ...]
 //
@@ -29,7 +29,7 @@
 		try {
 			const fat = await hydrateGameLog(
 				rec.spellNames, rec.variant, rec.setupSfn || null,
-				rec.finalSfn || null, rec.turns || []);
+				rec.finalSfn || null, rec.turns || [], recordEnding(rec));
 			out.push({
 				ok: true,
 				turns: fat.map(t => ({

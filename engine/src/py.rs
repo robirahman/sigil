@@ -2094,6 +2094,11 @@ impl SearchSession {
 #[pyo3(signature = (on, cap=crate::turn_iter::DECISIVE_LEAD_CAP))]
 fn set_decisive_lead(on: bool, cap: usize) { crate::turn_iter::set_decisive_lead(on, cap); }
 
+/// Rules-complete cast resolution (Rock Slide, Corrupt, Comet, Erupt) for
+/// exhaustive proofs; off by default (`cast_enum::set_full_rules`).
+#[pyfunction]
+fn set_full_rules(on: bool) { crate::cast_enum::set_full_rules(on); }
+
 #[pyfunction]
 #[pyo3(signature = (sfn, budget=50_000_000, time_ms=0, hint_after=vec![], max_mate=2))]
 fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>, max_mate: u8) -> PyResult<String> {
@@ -2571,6 +2576,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rank_of_result, m)?)?;
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
     m.add_function(wrap_pyfunction!(solve_mates, m)?)?;
+    m.add_function(wrap_pyfunction!(set_full_rules, m)?)?;
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;

@@ -20,6 +20,26 @@
 
 use std::collections::HashSet;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Rules-complete resolution (SigilBench, 2026-10-31). Off by default, so the
+/// strength engine is unchanged. On, four resolvers enumerate EVERY outcome the
+/// browser rules allow instead of the subset the search uses:
+///
+/// * Rock Slide: every assignment of a neighbour to every bordering enemy
+///   stone (JS `rock_slide`), not only the maximum-net ones;
+/// * Corrupt: every legal set of 0..=3 conversions ("up to 3"; the JS caster
+///   may stop at any point), not only the largest;
+/// * Comet: the sacrifice may be the stone that just blinked;
+/// * Erupt: the moves may interleave across the eligible spells in any order
+///   (JS `erupt`), so a spell unreachable at first can become reachable.
+///
+/// A proof (`mate.rs`) is exhaustive under the real rules only with this on;
+/// `bench_grade`, `children` and the Python `set_full_rules` turn it on.
+static FULL_RULES: AtomicBool = AtomicBool::new(false);
+
+pub fn set_full_rules(on: bool) { FULL_RULES.store(on, Ordering::Relaxed); }
+#[inline] pub fn full_rules() -> bool { FULL_RULES.load(Ordering::Relaxed) }
 use crate::actions::JsAct;
 use crate::board::{Board, Color, Outcome};
 use crate::spells_meta::*;
@@ -354,6 +374,48 @@ impl Board {
                 if f.is_empty() { return (start, trunc); }
                 trunc |= f.truncated; (f.take(), trunc)
             }
+            Resolve::Erupt if full_rules() => {
+                // Up to 2 moves into each 3-/5-node spell (not Erupt's own)
+                // holding a caster stone after payment, in ANY order, until no
+                // eligible spell with moves left offers a legal move. States are
+                // (board, moves left per spell), deduplicated.
+                let mut left0 = [0u8; 6];
+                for p in 0..6 { if p != pos && SIGIL[p] & self.mine(c) != 0 { left0[p] = 2; } }
+                let mut done = Frontier::new(cap);
+                let mut seen: HashSet<((u64, u64), [u8; 6])> = HashSet::new();
+                let mut cur: Vec<(Board, L, [u8; 6])> = vec![(*self, L::default(), left0)];
+                let mut trunc = false;
+                while !cur.is_empty() && !trunc {
+                    let mut next: Vec<(Board, L, [u8; 6])> = Vec::new();
+                    for (b, log, left) in cur {
+                        let mut zone = 0u64;
+                        for p in 0..6 { if left[p] > 0 { zone |= SIGIL[p]; } }
+                        let t = b.all_moveable(c) & zone;
+                        if t == 0 { done.push(b, log); continue; }
+                        let mut m = t;
+                        while m != 0 {
+                            let node = m.trailing_zeros() as u8; m &= m - 1;
+                            let p = (0..6).find(|&p| SIGIL[p] & (1u64 << node) != 0).unwrap();
+                            let mut step = Frontier::new(cap);
+                            b.branch_move(&log, 1u64 << node, c, &mut step);
+                            trunc |= step.truncated;
+                            for (nb, nl) in step.take() {
+                                let mut l2 = left;
+                                l2[p] -= 1;
+                                if nb.outcome != Outcome::Ongoing { done.push(nb, nl); continue; }
+                                if seen.insert((nb.state_key(), l2)) {
+                                    if next.len() >= cap { trunc = true; break; }
+                                    next.push((nb, nl, l2));
+                                }
+                            }
+                        }
+                    }
+                    cur = next;
+                }
+                trunc |= done.truncated;
+                if done.is_empty() { return (start, trunc); }
+                (done.take(), trunc)
+            }
             Resolve::Erupt => {
                 let mut cur = start;
                 let mut trunc = false;
@@ -552,6 +614,8 @@ impl Board {
                     false
                 }
                 while k > 0 && !any_legal(&el, k, 0, &mut acc, self, c) { k -= 1; }
+                // Rules-complete: every set size from 0 (convert nothing) up.
+                let k_min = if full_rules() { 0 } else { k };
                 fn rec<L: Log>(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>,
                                base: &Board, c: Color, f: &mut Frontier<L>) {
                     if acc.len() == k {
@@ -562,7 +626,8 @@ impl Board {
                         b.stones[c.other().idx()] &= !bits;
                         b.stones[c.idx()] |= bits;
                         b.update();
-                        let log0 = L::default().plus_with(|| JsAct::list("corrupt", order.clone()));
+                        let log0 = if order.is_empty() { L::default() }
+                                   else { L::default().plus_with(|| JsAct::list("corrupt", order.clone())) };
                         if b.outcome != Outcome::Ongoing { f.push(b, log0); return; }
                         let mut own = b.mine(c);
                         if own == 0 { f.push(b, log0); return; }
@@ -581,7 +646,7 @@ impl Board {
                         acc.pop();
                     }
                 }
-                rec(&el, k, 0, &mut acc, self, c, &mut f);
+                for kk in (k_min..=k).rev() { rec(&el, kk, 0, &mut acc, self, c, &mut f); }
                 if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
@@ -653,7 +718,10 @@ impl Board {
                     let mut lands = Frontier::new(cap);
                     self.branch_move(&L::default(), 1u64 << node, c, &mut lands);
                     for (b, l) in lands.take() {
-                        let mut own = b.mine(c) & !(1u64 << node);
+                        // The narrow enumeration never sacrifices the stone that
+                        // just blinked; the rules allow it (rules-complete mode).
+                        let keep = if full_rules() { 0 } else { 1u64 << node };
+                        let mut own = b.mine(c) & !keep;
                         if own == 0 { f.push(b, l); continue; }
                         while own != 0 {
                             let s = own.trailing_zeros() as u8; own &= own - 1;
@@ -691,6 +759,32 @@ impl Board {
                     let mut b = *self;
                     let (lost, _) = b.apply_rock_slide(&pushes, shield);
                     f.push(b, L::default().plus_with(|| JsAct::rock_slide(&pushes, lost.clone())));
+                }
+                if full_rules() {
+                    // Every assignment (the optimal ones are already in, first,
+                    // so a capped frontier keeps them): each source to any
+                    // neighbour, walls and occupied nodes included.
+                    let srcs = mask_vec(self.rock_slide_sources(c));
+                    let opts: Vec<Vec<u8>> = srcs.iter().map(|&s| mask_vec(ADJ[s as usize])).collect();
+                    let mut idx = vec![0usize; srcs.len()];
+                    'all: loop {
+                        if f.truncated { break; }
+                        let pushes: Vec<crate::rockslide::Push> = srcs.iter().zip(&idx)
+                            .enumerate().map(|(i, (&s, &j))| crate::rockslide::Push { from: s, to: opts[i][j] })
+                            .collect();
+                        let mut b = *self;
+                        let (lost, _) = b.apply_rock_slide(&pushes, shield);
+                        f.push(b, L::default().plus_with(|| JsAct::rock_slide(&pushes, lost.clone())));
+                        // odometer
+                        let mut i = 0;
+                        loop {
+                            if i == idx.len() { break 'all; }
+                            idx[i] += 1;
+                            if idx[i] < opts[i].len() { break; }
+                            idx[i] = 0;
+                            i += 1;
+                        }
+                    }
                 }
                 if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)

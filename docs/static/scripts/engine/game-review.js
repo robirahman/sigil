@@ -578,6 +578,15 @@ function _emptyReview(opts) {
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+/** How long a review waits on a stored-review lookup before computing it here. */
+const REVIEW_LOOKUP_TIMEOUT_MS = 4000;
+/** `promise`, or null when it has not settled within REVIEW_LOOKUP_TIMEOUT_MS. */
+function _reviewLookup(promise) {
+	let timer;
+	const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), REVIEW_LOOKUP_TIMEOUT_MS); });
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Returns an object with AI-review state + methods that can be spread into an
  * Alpine.data() factory's return value. Both `game-board-local.js` and
@@ -676,7 +685,13 @@ function aiReviewMixin() {
 			//   - deep requested + only quick cached (or none) → recompute deep,
 			//     overwriting the cached entry
 			const gameId = this._roomCodeForReview;
-			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
+			// Offline, the stored reviews are out of reach: an RTDB once() then
+			// waits for a connection that never comes, so the review would never
+			// start. Skip the lookups when the browser knows it is offline, and
+			// give up on them after REVIEW_LOOKUP_TIMEOUT_MS otherwise (a dead
+			// connection that still reads as online) -- the review is computed here.
+			const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+			const db = (online && typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
 			// Stored reviews, best first: the Rust engine's offline depth-6
 			// evaluation (game_evals/<roomCode>, when it describes this game), a
 			// cached Deep Review, then for a Quick request the server's analysis
@@ -685,13 +700,13 @@ function aiReviewMixin() {
 			let stored = null, cached = null;
 			if (db && gameId && typeof loadGameEvals === 'function') {
 				try {
-					const doc = await loadGameEvals(db, gameId);
+					const doc = await _reviewLookup(loadGameEvals(db, gameId));
 					stored = doc ? rustEvalsToReview(doc, gameLog) : null;
 				} catch (e) { /* fall through to the cached review */ }
 			}
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
-					const c = await loadGameReview(db, gameId);
+					const c = await _reviewLookup(loadGameReview(db, gameId));
 					cached = c && okVersions.includes(c.modelVersion) ? c : null;
 				} catch (e) { /* fall through to compute */ }
 			}
@@ -717,7 +732,7 @@ function aiReviewMixin() {
 					try {
 						// Quick reviews take the positions the server already searched.
 						const cached = mode === 'quick' && db && typeof loadPositionEvals === 'function'
-							? await loadPositionEvals(db, _reviewPositions(gameLog).slice(0, -1)).catch(() => null) : null;
+							? await _reviewLookup(loadPositionEvals(db, _reviewPositions(gameLog).slice(0, -1))).catch(() => null) : null;
 						const searched = [];
 						result = await reviewGameRust(gameLog, mode, progress, this.winner, { cached, searched });
 						// The rest go to the server, which searches them again before
@@ -1066,7 +1081,7 @@ function turnToNotation(turn) {
  * @throws on replay failure or integrity mismatch — callers degrade to a
  *   final-position-only view (finalSfn), never a broken scrub.
  */
-async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
+async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns, ending) {
 	const gameLog = turns || [];
 	if (!gameLog.length) return gameLog;
 	// Fully-fat records pass through untouched. Anything else — slim
@@ -1075,11 +1090,71 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 	if (!gameLog.some(t => !(t.sfnAfter && t.sfnBefore))) return gameLog;
 	const rebuilt = await reconstructGameLog(
 		spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
-	const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
-	if (finalSfn && last !== normalizeSfnString(finalSfn)) {
+	const lastTurn = rebuilt.length ? rebuilt[rebuilt.length - 1] : null;
+	if (finalSfn && !finalSfnMatchesReplay(
+			lastTurn && lastTurn.sfnAfter, lastTurn && lastTurn.color, finalSfn, ending)) {
 		throw new Error('replayed final position does not match record');
 	}
 	return rebuilt;
+}
+
+/** Endings that finish a game without a move: the board stops wherever
+ *  the clock or the player left it, not at the end of a turn. */
+const NON_MOVE_ENDINGS = ['forfeit', 'time', 'abandon'];
+
+/**
+ * Integrity check: is `recorded` (a record's finalSfn) the position the
+ * replay ended on (`replayed`, after `lastColor`'s turn)?
+ *
+ * finalSfn is the live board when the game ended. After a normal win that
+ * is the instant the winner's last turn finished, so it must match the
+ * replay byte-for-byte. A forfeit, flag or abandon can land after the turn
+ * passed on: the next player's turn had begun (unrecorded, its actions
+ * still unsent), so the token names the side after `lastColor` and, once
+ * that turn's preamble ran, the counter is one higher. That shape — and
+ * only that shape, with everything else identical — is accepted when the
+ * record shows the game ended without a move:
+ *   - `ending.endReason` is forfeit / time / abandon (online rooms carry
+ *     forfeitedBy / endReason, completed_games an endReason). Either side
+ *     may have made the last turn: a player can forfeit on the opponent's
+ *     turn, and a clock can run out on either.
+ *   - no endReason (local-game archives store none) but the recorded
+ *     winner made the last turn and the token names the loser: a game can
+ *     only end with the loser on move by a non-move ending.
+ * Otherwise (resumed games, winnerless SGN-T imports, natural ends) the
+ * check stays exact, so a transcript missing a final no-op turn — a plain
+ * pass looks identical apart from token and counter — is still rejected.
+ */
+function finalSfnMatchesReplay(replayed, lastColor, recorded, ending) {
+	if (!replayed || !recorded) return false;
+	const a = normalizeSfnString(replayed);
+	const b = normalizeSfnString(recorded);
+	if (a === b) return true;
+	if (lastColor !== 'red' && lastColor !== 'blue') return false;
+	const e = (ending && typeof ending === 'object') ? ending : { winner: ending };
+	const nonMove = NON_MOVE_ENDINGS.includes(e.endReason);
+	if (!nonMove && !(e.winner === lastColor && !e.endReason)) return false;
+	const pa = a.trim().split(/\s+/);
+	const pb = b.trim().split(/\s+/);
+	if (pa.length !== pb.length || pa.length < 3) return false;
+	const nextToken = lastColor === 'red' ? 'b' : 'r';
+	if (pa[1] !== lastColor[0] || pb[1] !== nextToken) return false;
+	const counterStep = Number(pb[2]) - Number(pa[2]);
+	if (counterStep !== 0 && counterStep !== 1) return false;
+	for (let i = 0; i < pa.length; i++) {
+		if (i !== 1 && i !== 2 && pa[i] !== pb[i]) return false;
+	}
+	return true;
+}
+
+/** The ending a stored room / completed_games record describes, for
+ *  hydrateGameLog: { winner, endReason }. */
+function recordEnding(rec) {
+	if (!rec) return null;
+	return {
+		winner: rec.winner || null,
+		endReason: rec.forfeitedBy ? 'forfeit' : (rec.endReason || null),
+	};
 }
 
 /**

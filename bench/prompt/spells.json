@@ -1,0 +1,416 @@
+{
+ "Flourish": {
+  "display": "Flourish",
+  "size": 5,
+  "static": false,
+  "text": "Make 4 soft moves.",
+  "clarifications": "Four soft moves, one at a time, each onto an empty node touching your stones (a stone placed earlier in the spell counts). Mandatory while a legal soft move exists; stops early only when none exists.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Flourish\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then up to 4 {\"type\":\"move\",\"node\":X} actions in the order made.",
+  "example": [{"type":"cast","spell":"Flourish","kept":["b4"]},{"type":"move","node":"a7"},{"type":"move","node":"b2"},{"type":"move","node":"b3"},{"type":"move","node":"b5"}]
+ },
+ "Carnage": {
+  "display": "Carnage",
+  "size": 5,
+  "static": false,
+  "text": "Make 4 hard moves.",
+  "clarifications": "Four hard moves, one at a time, each onto an unshielded enemy stone touching your stones, with the usual push or crush. Mandatory while a legal hard move exists. Each later move sees the board left by the earlier pushes.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Carnage\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then up to 4 {\"type\":\"hard_move\",\"node\":X,\"pushed_to\":Y} actions in order (no pushed_to when the stone is crushed).",
+  "example": [{"type":"cast","spell":"Carnage","kept":["a4"]},{"type":"hard_move","node":"a7","pushed_to":"b4"},{"type":"hard_move","node":"a10","pushed_to":"b6"},{"type":"hard_move","node":"a8"},{"type":"hard_move","node":"b11","pushed_to":"b3"}]
+ },
+ "Bewitch": {
+  "display": "Bewitch",
+  "size": 5,
+  "static": false,
+  "text": "Choose 2 enemy stones touching each other. Convert them to your color.",
+  "clarifications": "Convert two adjacent unshielded enemy stones to your colour. They need not touch your stones. If no two unshielded enemy stones are adjacent, nothing happens.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Bewitch\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"bewitch\",\"node\":A,\"node2\":B} with A and B the two adjacent enemy stones (omit the action if no pair exists).",
+  "example": [{"type":"cast","spell":"Bewitch","kept":["b4"]},{"type":"bewitch","node":"a7","node2":"a8"}]
+ },
+ "Starfall": {
+  "display": "Starfall",
+  "size": 5,
+  "static": false,
+  "text": "Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.",
+  "clarifications": "Place 2 stones on two ADJACENT EMPTY nodes anywhere on the board (no need to touch your stones), then destroy every unshielded enemy stone adjacent to either of them.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Starfall\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"starfall\",\"node\":A,\"node2\":B,\"destroyed\":[every enemy stone adjacent to A or B]}. The destroyed list must be complete; omit it if empty.",
+  "example": [{"type":"cast","spell":"Starfall","kept":["a2","a5"]},{"type":"starfall","node":"a3","node2":"a4","destroyed":["a7","a13"]}]
+ },
+ "Seal_of_Lightning": {
+  "display": "Seal of Lightning",
+  "size": 5,
+  "static": true,
+  "text": "STATIC: Your dash only requires 1 sacrifice.",
+  "clarifications": "Static. While you hold it, a dash costs 1 sacrifice instead of 2. You still need at least 3 stones on the board to dash. Gained or lost the moment it is filled or loses a stone.",
+  "actions": "No cast. Your dash is written {\"type\":\"dash_lightning\",\"sacrificed\":[S]} with exactly one node, followed by the dash placement (move/hard_move). Holding it, a two-stone dash is illegal.",
+  "example": [{"type":"move","node":"a4"},{"type":"dash_lightning","sacrificed":["a4"]},{"type":"move","node":"a8"},{"type":"pass"}],
+  "example_note": "Holder dashes paying one stone (verified legal); paying two is graded illegal (T6)."
+ },
+ "Grow": {
+  "display": "Grow",
+  "size": 3,
+  "static": false,
+  "text": "Make 2 soft moves.",
+  "clarifications": "Two soft moves onto empty nodes touching your stones; mandatory while possible.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Grow\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then up to 2 {\"type\":\"move\",\"node\":X}.",
+  "example": [{"type":"cast","spell":"Grow","kept":["a10"]},{"type":"move","node":"a2"},{"type":"move","node":"a5"}]
+ },
+ "Fireblast": {
+  "display": "Fireblast",
+  "size": 3,
+  "static": false,
+  "text": "Destroy all enemy stones which are touching you, then sacrifice a stone.",
+  "clarifications": "Destroy every unshielded enemy stone touching your stones (all at once, on the board after payment), then sacrifice one of your stones (any one). The sacrifice is skipped only if the destruction left the enemy with no stones (you have already won) or you have no stones.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Fireblast\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"fireblast\",\"destroyed\":[all such enemy stones]} (omit if none), then {\"type\":\"sacrifice\",\"node\":S}.",
+  "example": [{"type":"cast","spell":"Fireblast","kept":["a10"]},{"type":"fireblast","destroyed":["b4","b5","b12"]},{"type":"sacrifice","node":"a7"}]
+ },
+ "Hail_Storm": {
+  "display": "Hail Storm",
+  "size": 3,
+  "static": false,
+  "text": "Destroy 1 enemy stone in each 3-node and 5-node spell.",
+  "clarifications": "In each 3-node and 5-node spell position (1-6) that contains at least one unshielded enemy stone, destroy one enemy stone of your choice. Not optional for any such position. 1-node spells are not affected.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Hail_Storm\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then one {\"type\":\"hail_storm\",\"destroyed\":[X]} per destroyed stone (a single hail_storm action listing all of them is equivalent).",
+  "example": [{"type":"cast","spell":"Hail_Storm","kept":["c9","c10"]},{"type":"hail_storm","destroyed":["a2"]},{"type":"hail_storm","destroyed":["b4"]},{"type":"hail_storm","destroyed":["a8"]}]
+ },
+ "Meteor": {
+  "display": "Meteor",
+  "size": 3,
+  "static": false,
+  "text": "Make 1 blink move, then destroy 1 enemy stone touching it.",
+  "clarifications": "Make one blink move anywhere (soft onto an empty node, or hard onto an unshielded enemy stone with the usual push/crush). Then destroy one unshielded enemy stone adjacent to the node you landed on, your choice; mandatory if any exists.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Meteor\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then the blink as {\"type\":\"move\",\"node\":X} or {\"type\":\"hard_move\",\"node\":X,\"pushed_to\":Y}, then {\"type\":\"meteor_destroy\",\"node\":Z} (omit if no enemy stone touches X).",
+  "example": [{"type":"cast","spell":"Meteor","kept":["c9","c10"]},{"type":"move","node":"a2"},{"type":"meteor_destroy","node":"a3"}]
+ },
+ "Seal_of_Wind": {
+  "display": "Seal of Wind",
+  "size": 3,
+  "static": true,
+  "text": "STATIC: Your first move each turn is a blink move.",
+  "clarifications": "Static. Your regular move (step 1 only) may be a blink: any node that is empty or holds an unshielded enemy stone, adjacent to your stones or not. A hard blink pushes as usual. It does not apply to dash, Providence or spell placements. If the enemy holds Seal of Stone, the blink must be soft (empty node).",
+  "actions": "No cast. The first action is simply {\"type\":\"move\",\"node\":X} or {\"type\":\"hard_move\",\"node\":X,\"pushed_to\":Y} on a non-adjacent node ({\"type\":\"blink\",...} is also accepted).",
+  "example": [{"type":"blink","node":"a3"},{"type":"pass"}],
+  "example_note": "First action is a blink onto a node touching none of the mover's stones (verified legal)."
+ },
+ "Sprout": {
+  "display": "Sprout",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 soft move.",
+  "clarifications": "One soft move onto an empty node touching your stones (mandatory if one exists).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Sprout\"} (no kept: a 1-node spell always loses its stone). Then {\"type\":\"move\",\"node\":X}.",
+  "example": [{"type":"cast","spell":"Sprout"},{"type":"move","node":"a2"}]
+ },
+ "Slash": {
+  "display": "Slash",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 hard move.",
+  "clarifications": "One hard move onto an unshielded enemy stone touching your stones (mandatory if one exists).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Slash\"} (no kept: a 1-node spell always loses its stone). Then {\"type\":\"hard_move\",\"node\":X,\"pushed_to\":Y}.",
+  "example": [{"type":"cast","spell":"Slash"},{"type":"hard_move","node":"a5","pushed_to":"a11"}]
+ },
+ "Surge": {
+  "display": "Surge",
+  "size": 1,
+  "static": false,
+  "text": "If you dashed this turn, make 1 move.",
+  "clarifications": "Castable only if you dashed earlier this turn. Then make one ordinary move (soft or hard) touching your stones.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Surge\"} (no kept: a 1-node spell always loses its stone). Then {\"type\":\"move\"...} or {\"type\":\"hard_move\"...}. The dash must appear earlier in the list.",
+  "example": [{"type":"cast","spell":"Surge"},{"type":"move","node":"a1"}]
+ },
+ "Comet": {
+  "display": "Comet",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 blink move, then sacrifice a stone.",
+  "clarifications": "Make one blink move anywhere (soft, or hard with the usual push/crush), then sacrifice one of your stones. The sacrificed stone may be any of your stones.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Comet\"} (no kept: a 1-node spell always loses its stone). Then the blink as move/hard_move, then {\"type\":\"sacrifice\",\"node\":S}.",
+  "example": [{"type":"cast","spell":"Comet"},{"type":"move","node":"a1"},{"type":"sacrifice","node":"a4"}]
+ },
+ "Seal_of_Summer": {
+  "display": "Seal of Summer",
+  "size": 1,
+  "static": true,
+  "text": "STATIC: You may cast 2 spells on your turn.",
+  "clarifications": "Static. After your first cast resolves, if you still (or now) hold Seal of Summer, you may cast a second spell this turn (any castable spell, charms included). Filling it mid-turn (e.g. by the first spell's moves) counts. Never more than 2 casts.",
+  "actions": "No cast. Write a second {\"type\":\"cast\",...} block (with its resolution) after the first spell's resolution actions.",
+  "example": [{"type":"move","node":"a4"},{"type":"dash_lightning","sacrificed":["a4"]},{"type":"move","node":"b7"},{"type":"cast","spell":"Surge"},{"type":"move","node":"b7"},{"type":"cast","spell":"Surge"},{"type":"move","node":"b9"},{"type":"pass"}],
+  "example_note": "Two casts in one turn while holding Seal of Summer (verified legal)."
+ },
+ "Blossom": {
+  "display": "Blossom",
+  "size": 5,
+  "static": false,
+  "text": "Make 1 soft blink move into each other 3-node and 5-node spell.",
+  "clarifications": "Make one soft blink (empty node, anywhere in that spell) into each OTHER 3-node and 5-node spell position, i.e. into each of positions 1-6 except Blossom's own: up to 5 stones. A position with no empty node is skipped. Order is free; all are mandatory.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Blossom\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then one {\"type\":\"move\",\"node\":X} per placement (\"blink\" also accepted).",
+  "example": [{"type":"cast","spell":"Blossom","kept":["a4","a5"]},{"type":"blink","node":"b2"},{"type":"blink","node":"c2"},{"type":"blink","node":"a8"},{"type":"blink","node":"b9"}]
+ },
+ "Scatter": {
+  "display": "Scatter",
+  "size": 3,
+  "static": false,
+  "text": "Make 1 soft blink move into each of 2 spells.",
+  "clarifications": "Make 2 soft blinks (empty nodes, anywhere) into two DIFFERENT spell positions (any of the 9, including 1-node spells and Scatter's own nodes). Mandatory while empty spell nodes remain.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Scatter\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"move\",\"node\":X} twice (\"blink\" also accepted).",
+  "example": [{"type":"cast","spell":"Scatter","kept":["c10"]},{"type":"blink","node":"a2"},{"type":"blink","node":"b2"}]
+ },
+ "Seal_of_Spring": {
+  "display": "Seal of Spring",
+  "size": 1,
+  "static": true,
+  "text": "STATIC: You may cast your locked spells a second time.",
+  "clarifications": "Static. You may cast your own locked spell once more. That cast springlocks it (SFN springlock field): it cannot be cast by you a third time until you cast a different 3/5-node spell, which moves the lock and clears the springlock.",
+  "actions": "No cast. Allows {\"type\":\"cast\",\"spell\":<your lock>} once while the springlock field is not already that spell.",
+  "example": [{"type":"move","node":"c9"},{"type":"dash","sacrificed":["a1","a4"]},{"type":"move","node":"c10"},{"type":"cast","spell":"Fury","kept":["c10"]},{"type":"sacrifice","node":"a7"},{"type":"hard_move","node":"b2","pushed_to":"b7"},{"type":"hard_move","node":"b1"},{"type":"hard_move","node":"b3","pushed_to":"b9"},{"type":"pass"}],
+  "example_note": "The mover recasts its own locked spell (verified legal; the result springlocks it)."
+ },
+ "Syzygy": {
+  "display": "Syzygy",
+  "size": 5,
+  "static": false,
+  "text": "Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell.",
+  "clarifications": "'Opposite' is fixed by Syzygy's position: in position 1 (a2-a6) it is b7 and b8-b10; in position 2 (b2-b6) c7 and c8-c10; in position 3 (c2-c6) a7 and a8-a10. First blink onto that 1-node spell's node (soft, or hard with a push) unless it is already yours, a wall, or shielded. Then up to 3 blinks onto nodes of that 3-node spell that are not yours (each soft, or hard pushing the enemy stone; a stone pushed back into the spell may be blinked on again); stops when all its nodes are yours. Mandatory as available.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Syzygy\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then the blinks in order as move/hard_move (charm node first).",
+  "example": [{"type":"cast","spell":"Syzygy","kept":["a4","a5","a6"]},{"type":"move","node":"b7"},{"type":"move","node":"b8"},{"type":"move","node":"b9"},{"type":"move","node":"b10"}]
+ },
+ "Eclipse": {
+  "display": "Eclipse",
+  "size": 3,
+  "static": false,
+  "text": "Make 2 moves into a spell where you control all but 2 nodes.",
+  "clarifications": "Choose a spell position (any size) in which exactly 2 nodes are not yours (after payment; walls count as not yours). Make 2 ordinary adjacent moves (soft or hard) into that same position. If the second move is impossible it is lost.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Eclipse\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then two move/hard_move actions into nodes of the same position.",
+  "example": [{"type":"cast","spell":"Eclipse","kept":["b10"]},{"type":"move","node":"b8"},{"type":"move","node":"b9"}]
+ },
+ "Azimuth": {
+  "display": "Azimuth",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 move into a spell where you control all but 1 node.",
+  "clarifications": "Make 1 ordinary adjacent move (soft or hard) into a node of any spell position in which exactly 1 node is not yours (after payment). Note that every 1-node spell you do not hold qualifies, including Azimuth's own now-empty node.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Azimuth\"} (no kept: a 1-node spell always loses its stone). Then one move/hard_move.",
+  "example": [{"type":"cast","spell":"Azimuth"},{"type":"move","node":"b7"}]
+ },
+ "Erupt": {
+  "display": "Erupt",
+  "size": 5,
+  "static": false,
+  "text": "Make 2 moves into every spell, except Erupt, in which you have a stone.",
+  "clarifications": "The eligible positions are the 3-node and 5-node positions (1-6), except Erupt's own, that contain at least one of your stones after payment. Make ordinary adjacent moves (soft or hard) into eligible positions, at most 2 per position, in any order, until no such move remains; all of these moves are mandatory.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Erupt\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then one move/hard_move per placement, in the order made.",
+  "example": [{"type":"cast","spell":"Erupt","kept":["a4"]},{"type":"hard_move","node":"b3","pushed_to":"b4"},{"type":"hard_move","node":"b6","pushed_to":"a10"},{"type":"move","node":"a9"},{"type":"hard_move","node":"a10"},{"type":"move","node":"c9"},{"type":"move","node":"c10"}]
+ },
+ "Fury": {
+  "display": "Fury",
+  "size": 3,
+  "static": false,
+  "text": "Sacrifice 1 stone, then make 3 hard moves.",
+  "clarifications": "First sacrifice one of your stones (any), then make 3 hard moves (mandatory while possible).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Fury\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"sacrifice\",\"node\":S}, then up to 3 hard_move actions.",
+  "example": [{"type":"cast","spell":"Fury"},{"type":"sacrifice","node":"c4"},{"type":"hard_move","node":"c11","pushed_to":"b10"},{"type":"hard_move","node":"c1"},{"type":"hard_move","node":"c2"}]
+ },
+ "Charge": {
+  "display": "Charge",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 move into a 3- or 5-node spell.",
+  "clarifications": "Make 1 ordinary adjacent move (soft or hard) onto a node of a 3-node or 5-node spell (positions 1-6).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Charge\"} (no kept: a 1-node spell always loses its stone). Then one move/hard_move.",
+  "example": [{"type":"cast","spell":"Charge"},{"type":"hard_move","node":"a4","pushed_to":"a13"}]
+ },
+ "Hurricane": {
+  "display": "Hurricane",
+  "size": 5,
+  "static": false,
+  "text": "Destroy the smallest contiguous group of enemy stones. If tied, you choose which.",
+  "clarifications": "Group the unshielded enemy stones into connected groups (adjacent stones of that colour). Destroy every stone of the smallest group; if several groups tie for smallest you choose one.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Hurricane\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"hurricane\",\"destroyed\":[every node of the chosen group]}.",
+  "example": [{"type":"cast","spell":"Hurricane"},{"type":"hurricane","destroyed":["b13"]}]
+ },
+ "Storm_Front": {
+  "display": "Storm Front",
+  "size": 3,
+  "static": false,
+  "text": "Destroy any 2 enemy stones of your choice.",
+  "clarifications": "Destroy 2 unshielded enemy stones anywhere, one at a time (1 if only one exists).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Storm_Front\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"storm_front\",\"destroyed\":[X,Y]}.",
+  "example": [{"type":"cast","spell":"Storm_Front","kept":["a10"]},{"type":"storm_front","destroyed":["a1","a2"]}]
+ },
+ "Gust": {
+  "display": "Gust",
+  "size": 1,
+  "static": false,
+  "text": "Pick up every enemy stone touching one of your stones, then place them on any empty nodes.",
+  "clarifications": "Every unshielded enemy stone touching your stones (after payment) is picked up - all of them, not a choice. Then you place each of them, still enemy stones, on any empty nodes of your choice (nodes just vacated included). If the pick-up removes all enemy stones from the board, the enemy has lost immediately.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Gust\"} (no kept: a 1-node spell always loses its stone). Then {\"type\":\"gust\",\"destroyed\":[all picked-up nodes],\"kept\":[one landing node per stone]}. kept lists empty nodes (after the pick-up) where ENEMY stones are put; same length as destroyed.",
+  "example": [{"type":"cast","spell":"Gust"},{"type":"gust","destroyed":["c1","c12"],"kept":["a2","a3"]}]
+ },
+ "Tsunami": {
+  "display": "Tsunami",
+  "size": 5,
+  "static": false,
+  "text": "Make 2 soft moves, then 2 hard moves.",
+  "clarifications": "Make 2 soft moves, then 2 hard moves, all ordinary adjacent placements, each mandatory while possible.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Tsunami\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then up to 2 move then up to 2 hard_move actions.",
+  "example": [{"type":"cast","spell":"Tsunami","kept":["a4"]},{"type":"move","node":"a2"},{"type":"move","node":"a3"},{"type":"hard_move","node":"a11","pushed_to":"a6"},{"type":"hard_move","node":"a6","pushed_to":"a5"}]
+ },
+ "Torrent": {
+  "display": "Torrent",
+  "size": 3,
+  "static": false,
+  "text": "Make 1 soft move, then 1 hard move.",
+  "clarifications": "Make 1 soft move, then 1 hard move (ordinary adjacent placements, mandatory while possible).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Torrent\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"move\"...}, then {\"type\":\"hard_move\"...}.",
+  "example": [{"type":"cast","spell":"Torrent","kept":["b10"]},{"type":"move","node":"b4"},{"type":"hard_move","node":"b2","pushed_to":"a7"}]
+ },
+ "Splash": {
+  "display": "Splash",
+  "size": 1,
+  "static": false,
+  "text": "If you did not dash this turn, make 1 move.",
+  "clarifications": "Castable only if you did NOT dash this turn. Then make 1 ordinary adjacent move (soft or hard).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Splash\"} (no kept: a 1-node spell always loses its stone). Then one move/hard_move. No dash may appear in the turn.",
+  "example": [{"type":"cast","spell":"Splash"},{"type":"move","node":"a3"}]
+ },
+ "Harvest": {
+  "display": "Harvest",
+  "size": 5,
+  "static": false,
+  "text": "Make 5 moves into your locked spell or into Harvest.",
+  "clarifications": "Make up to 5 ordinary adjacent moves (soft or hard), each landing on a node of your locked spell (your lock BEFORE this cast) or of Harvest's own position. Mandatory while possible. With no lock, only Harvest's nodes qualify.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Harvest\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then one move/hard_move per placement.",
+  "example": [{"type":"cast","spell":"Harvest","kept":["c4"]},{"type":"move","node":"b8"},{"type":"move","node":"b9"},{"type":"move","node":"c2"},{"type":"move","node":"c3"},{"type":"move","node":"c5"}]
+ },
+ "Gather": {
+  "display": "Gather",
+  "size": 3,
+  "static": false,
+  "text": "Make 3 moves into your locked spell or into Gather.",
+  "clarifications": "As Harvest but 3 moves: each lands on a node of your locked spell (lock before this cast) or of Gather's own position; mandatory while possible.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Gather\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then one move/hard_move per placement.",
+  "example": [{"type":"cast","spell":"Gather","kept":["a10"]},{"type":"hard_move","node":"a3","pushed_to":"a2"},{"type":"hard_move","node":"a2","pushed_to":"c9"},{"type":"hard_move","node":"a5","pushed_to":"c7"}]
+ },
+ "Seal_of_Autumn": {
+  "display": "Seal of Autumn",
+  "size": 1,
+  "static": true,
+  "text": "STATIC: Opponent cannot sacrifice stones in spells to dash.",
+  "clarifications": "Static. While you hold it, your OPPONENT cannot sacrifice stones on spell nodes (any of positions 1-9) to pay for a dash; they can only dash if they have enough stones elsewhere (mana and void nodes). Other sacrifices are unaffected.",
+  "actions": "No cast. Affects which nodes the opponent may list in dash sacrificed.",
+  "example": [{"type":"hard_move","node":"a2","pushed_to":"a11"},{"type":"dash","sacrificed":["a13","b1"]},{"type":"hard_move","node":"a1","pushed_to":"c10"},{"type":"pass"}],
+  "example_note": "Opponent holds Seal of Autumn: the dash sacrifices only stones off the spell nodes (verified legal); sacrificing a spell-node stone is graded illegal (T21)."
+ },
+ "Corrupt": {
+  "display": "Corrupt",
+  "size": 5,
+  "static": false,
+  "text": "Choose up to 3 enemy stones touching your stones. Convert them to your color, then sacrifice a stone.",
+  "clarifications": "The eligible stones are the enemy stones touching your stones when the spell resolves (fixed then: a stone touching only a freshly converted stone is not eligible). Convert up to 3 of them, one at a time (shielded stones cannot be converted; shielding is re-checked after each). Then sacrifice one of your stones (any, converted ones included), unless the conversions ended the game or you have no stones.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Corrupt\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"corrupt\",\"converted\":[...]} (omit if converting none), then {\"type\":\"sacrifice\",\"node\":S}.",
+  "example": [{"type":"cast","spell":"Corrupt","kept":["b4"]},{"type":"corrupt","converted":["a7","a9"]},{"type":"sacrifice","node":"a7"}]
+ },
+ "Decay": {
+  "display": "Decay",
+  "size": 3,
+  "static": false,
+  "text": "Destroy all enemy stones touching 2 or more empty nodes.",
+  "clarifications": "Destroy, all at once, every unshielded enemy stone that touches 2 or more EMPTY nodes (walls are not empty), evaluated after payment.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Decay\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"decay\",\"destroyed\":[all such stones]} (omit if none).",
+  "example": [{"type":"cast","spell":"Decay","kept":["a10"]},{"type":"decay","destroyed":["a7","c1","c5","c8"]}]
+ },
+ "Lurk": {
+  "display": "Lurk",
+  "size": 1,
+  "static": false,
+  "text": "Make 1 move into a 1-node spell or a node outside of a spell.",
+  "clarifications": "Make 1 ordinary adjacent move (soft or hard) onto any node that is NOT part of a 3-node or 5-node spell: a 1-node spell node, a mana node or a void node.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Lurk\"} (no kept: a 1-node spell always loses its stone). Then one move/hard_move.",
+  "example": [{"type":"cast","spell":"Lurk"},{"type":"move","node":"a1"}]
+ },
+ "Seal_of_Destruction": {
+  "display": "Seal of Destruction",
+  "size": 5,
+  "static": true,
+  "text": "STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.",
+  "clarifications": "Static. At the end of each of your turns while you hold it, every unshielded enemy stone touching your stones is destroyed (before the lead check). At the start of your turn, if you hold it, you lose. So a turn that leaves your OPPONENT holding it wins at once, and holding it yourself means you lose next turn unless your opponent's turn breaks it (or the game ends first).",
+  "actions": "No cast and no action: the burn is applied automatically after your last action. Do not write the burned stones anywhere.",
+  "example": [{"type":"move","node":"a12"},{"type":"dash","sacrificed":["a12","c7"]},{"type":"move","node":"b7"},{"type":"cast","spell":"Charge"},{"type":"move","node":"c6"},{"type":"pass"}],
+  "example_note": "This turn ends with the mover holding Seal of Destruction; the burn happens automatically after the last action (no extra action written). Verified legal."
+ },
+ "Seal_of_Stone": {
+  "display": "Seal of Stone",
+  "size": 3,
+  "static": true,
+  "text": "STATIC: Your opponent's first move each turn must be soft.",
+  "clarifications": "Static. Your OPPONENT's regular move (step 1) must be soft (onto an empty node). If the opponent holds Seal of Wind it may still be a soft blink. Their Providence placement, dash placement and spell moves are not restricted.",
+  "actions": "No cast. Affects only what the opponent may write as their first action.",
+  "example": [{"type":"move","node":"b2"},{"type":"pass"}],
+  "example_note": "Opponent holds Seal of Stone: the regular move is soft (verified legal); a hard regular move is graded illegal (N19)."
+ },
+ "Seal_of_Winter": {
+  "display": "Seal of Winter",
+  "size": 1,
+  "static": true,
+  "text": "STATIC: Your opponent cannot cast 1-node spells (charms).",
+  "clarifications": "Static. Your OPPONENT cannot cast 1-node spells.",
+  "actions": "No cast. The opponent may not write a cast of any 1-node spell.",
+  "example": [{"type":"move","node":"b3"},{"type":"cast","spell":"Charge"},{"type":"move","node":"c6"},{"type":"pass"}],
+  "example_note": "ILLEGAL example: the opponent holds Seal of Winter, so this cast of a 1-node spell is rejected."
+ },
+ "Fissure": {
+  "display": "Fissure",
+  "size": 5,
+  "static": false,
+  "text": "Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own.",
+  "clarifications": "Choose any node that is not already a wall (empty, yours or the enemy's). Every unshielded stone, of EITHER colour, on its adjacent nodes is destroyed. The target's own stone (if any) is destroyed and the target becomes a permanent wall; but if the target holds a Bulwark-shielded stone, that stone stays and no wall forms. See rules: walls.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Fissure\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"fissure\",\"node\":T,\"destroyed\":[every destroyed stone: adjacent occupied unshielded nodes, plus T if it held an unshielded stone],\"wall\":T} (\"wall\":null when T held a shielded stone).",
+  "example": [{"type":"cast","spell":"Fissure","kept":["a4"]},{"type":"fissure","node":"a1","destroyed":["a11"],"wall":"a1"}]
+ },
+ "Rock_Slide": {
+  "display": "Rock Slide",
+  "size": 3,
+  "static": false,
+  "text": "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other's nodes, are destroyed; a stone already in that node survives.",
+  "clarifications": "The sources are every unshielded enemy stone touching your stones (after payment); each MUST be pushed to one adjacent node of your choice (any neighbour: empty, wall, or occupied). All pushes resolve at once: a node whose stone is pushed away counts as vacated (chains slide, loops of 3+ rotate); a single stone pushed onto an occupied node that is not itself moving destroys the stone there and takes its place; two or more stones pushed into the same node all die and a stationary stone there survives; two stones pushed onto each other's nodes both die; a stone pushed into a wall or onto a shielded stone dies.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Rock_Slide\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"rock_slide\",\"pushes\":[{\"from\":S,\"to\":D}, ... one per source],\"destroyed\":[...]}. destroyed must list every destination where a stone dies (the stationary stone, or arriving stones); the replay treats an occupied, non-moving destination that is NOT listed as Bulwark-shielded.",
+  "example": [{"type":"cast","spell":"Rock_Slide","kept":["c10"]},{"type":"rock_slide","destroyed":["a5","b2","b5"],"pushes":[{"from":"a4","to":"a5"},{"from":"a12","to":"a5"},{"from":"b1","to":"b2"},{"from":"b6","to":"b2"},{"from":"b12","to":"b5"}]}]
+ },
+ "Bulwark": {
+  "display": "Bulwark",
+  "size": 1,
+  "static": true,
+  "text": "STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent.",
+  "clarifications": "Static. While you hold it, your stones on the nodes of your locked spell (your lock field) cannot be hard-moved onto (so never pushed or crushed), converted or destroyed by any effect, and Rock Slide treats them as walls. Sacrifices are unaffected. If the lock changes or Bulwark loses a stone, protection ends immediately.",
+  "actions": "No cast. Shielded enemy stones may not appear as hard_move/blink targets, in conversions, or in destroyed lists.",
+  "example": [{"type":"hard_move","node":"c8","pushed_to":"c10"},{"type":"pass"}],
+  "example_note": "ILLEGAL example: the hard move targets an enemy stone shielded by Bulwark."
+ },
+ "Dividend": {
+  "display": "Dividend",
+  "size": 1,
+  "static": false,
+  "text": "Add 1 stone to your Providence bank.",
+  "clarifications": "Add 1 stone to your Providence bank (counts toward your score at once; placeable from a later turn).",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Dividend\"} (no kept: a 1-node spell always loses its stone). Then {\"type\":\"bank_stones\",\"spell\":\"Dividend\",\"banked\":1}.",
+  "example": [{"type":"cast","spell":"Dividend"},{"type":"bank_stones","spell":"Dividend","banked":1}]
+ },
+ "Annuity": {
+  "display": "Annuity",
+  "size": 3,
+  "static": false,
+  "text": "Add 2 stones to your Providence bank.",
+  "clarifications": "Add 2 stones to your Providence bank.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Annuity\",\"kept\":[...]} with exactly min(mana nodes you control, 3) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"bank_stones\",\"spell\":\"Annuity\",\"banked\":2}.",
+  "example": [{"type":"cast","spell":"Annuity","kept":["c10"]},{"type":"bank_stones","spell":"Annuity","banked":2}]
+ },
+ "Endowment": {
+  "display": "Endowment",
+  "size": 5,
+  "static": false,
+  "text": "Add 4 stones to your Providence bank.",
+  "clarifications": "Add 4 stones to your Providence bank.",
+  "actions": "Write {\"type\":\"cast\",\"spell\":\"Endowment\",\"kept\":[...]} with exactly min(mana nodes you control, 5) of its nodes in kept (omit kept or use [] with no mana). Then {\"type\":\"bank_stones\",\"spell\":\"Endowment\",\"banked\":4}.",
+  "example": [{"type":"cast","spell":"Endowment","kept":["c4"]},{"type":"bank_stones","spell":"Endowment","banked":4}]
+ }
+}

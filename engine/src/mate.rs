@@ -34,17 +34,26 @@
 //! position is the natural unit here.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+
+/// Threads `judge_turn_exhaustive` uses for each exhaustive mate-in-2 decision
+/// (bench_grade: BENCH_THREADS). 1 = single-threaded.
+static RESOLVE_THREADS: AtomicUsize = AtomicUsize::new(1);
+pub fn set_resolve_threads(n: usize) { RESOLVE_THREADS.store(n.max(1), AtomicOrdering::Relaxed); }
 
 use crate::board::{Board, Color, Outcome};
 use crate::turn::Turn;
 
 /// Position key for deduplication among siblings (side to move and turn
 /// counter are constant across siblings, so they are left out).
-pub type Key = (u64, u64, [u8; 2], [u8; 2], [u8; 2], u8);
+/// Walls (Fissure) and Providence banks are part of it: two siblings can share
+/// every stone yet differ in a wall (Fissure on an isolated empty node) or a
+/// bank, and their futures differ (Codex review, PR #60).
+pub type Key = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2], u8);
 
 fn key(b: &Board) -> Key {
     let o = match b.outcome { Outcome::Ongoing => 0, Outcome::RedWins => 1, Outcome::BlueWins => 2 };
-    (b.stones[0], b.stones[1], b.spell_counter, b.lock, b.springlock, o)
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank, o)
 }
 
 fn won_by(o: Outcome, c: Color) -> bool {
@@ -128,6 +137,10 @@ pub struct Solution {
     /// Proven mate-in-3 first turns among the nominated ones; only computed
     /// when `mate1` and `mate2` are both empty.
     pub mate3: Vec<Line>,
+    /// Proven mate-in-4 first turns among the nominated ones; only computed
+    /// when mate-in-1..3 are all empty and `max_mate >= 4`. Lines carry no
+    /// defence or continuations (the proof is kept, the line is not).
+    pub mate4: Vec<Line>,
     pub stats: MateStats,
 }
 
@@ -144,6 +157,13 @@ pub const MAX_LINES_EMITTED: usize = 512;
 /// proof visits every reply, so this multiplies.
 pub const INNER_NOMINATE_MS: u64 = 250;
 
+/// An inner nomination time, overridable by environment variable (mining and
+/// re-proof runs on idle VMs give the nominator more time: a time-capped
+/// search that scores no move as a mate leaves a true mate unproven).
+fn inner_ms(var: &str, default: u64) -> u64 {
+    std::env::var(var).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+}
+
 struct Solver {
     budget: u64,
     deadline: Option<f64>,
@@ -155,6 +175,18 @@ struct Solver {
     /// The strength engine used ONLY to nominate candidate turns (one table
     /// for the whole solve; nothing it says is trusted without proof).
     se: crate::search::Search,
+    /// `prove_le` results by (position, k, deep): `true` is a proof; `false`
+    /// only means "not found in that mode" and is never read as a refutation.
+    le_memo: HashMap<(Key, u8, bool), bool>,
+    /// For each `false` in `le_memo`: the `mk_gen` it was computed under. A
+    /// miss is provisional; once new mover killers are learned it is retried
+    /// with them before being reused.
+    le_miss_gen: HashMap<(Key, u8, bool), u64>,
+    /// Bumped whenever a new mover killer is learned.
+    mk_gen: u64,
+    /// Mover turns that completed a proof at each k (index k): the same mating
+    /// turn often works against many defences, so it is tried first.
+    mkillers: [Vec<Turn>; 4],
 }
 
 impl Solver {
@@ -168,7 +200,8 @@ impl Solver {
         se.set_elastic(None);
         se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
-                 killers: Vec::new(), se }
+                 killers: Vec::new(), se, le_memo: HashMap::new(),
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
     }
 
     fn time_left_ms(&self) -> Option<f64> {
@@ -385,7 +418,7 @@ impl Solver {
     /// then engine-nominated second turns, each proven against every reply.
     fn has_mate_in_le2(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
         if self.has_mate_in_1(b, c)? { return Ok(true); }
-        let cands = self.nominate(b, c, 3, INNER_NOMINATE_MS)?;
+        let cands = self.nominate(b, c, 3, inner_ms("MATE_INNER2_MS", INNER_NOMINATE_MS))?;
         Ok(!self.mate2_lines(b, c, &cands, false, 1)?.is_empty())
     }
 
@@ -452,6 +485,223 @@ impl Solver {
     }
 }
 
+/// At an OR node, a candidate whose subtree hits an enumeration cap simply
+/// fails to prove (the search moves on to the next candidate); budget and
+/// time errors still abort.
+fn or_ok(r: Result<bool, MateError>) -> Result<bool, MateError> {
+    match r { Err(MateError::Incomplete(..)) => Ok(false), other => other }
+}
+
+/// Time the nominating search gets when looking for a mate-in-3 at an inner
+/// node of a mate-in-4 proof.
+pub const INNER_NOMINATE3_MS: u64 = 1_500;
+/// The second, longer nomination when the first finds no proven mate-in-3.
+pub const INNER_RENOMINATE3_MS: u64 = 8_000;
+
+impl Solver {
+    // ---- the mate-in-<=k prover used for mate-in-4 (prove_le / prove_forced) ----
+    //
+    // AND-OR proof search with three accelerators over has_mate_in_le:
+    //  * mover killers: a turn that completed a proof at depth k is tried first
+    //    at every later OR node of depth k (the same mating idea usually beats
+    //    many defences);
+    //  * defender killers: replies that refuted a candidate are tried first, so
+    //    a failing candidate fails after one reply;
+    //  * a memo of proven (position, k) results, shared by every branch.
+    // `deep` additionally tries EVERY mover turn at the outermost OR node (k=3)
+    // when killers and nominations fail: best-first by the strength engine's
+    // root scores, a cheap pass (mate-in-1 after each reply, killers only)
+    // before a full one, and in parallel threads (RESOLVE_THREADS). Every
+    // `true` is a proof; `false` is "not found".
+
+    fn remember_mkiller(&mut self, k: u8, t: Turn) {
+        // (see `or_ok` below for how OR nodes treat incomplete subtrees)
+        let v = &mut self.mkillers[k as usize];
+        if v.iter().any(|x| x.slice() == t.slice()) { return; }
+        v.insert(0, t);
+        v.truncate(8);
+        self.mk_gen += 1;
+    }
+
+    /// Every reply to `after` (opponent to move) leaves `c` a proven win within
+    /// `j` more turns. `cheap`: mate-in-1 after each reply plus mover killers
+    /// only (no nominations) -- a fast filter, never a refutation.
+    fn prove_forced(&mut self, after: &Board, c: Color, j: u8, deep: bool, cheap: bool) -> Result<bool, MateError> {
+        let o = c.other();
+        let replies = self.successors(after, o)?;
+        if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Ok(false); }
+        let mut idx: Vec<usize> = (0..replies.len()).collect();
+        idx.sort_by_key(|&i| {
+            let t = &replies[i].0;
+            let is_killer = self.killers.iter().any(|k| k.slice() == t.slice());
+            let mat = replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32;
+            (if is_killer { 0 } else { 1 }, -mat)
+        });
+        let mut rest: Vec<usize> = Vec::new();
+        for &i in &idx {
+            let rb = &replies[i].1;
+            if rb.outcome != Outcome::Ongoing { continue; }
+            if self.has_mate_in_1(rb, c)? { continue; }
+            if j <= 1 { self.remember_killer(replies[i].0); return Ok(false); }
+            rest.push(i);
+        }
+        for &i in &rest {
+            let (rt, rb) = replies[i];
+            let ok = if cheap { self.prove_le_cheap(&rb, c, j)? } else { self.prove_le(&rb, c, j, deep)? };
+            if !ok { self.remember_killer(rt); return Ok(false); }
+        }
+        Ok(true)
+    }
+
+    /// Mate within `k` using only mate-in-1 and the mover killers (no search).
+    fn prove_le_cheap(&mut self, b: &Board, c: Color, k: u8) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        if k <= 1 { return Ok(false); }
+        if let Some(&v) = self.le_memo.get(&(key(b), k, false)) { if v { return Ok(true); } }
+        let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
+        let killers = self.mkillers[k as usize].clone();
+        for kt in &killers {
+            if let Some((_, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
+                let n = *n;
+                if or_ok(self.prove_forced(&n, c, k - 1, false, true))? { return Ok(true); }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Does `c` (to move at `b`) have a PROVEN forced win within `k` turns?
+    fn prove_le(&mut self, b: &Board, c: Color, k: u8, deep: bool) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        if k <= 1 { return Ok(false); }
+        let mk = (key(b), k, deep);
+        if let Some(&v) = self.le_memo.get(&mk) {
+            if v { return Ok(true); }
+            // A cached miss only means the candidates tried then failed. If
+            // new mover killers have been learned since, try them first.
+            if self.le_miss_gen.get(&mk) == Some(&self.mk_gen) { return Ok(false); }
+            let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
+            let r = self.try_mkillers(&root, c, k, &mut HashSet::new())?;
+            self.le_memo.insert(mk, r);
+            if r { self.le_miss_gen.remove(&mk); } else { self.le_miss_gen.insert(mk, self.mk_gen); }
+            return Ok(r);
+        }
+        if deep { if let Some(&true) = self.le_memo.get(&(key(b), k, false)) { return Ok(true); } }
+        let r = self.prove_le_inner(b, c, k, deep)?;
+        self.le_memo.insert(mk, r);
+        if !r { self.le_miss_gen.insert(mk, self.mk_gen); }
+        Ok(r)
+    }
+
+    /// Try the current mover killers at k (skipping children in `tried`).
+    fn try_mkillers(&mut self, root: &[(Turn, Board)], c: Color, k: u8, tried: &mut HashSet<Key>) -> Result<bool, MateError> {
+        let killers = self.mkillers[k as usize].clone();
+        for kt in &killers {
+            if let Some(&(t, n)) = root.iter().find(|(t, n)| t.slice() == kt.slice() && n.outcome == Outcome::Ongoing) {
+                if !tried.insert(key(&n)) { continue; }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
+            }
+        }
+        Ok(false)
+    }
+
+    fn prove_le_inner(&mut self, b: &Board, c: Color, k: u8, deep: bool) -> Result<bool, MateError> {
+        // An OR node too wide to enumerate cannot be searched, but that is only
+        // "not found" here (an AND node above decides what it means).
+        let root = match self.successors(b, c) { Err(MateError::Incomplete(..)) => return Ok(false), r => r? };
+        let mut tried: HashSet<Key> = HashSet::new();
+        // 1. Mover killers.
+        if self.try_mkillers(&root, c, k, &mut tried)? { return Ok(true); }
+        // 2. Nominations (a short and a longer search).
+        let depth = 2 * k as i32 - 1;
+        let times = if k >= 3 {
+            vec![inner_ms("MATE_INNER3_MS", INNER_NOMINATE3_MS), inner_ms("MATE_INNER3_RETRY_MS", INNER_RENOMINATE3_MS)]
+        } else {
+            vec![inner_ms("MATE_INNER2_MS", INNER_NOMINATE_MS), inner_ms("MATE_INNER2_RETRY_MS", INNER_NOMINATE_MS * 4)]
+        };
+        for ms in times {
+            let cands = self.nominate(b, c, depth, ms)?;
+            for &(t, n) in &root {
+                let kn = key(&n);
+                if n.outcome != Outcome::Ongoing || !cands.contains(&kn) || !tried.insert(kn) { continue; }
+                if or_ok(self.prove_forced(&n, c, k - 1, false, false))? { self.remember_mkiller(k, t); return Ok(true); }
+            }
+        }
+        if !deep || k < 3 { return Ok(false); }
+        // 3. Deep: every other mover turn, best-first by the last search's root
+        //    scores; a cheap pass over all of them, then a full pass.
+        let mut score: HashMap<Key, i32> = HashMap::new();
+        for (t, v) in self.se.root_scores() { score.insert(key(&child(b, t, c)), *v); }
+        let mut rest: Vec<(Turn, Board)> = root.iter().copied()
+            .filter(|(_, n)| n.outcome == Outcome::Ongoing && !tried.contains(&key(n))).collect();
+        rest.sort_by_key(|(_, n)| -(score.get(&key(n)).copied().unwrap_or(i32::MIN / 2) as i64));
+        for cheap in [true, false] {
+            if let Some(t) = self.deep_or(&rest, c, k, cheap)? { self.remember_mkiller(k, t); return Ok(true); }
+        }
+        Ok(false)
+    }
+
+    /// The deep OR scan of `cands` (parallel when RESOLVE_THREADS > 1): the
+    /// first mover turn proven to force a win within k-1 more turns.
+    fn deep_or(&mut self, cands: &[(Turn, Board)], c: Color, k: u8, cheap: bool) -> Result<Option<Turn>, MateError> {
+        let threads = RESOLVE_THREADS.load(AtomicOrdering::Relaxed).min(cands.len()).max(1);
+        if threads <= 1 {
+            for &(t, n) in cands {
+                if or_ok(self.prove_forced(&n, c, k - 1, false, cheap))? { return Ok(Some(t)); }
+            }
+            return Ok(None);
+        }
+        let found: std::sync::Mutex<Option<Turn>> = std::sync::Mutex::new(None);
+        let stop = AtomicBool::new(false);
+        let next = AtomicUsize::new(0);
+        let (budget, deadline) = (self.budget, self.deadline);
+        let (killers, mkillers) = (self.killers.clone(), self.mkillers.clone());
+        let results: Vec<(Result<(), MateError>, u64)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = (0..threads).map(|_| {
+                let (found, stop, next, killers, mkillers) = (&found, &stop, &next, killers.clone(), mkillers.clone());
+                sc.spawn(move || {
+                    let mut w = Solver::nominating_worker(budget, deadline, killers, mkillers);
+                    let r = loop {
+                        if stop.load(AtomicOrdering::Relaxed) { break Ok(()); }
+                        let i = next.fetch_add(1, AtomicOrdering::Relaxed);
+                        if i >= cands.len() { break Ok(()); }
+                        let (t, n) = cands[i];
+                        match or_ok(w.prove_forced(&n, c, k - 1, false, cheap)) {
+                            Ok(true) => { *found.lock().unwrap() = Some(t); stop.store(true, AtomicOrdering::Relaxed); break Ok(()); }
+                            Ok(false) => {}
+                            Err(e) => break Err(e),
+                        }
+                    };
+                    (r, w.stats.nodes)
+                })
+            }).collect();
+            hs.into_iter().map(|h| h.join().expect("deep worker panicked")).collect()
+        });
+        let mut err = None;
+        for (r, nodes) in results {
+            self.stats.nodes += nodes;
+            if let Err(e) = r { err = Some(e); }
+        }
+        if let Some(t) = *found.lock().unwrap() { return Ok(Some(t)); }
+        match err { Some(e) => Err(e), None => Ok(None) }
+    }
+
+    /// Proven mate-in-4 first turns for `c` at `b` among `cand_keys`: after every
+    /// legal reply the mover has a proven forced win within 3 more turns.
+    fn mate4_lines(&mut self, b: &Board, c: Color, cand_keys: &[Key]) -> Result<Vec<Line>, MateError> {
+        let mut out = Vec::new();
+        if cand_keys.is_empty() { return Ok(out); }
+        let root = self.successors(b, c)?;
+        for (t, n) in &root {
+            if n.outcome != Outcome::Ongoing || !cand_keys.contains(&key(n)) { continue; }
+            if self.prove_forced(n, c, 3, false, false)? {
+                out.push(Line { turn: *t, after: *n, defence: None, finish: None, mates_after_defence: 0,
+                                replies: 0, continuations: Vec::new() });
+            }
+        }
+        Ok(out)
+    }
+}
+
 /// Solve `b` for the side to move: mate-in-1 lines (complete); else proven
 /// mate-in-2 lines among the nominated first turns; else, if `max_mate >= 3`,
 /// proven mate-in-3 lines (see the module doc). `budget` bounds `apply_turn`
@@ -471,7 +721,7 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate:
         .map(|(t, n)| Line { turn: *t, after: *n, defence: None, finish: None,
                              mates_after_defence: 0, replies: 0, continuations: Vec::new() })
         .collect();
-    let mut sol = Solution { mate1, mate2: Vec::new(), mate3: Vec::new(), stats: s.stats };
+    let mut sol = Solution { mate1, mate2: Vec::new(), mate3: Vec::new(), mate4: Vec::new(), stats: s.stats };
     if !sol.mate1.is_empty() || max_mate < 2 { sol.stats = s.stats; return Ok(sol); }
 
     // Nomination budgets: a 3-ply search settles in a few seconds even on a
@@ -492,6 +742,15 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate:
     cand3.sort();
     cand3.dedup();
     sol.mate3 = s.mate3_lines(b, c, &cand3)?;
+    if !sol.mate3.is_empty() || max_mate < 4 { sol.stats = s.stats; return Ok(sol); }
+
+    // ---- mate-in-4: nominated by a 7-ply search and by the hints ----
+    let root7_ms = if time_ms > 0 { (time_ms / 3).clamp(1_000, 120_000) } else { 20_000 };
+    let mut cand4 = s.nominate(b, c, 7, root7_ms)?;
+    cand4.extend_from_slice(extra_keys);
+    cand4.sort();
+    cand4.dedup();
+    sol.mate4 = s.mate4_lines(b, c, &cand4)?;
     sol.stats = s.stats;
     Ok(sol)
 }
@@ -553,8 +812,302 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], m
     let m1: Vec<String> = sol.mate1.iter().take(MAX_LINES_EMITTED).map(|l| line_json(&b, l, c)).collect();
     let m2: Vec<String> = sol.mate2.iter().map(|l| line_json(&b, l, c)).collect();
     let m3: Vec<String> = sol.mate3.iter().map(|l| line_json(&b, l, c)).collect();
-    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"mate3\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
+    let m4: Vec<String> = sol.mate4.iter().map(|l| line_json(&b, l, c)).collect();
+    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"mate3\":[{}],\"mate4\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
             if c == Color::Red { "red" } else { "blue" },
-            m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), sol.stats.root_successors, sol.stats.nodes,
+            m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), m4.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
+}
+
+/// The whole line for a proven mate-in-4 first turn, for "show solution"
+/// (SigilBench dev set v2, whose mate-in-4 puzzles were mined and never had
+/// stored lines). `after_sfn` is the position after the first turn. The
+/// defence is the hardest reply classified: one leaving the mover no
+/// mate-in-1 and no mate-in-2 the solver finds, else one needing a mate-in-2,
+/// else any; the defender's best material first, at most `probe` replies
+/// classified. The rest of the line is `solve`'s mate-in-<=3 line against
+/// it, so the JSON nests like a mate-in-3 line one level deeper:
+/// `{actions, after, defence, replies, defence_needs, continuations: [line]}`.
+pub fn mate4_line_json(sfn: &str, after_sfn: &str, budget: u64, time_ms: u64, probe: usize) -> String {
+    match mate4_line(sfn, after_sfn, budget, time_ms, probe) {
+        Ok(s) => s,
+        Err(e) => format!("{{\"ok\":false,\"error\":{:?}}}", e),
+    }
+}
+
+fn mate4_line(sfn: &str, after_sfn: &str, budget: u64, time_ms: u64, probe: usize) -> Result<String, String> {
+    let merr = |e: MateError| format!("{:?}", e);
+    let b = Board::from_sfn(sfn).map_err(|e| format!("{:?}", e))?;
+    let want = key(&Board::from_sfn(after_sfn).map_err(|e| format!("{:?}", e))?);
+    let c = b.to_move;
+    let o = c.other();
+    let t0 = crate::search::now_ms();
+    let mut s = Solver::new(budget, 0);
+    let root = s.successors(&b, c).map_err(merr)?;
+    let (t, n) = *root.iter().find(|(_, n)| key(n) == want).ok_or("the first turn is not a legal successor")?;
+    let replies = s.successors(&n, o).map_err(merr)?;
+    if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Err("a reply wins for the defender".into()); }
+    let mut idx: Vec<usize> = (0..replies.len()).filter(|&i| replies[i].1.outcome == Outcome::Ongoing).collect();
+    idx.sort_by_key(|&i| -(replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32));
+    let mut level: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for &i in idx.iter().take(probe.max(1)) {
+        let rb = replies[i].1;
+        let l = if s.has_mate_in_1(&rb, c).map_err(merr)? { 0 }
+                else if s.has_mate_in_le2(&rb, c).map_err(merr)? { 1 } else { 2 };
+        level[l].push(i);
+        if level[2].len() >= 4 { break; }
+    }
+    let order: Vec<usize> = level[2].iter().chain(level[1].iter()).chain(level[0].iter()).copied().collect();
+    if order.is_empty() {
+        // Every reply loses on the spot: the first turn is the whole line.
+        let (acts, _) = b.emit_actions(&t, c);
+        return Ok(format!("{{\"ok\":true,\"actions\":{},\"after\":{:?},\"replies\":{},\"seconds\":{:.3}}}",
+                          crate::actions::acts_to_json(&acts), n.to_sfn(), replies.len(),
+                          (crate::search::now_ms() - t0) / 1000.0));
+    }
+    for &i in &order {
+        let (rt, rb) = replies[i];
+        let sol = match solve(&rb, budget, time_ms, &[], 3) { Ok(x) => x, Err(_) => continue };
+        let (need, l) = if let Some(l) = sol.mate1.first() { (1, l) }
+            else if let Some(l) = sol.mate2.first() { (2, l) }
+            else if let Some(l) = sol.mate3.first() { (3, l) } else { continue };
+        let (acts, _) = b.emit_actions(&t, c);
+        let (dacts, _) = n.emit_actions(&rt, o);
+        return Ok(format!("{{\"ok\":true,\"actions\":{},\"after\":{:?},\"defence\":{{\"actions\":{},\"after\":{:?}}},\"replies\":{},\"defence_needs\":{},\"continuations\":[{}],\"seconds\":{:.3}}}",
+                          crate::actions::acts_to_json(&acts), n.to_sfn(),
+                          crate::actions::acts_to_json(&dacts), rb.to_sfn(), replies.len(), need,
+                          line_json(&rb, l, c), (crate::search::now_ms() - t0) / 1000.0));
+    }
+    Err(format!("no line found against {} classified replies", order.len()))
+}
+
+// ---------------------------------------------------------------------------
+// SigilBench grading (`bench/`): judge ONE submitted turn by proof.
+// ---------------------------------------------------------------------------
+
+/// Time for each re-nomination `judge_turn` makes before calling a turn unproven.
+pub const BENCH_RENOMINATE_MS: u64 = 3_000;
+
+/// Verdict on a submitted turn, by `judge_turn`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnVerdict {
+    /// Proven: the turn forces a win within the allowed number of the mover's
+    /// turns (counting the submitted turn). `true` when it wins on the spot.
+    Mate { immediate: bool },
+    /// Proven NOT to force a win within the allowed turns (exhaustive).
+    NotMate,
+    /// No proof either way: some reply leaves the mover no mate-in-1, and the
+    /// nominate-then-prove search found no mate-in-2 after it. Mate-in-3 only.
+    Unproven,
+}
+
+/// Full position identity for matching a replayed turn against the legal
+/// successors: everything the SFN carries except the side to move, the turn
+/// counter and the (constant) spell list.
+pub type FullKey = (u64, u64, u64, [u8; 2], [u8; 2], [u8; 2], [u8; 2]);
+
+pub fn full_key(b: &Board) -> FullKey {
+    (b.stones[0], b.stones[1], b.walls, b.spell_counter, b.lock, b.springlock, b.bank)
+}
+
+/// The legal successor of `b` (side to move plays) whose position matches
+/// `claimed` (an after-position replayed from a submitted action list, e.g. by
+/// the browser's applyAITurn), as `child` builds it (end-of-turn effects and
+/// the outcome applied). `Ok(None)` = no legal turn reaches that position.
+pub fn legal_successor(b: &Board, claimed: &Board, budget: u64, time_ms: u64)
+    -> Result<Option<Board>, MateError>
+{
+    let mut s = Solver::new(budget, time_ms);
+    let want = full_key(claimed);
+    let c = b.to_move;
+    for t in s.turns(b, c)? {
+        s.tick()?;
+        let n = child(b, &t, c);
+        if full_key(&n) == want { return Ok(Some(n)); }
+    }
+    Ok(None)
+}
+
+/// SigilBench: does the mover's turn that produced `after` (opponent to move,
+/// as `child` builds it) force a win within `n` of the mover's turns, counting
+/// the turn just played? A faster win counts (a mate-in-1 answer to a
+/// mate-in-3 puzzle is correct). Proofs:
+///
+/// * the turn itself wins: `Mate { immediate: true }`.
+/// * n = 2: every reply is enumerated and, after each, the mover's mate-in-1
+///   is settled by full enumeration, so both `Mate` and `NotMate` are proofs.
+/// * n = 3: a reply that wins outright, or (none needing more) is a proof of
+///   `NotMate`; otherwise each reply without a mate-in-1 needs a mate-in-2,
+///   found by nominate-then-prove (`has_mate_in_le2`). A miss there is NOT a
+///   refutation, so it returns `Unproven` rather than `NotMate`.
+/// * n >= 4 is not supported yet (`Unproven` unless decided by the cheap
+///   checks).
+pub fn judge_turn(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n, false);
+    (r, s.stats)
+}
+
+/// `judge_turn` that never returns `Unproven` for n <= 3: every reply that
+/// leaves no mate-in-1 is settled by an EXHAUSTIVE mate-in-2 decision
+/// (`has_mate_in_le2_exhaustive`), so both `Mate` and `NotMate` are proofs.
+/// Far more expensive in the refutation case (every mover turn after the
+/// refuting reply needs its own refuting reply plus a full no-mate-in-1
+/// enumeration), so it is the resolver for answers `judge_turn` left
+/// unproven, not the first pass. `Err(Budget)` = still unresolved.
+pub fn judge_turn_exhaustive(after: &Board, mover: Color, n: u8, budget: u64, time_ms: u64)
+    -> (Result<TurnVerdict, MateError>, MateStats)
+{
+    let mut s = Solver::new(budget, time_ms);
+    let r = s.judge_turn(after, mover, n, true);
+    (r, s.stats)
+}
+
+impl Solver {
+    /// Exhaustive: does `c` (to move at `b`) have a forced win in at most 2 of
+    /// its turns? Mate-in-1 first, then the nominated mate-in-2, then EVERY
+    /// distinct first turn is tested with `forced_after`, which is exhaustive
+    /// at both plies. `false` is therefore a proof that no mate-in-2 exists.
+    /// Parallel over first turns when `RESOLVE_THREADS` > 1.
+    fn has_mate_in_le2_exhaustive(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        // Cheap nominated pass (also seeds the killer replies).
+        if self.has_mate_in_le2(b, c)? { return Ok(true); }
+        let cands: Vec<Board> = self.successors(b, c)?.into_iter().map(|(_, n)| n)
+            .filter(|n| n.outcome == Outcome::Ongoing)   // a win was caught by has_mate_in_1
+            .collect();
+        let threads = RESOLVE_THREADS.load(AtomicOrdering::Relaxed).min(cands.len()).max(1);
+        if threads <= 1 {
+            for n in &cands {
+                if self.forced_after(n, c)?.is_some() { return Ok(true); }
+            }
+            return Ok(false);
+        }
+        // Workers take first turns off a shared index; any proof stops them
+        // all. A refutation needs every worker to finish without error.
+        let found = AtomicBool::new(false);
+        let next = AtomicUsize::new(0);
+        let (budget, deadline, killers) = (self.budget, self.deadline, self.killers.clone());
+        let results: Vec<(Result<(), MateError>, u64)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = (0..threads).map(|_| {
+                let (found, next, cands, killers) = (&found, &next, &cands, killers.clone());
+                sc.spawn(move || {
+                    let mut w = Solver::worker(budget, deadline, killers);
+                    let r = loop {
+                        if found.load(AtomicOrdering::Relaxed) { break Ok(()); }
+                        let i = next.fetch_add(1, AtomicOrdering::Relaxed);
+                        if i >= cands.len() { break Ok(()); }
+                        match w.forced_after(&cands[i], c) {
+                            Ok(Some(_)) => { found.store(true, AtomicOrdering::Relaxed); break Ok(()); }
+                            Ok(None) => {}
+                            Err(e) => break Err(e),
+                        }
+                    };
+                    (r, w.stats.nodes)
+                })
+            }).collect();
+            hs.into_iter().map(|h| h.join().expect("resolver worker panicked")).collect()
+        });
+        let mut err = None;
+        for (r, nodes) in results {
+            self.stats.nodes += nodes;
+            if let Err(e) = r { err = Some(e); }
+        }
+        if found.load(AtomicOrdering::Relaxed) { return Ok(true); }
+        match err { Some(e) => Err(e), None => Ok(false) }
+    }
+
+    /// A solver for one resolver thread: no nominating search is needed
+    /// (`forced_after` never nominates), so its table is tiny.
+    fn worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>) -> Self {
+        Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
+                 killers, se: crate::search::Search::new(10), le_memo: HashMap::new(),
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers: Default::default() }
+    }
+
+    /// A worker that may nominate (deep mate-in-4 search): a real, smaller
+    /// strength engine with the shipped settings.
+    fn nominating_worker(budget: u64, deadline: Option<f64>, killers: Vec<Turn>, mkillers: [Vec<Turn>; 4]) -> Self {
+        let mut se = crate::search::Search::new(16);
+        se.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap_or_default();
+        se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+        let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+        se.set_adaptive(p, e, h);
+        se.set_elastic(None);
+        se.set_root_resort(true);
+        Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
+                 killers, se, le_memo: HashMap::new(),
+                 le_miss_gen: HashMap::new(), mk_gen: 0, mkillers }
+    }
+
+    fn judge_turn(&mut self, after: &Board, c: Color, n: u8, exhaustive: bool) -> Result<TurnVerdict, MateError> {
+        if won_by(after.outcome, c) { return Ok(TurnVerdict::Mate { immediate: true }); }
+        if after.outcome != Outcome::Ongoing || n <= 1 { return Ok(TurnVerdict::NotMate); }
+        let o = c.other();
+        let replies = self.successors(after, o)?;
+        // Cheap pass first: an outright win for the defender refutes at once.
+        if replies.iter().any(|(_, rb)| won_by(rb.outcome, o)) { return Ok(TurnVerdict::NotMate); }
+        let mut need_m2: Vec<Board> = Vec::new();
+        for (_, rb) in &replies {
+            if rb.outcome != Outcome::Ongoing { continue; }      // the reply loses on the spot
+            if self.has_mate_in_1(rb, c)? { continue; }
+            if n == 2 { return Ok(TurnVerdict::NotMate); }       // exhaustive: no mate-in-1 here
+            need_m2.push(*rb);
+        }
+        if need_m2.is_empty() { return Ok(TurnVerdict::Mate { immediate: false }); }
+        if n == 4 {
+            // Every reply without a mate-in-1 needs a proven win within 3 more
+            // turns (nominate-then-prove; a miss is unproven, not wrong).
+            // Fast pass over every reply first (killers, memo, nominations),
+            // then -- resolver mode -- the deep search on what is left.
+            let mut hard: Vec<Board> = Vec::new();
+            for rb in &need_m2 {
+                if !self.prove_le(rb, c, 3, false)? {
+                    if !exhaustive { return Ok(TurnVerdict::Unproven); }   // first-pass grading: stop at the first miss
+                    hard.push(*rb);
+                }
+            }
+            for rb in &hard {
+                if !self.prove_le(rb, c, 3, true)? { return Ok(TurnVerdict::Unproven); }
+            }
+            return Ok(TurnVerdict::Mate { immediate: false });
+        }
+        if n > 4 { return Ok(TurnVerdict::Unproven); }
+        if exhaustive {
+            // Cheap proofs first: a reply whose mate-in-2 the nominator finds
+            // never needs the exhaustive walk. The rest are decided exactly;
+            // the first reply with no mate-in-2 at all refutes the answer.
+            let mut hard: Vec<Board> = Vec::new();
+            for rb in &need_m2 {
+                if !self.has_mate_in_le2(rb, c)? { hard.push(*rb); }
+            }
+            // Defender's likeliest refutations first (strength-engine ORDER
+            // only): then usually one exhaustive "no mate-in-2" proof settles it.
+            if hard.len() > 1 {
+                self.check_deadline()?;
+                let o = c.other();
+                let _ = self.se.go(after, o, 3, BENCH_RENOMINATE_MS);
+                let mut score: HashMap<Key, i32> = HashMap::new();
+                for (t, v) in self.se.root_scores() { score.insert(key(&child(after, t, o)), *v); }
+                hard.sort_by_key(|rb| -(score.get(&key(rb)).copied().unwrap_or(i32::MIN / 2) as i64));
+            }
+            for rb in &hard {
+                if !self.has_mate_in_le2_exhaustive(rb, c)? { return Ok(TurnVerdict::NotMate); }
+            }
+            return Ok(TurnVerdict::Mate { immediate: false });
+        }
+        for rb in &need_m2 {
+            if self.has_mate_in_le2(rb, c)? { continue; }
+            // The inner nomination is a 250 ms search; before calling a turn
+            // unproven, nominate again with a longer 3-ply and a 5-ply search.
+            let mut cands = self.nominate(rb, c, 3, BENCH_RENOMINATE_MS)?;
+            cands.extend(self.nominate(rb, c, 5, BENCH_RENOMINATE_MS)?);
+            cands.sort();
+            cands.dedup();
+            if self.mate2_lines(rb, c, &cands, false, 1)?.is_empty() { return Ok(TurnVerdict::Unproven); }
+        }
+        Ok(TurnVerdict::Mate { immediate: false })
+    }
 }

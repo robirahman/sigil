@@ -10,6 +10,9 @@ use std::collections::HashSet;
 use std::io::BufRead;
 
 fn main() {
+    // Every successor under the full browser rules (cast_enum::set_full_rules);
+    // SIGIL_NARROW_RULES=1 restores the strength engine's enumeration.
+    sigil_engine::cast_enum::set_full_rules(std::env::var("SIGIL_NARROW_RULES").is_err());
     for line in std::io::stdin().lock().lines() {
         let sfn = line.expect("stdin");
         let sfn = sfn.trim();
