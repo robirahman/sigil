@@ -300,7 +300,7 @@ Arenas ran on branch `v35-fix` rather than `ai-training-plan`, because v36 will 
 | **Fissure + Dividend pooled** | 2,158 | **+20.3** | **[+5.6, +35.0]** |
 | core | 2,160 | +5.8 | [−8.9, +20.4] |
 
-**Passes.** `SHIPPED_EVAL = "nnue_snn2_base"` is set on `ai-training-plan` (7c01638). The preset is now in the wasm build too, because a `SHIPPED_EVAL` the browser cannot load would panic in `configure`. That costs ~257 KB of wasm until Step 5's net replaces it. `the_net_sees_a_walled_slot_as_blocked_for_both_sides` now names `nnue_mt256`, since it tests the dead mask of a net without wall inputs. `cargo test` 199/199, wasm32 `cargo check` clean.
+**Passes.** `SHIPPED_EVAL = "nnue_snn2_base"` is set on `ai-training-plan` (7c01638). Tactical gate on that build: **9/12**, as v35. Q1/Q2 pass, and G2 passes again: with the new net Blue does not replay the GWSMF5 blunder at depth 5 or 10 s, which v35-fix on `nnue_mt256` did. G1 still fails (Red values the refutation at +0.65 to +2.0 stones against +3.56 to +3.93): the Flourish resolution gap. The preset is now in the wasm build too, because a `SHIPPED_EVAL` the browser cannot load would panic in `configure`. That costs ~257 KB of wasm until Step 5's net replaces it. `the_net_sees_a_walled_slot_as_blocked_for_both_sides` now names `nnue_mt256`, since it tests the dead mask of a net without wall inputs. `cargo test` 199/199, wasm32 `cargo check` clean.
 
 If it passes, set `SHIPPED_EVAL = "nnue_snn2_base"` on `ai-training-plan` so r6 self-play uses it. If Step 3 has to start before this verdict, r6 runs on `nnue_mt256`; that is fine.
 
