@@ -304,7 +304,7 @@
 											<picture>
 												<source type="image/webp" x-bind:srcset="getSpellImgWebp('charm' + i)" />
 												<img class="spell charm-spell" alt="" src="static/images/spacer.gif"
-													x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`], 'spell--red-lock': redLock === spellDict[`charm${i}`], 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }"
+													x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`] || springSealLock(`charm${i}`, 'blue'), 'spell--red-lock': redLock === spellDict[`charm${i}`] || springSealLock(`charm${i}`, 'red'), 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }"
 													x-bind:src="getSpellImg('charm' + i)"
 													x-on:click.stop="handleCharmClick(`charm${i}`)"
 													x-on:click.outside="closeSpellTooltip"
@@ -447,7 +447,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
-		<script src="static/scripts/game-board-local.js?v=41"></script>
+		<script src="static/scripts/game-board-local.js?v=42"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->

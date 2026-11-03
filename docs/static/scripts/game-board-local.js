@@ -70,6 +70,10 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Each side's springlock: its locked spell once cast a second time
+			// through Seal of Spring (springSealLock), or ''.
+			redSpringlock: '',
+			blueSpringlock: '',
 			// Providence bank sizes (badge beside the dice).
 			redBank: 0,
 			blueBank: 0,
@@ -484,6 +488,14 @@ document.addEventListener('alpine:init', () => {
 				});
 			},
 
+			/** Seal of Spring takes a side's lock highlight while that side's
+			 *  locked spell is springlocked: cast a second time through the
+			 *  Seal, so spent rather than just locked. */
+			springSealLock(slot, color) {
+				const spring = color === 'red' ? this.redSpringlock : this.blueSpringlock;
+				return !!spring && !!this.spellDict[slot] && baseSpellName(this.spellDict[slot]) === 'Seal_of_Spring';
+			},
+
 			exportPosition() {
 				if (this.currentSfn) {
 					navigator.clipboard.writeText(this.currentSfn).then(() => {
@@ -787,6 +799,8 @@ document.addEventListener('alpine:init', () => {
 				this.blueBank = state.blue_bank || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
+				this.redSpringlock = state.red_springlock || '';
+				this.blueSpringlock = state.blue_springlock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
 				this.pushSourceNode = '';
@@ -2813,6 +2827,8 @@ document.addEventListener('alpine:init', () => {
 						// here or the ...nodes rest treats them as node names.
 						redbank,
 						bluebank,
+						redspringlock,
+						bluespringlock,
 						...nodes
 					} = changedBoardState;
 
@@ -2830,6 +2846,12 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (isValidStateKey(redlock)) {
 						_this.redLock = redlock;
+					}
+					if (isValidStateKey(redspringlock)) {
+						_this.redSpringlock = redspringlock || '';
+					}
+					if (isValidStateKey(bluespringlock)) {
+						_this.blueSpringlock = bluespringlock || '';
 					}
 					if (isValidStateKey(redspellcounter)) {
 						_this.redSpellCounter = redspellcounter;

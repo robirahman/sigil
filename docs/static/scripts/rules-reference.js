@@ -109,6 +109,7 @@ const SIGIL_SPELL_NOTES = {
 	Seal_of_Spring: [
 		'While you fill it, you may cast the 3- or 5-node spell your lock is on one more time.',
 		'That second cast counts toward your spell count. The spell is then used up until your lock moves to a different spell.',
+		'While it is used up, the board puts your lock\'s coloured ring on Seal of Spring as well as on the spell.',
 	],
 	Syzygy: [
 		'The spells opposite Syzygy are the 1-node and 3-node spells straight across the board from it.',
