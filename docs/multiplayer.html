@@ -1406,6 +1406,8 @@
 						winner: roomData.winner || null,
 						finalSfn: roomData.finalSfn || null,
 						setupSfn: roomData.setupSfn || null,
+						// How the game ended, for the review's replay check.
+						endReason: recordEnding(roomData).endReason,
 						shareUrl: this.shareUrl,
 						roomCode: code,
 						authManager: _authManager,
@@ -2190,7 +2192,7 @@
 	<script src="static/scripts/engine/rust-ai.js?v=35"></script>
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js"></script>
-	<script src="static/scripts/engine/game-review.js?v=36"></script>
+	<script src="static/scripts/engine/game-review.js?v=39"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/engine/position-rating.js?v=35"></script>
@@ -2203,7 +2205,7 @@
 	<script src="static/scripts/board-marks.js?v=35"></script>
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js?v=35"></script>
-	<script src="static/scripts/game-board-multiplayer.js?v=35"></script>
+	<script src="static/scripts/game-board-multiplayer.js?v=39"></script>
 	<script src="static/scripts/rules-reference.js?v=35"></script>
 	<script src="static/scripts/help.js?v=35"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
