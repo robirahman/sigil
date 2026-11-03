@@ -30,7 +30,7 @@ P2=$!
 python3 - "$BIN" "$OUT" "$IN" <<'PY' > $OUT/m5.log 2>&1 &
 import json, subprocess, sys, concurrent.futures as cf
 bin_, out, inn = sys.argv[1:4]
-cs = json.load(open(inn + '/m5_candidates_spike.json'))
+cs = json.load(open(inn + '/m5_candidates_spike.json'))['candidates']
 def one(c):
     o = subprocess.run([bin_ + '/cert_tool', 'make'], input=f"5\t{c['hints'][0]}\t2000000000000\t3600000\t0\n",
                        capture_output=True, text=True).stdout
