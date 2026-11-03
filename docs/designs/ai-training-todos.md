@@ -69,9 +69,9 @@ Steps 0, 1 and 2 are independent and can run in parallel. Step 3 waits for Step 
 
 | # | Task | Depends on | Rough cost | Status |
 |---|---|---|---|---|
-| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **todo** |
-| 1 | Human-game audit (deep_review scan/flag/probe/report) and relabelled human chunks | – | ~$35 | **todo** |
-| 2 | Phase 3a: re-prep `nnue_mt256`'s corpus with walls/bank, train `snn2` + `ctrl`, arenas | – | ~$20 | **todo** |
+| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **running** (arenas launched 2026-11-03 03:37 UTC, runs in `data/r6/step0_runs.txt`); tactical gate run: 9/12 (see below) |
+| 1 | Human-game audit (deep_review scan/flag/probe/report) and relabelled human chunks | – | ~$35 | **running** (529 games / 15,002 positions since 10-07; scan runs in `data/deep_review/scan_runs_2026-11.txt`) |
+| 2 | Phase 3a: re-prep `nnue_mt256`'s corpus with walls/bank, train `snn2` + `ctrl`, arenas | – | ~$20 | **running** (prep run in `data/r6/prep_run.txt`) |
 | 3 | r6 self-play on the corrected v35 (16 Spot c3d-90, depth 4, ~300k games) | 0 (and 2, optionally) | ~$80 | **todo** |
 | 4 | Policy retrain on r6 (`r3_policy.sh`), policy arena | 3 | ~$15 | **todo** |
 | 5 | Final value net `nnue_r6` on corpus + r6 + human chunks, net arena | 1, 3 | ~$20 | **todo** |
@@ -82,21 +82,29 @@ Code that does not exist yet:
 
 | id | What | Needed by |
 |---|---|---|
-| C1 | `engine/harness/tactical_gate.py`. Load `engine/data/benchmarks/{gwsmf5_hydrated,qjlgqr_room}.json`. GWSMF5 `b 26`: at depth 5 and at 10 s, the best move is not `b11, Charge, b6->b12`, and Red's `b6, dash (sac c3,c5), Flourish` is in the ply-1 window. QJLGQR `r 25` with the real game history: never `c9` at depths 2–6. QJLGQR `b 26`: `mate_in == 1`. Exit nonzero on any failure. | 0, 6 |
-| C2 | `nn_eval.py golden`: sample positions with walls != 0 and bank != 0 as well as random ones (e.g. 64 + 32 + 32), so an SNN2 net's golden vectors actually test the new input rows in `cargo test` and `nn-wasm-parity.js` | 2, 5 |
-| C3 | `nn_eval.py prep`: print how many rows have walls != 0 and how many have bank != 0 | 2 |
-| C4 | Per new net: `engine/nets/<preset>.bin` + `_golden.txt`, an `NnSpec` in `nn.rs`, the name in `EVAL_NAMES`, a `weights_by_name` entry (`Weights { nn: Some(..), ..MATERIAL_TEMPO }`) in `eval.rs`, and a golden test in `tests.rs` | 2, 5 |
+| C1 | **Done** (d5e979a): `engine/harness/tactical_gate.py` + `engine/data/benchmarks/qjlgqr_hydrated.json`. G1 = Red's search after Blue's GWSMF5 blunder values the position within 0.5 stones of the recorded refutation; G2 = Blue does not replay the blunder (depth 5, 10 s); Q1 = no 3rd-repetition loss at QJLGQR `r 25` (depths 2–6, 10 s); Q2 = mate in 1 at `b 26` | 0, 6 |
+| C2 | **Done** (d5e979a): `nn_eval.py golden --n-feature 32` adds walled and banked positions for SNN2 nets | 2, 5 |
+| C3 | **Done** (7ea0404): `nn_eval.py prep` prints a `COVERAGE` line | 2 |
+| C4 | **Done** (d5e979a): `engine/harness/add_net_preset.py <name> <net.bin> <golden.txt> --doc ... [--wasm]`; self-tested (199/199 cargo tests) | 2, 5 |
 | C5 | *(Optional, only if upweighting human data is still wanted.)* A per-prefix sample weight in prep or train, keeping copies of a game on one side of the game split | 5 |
 
-One check is still open:
+Open check (now resolved):
 
 | id | What |
 |---|---|
-| T1 | Confirm that `aiTelemetry` is arriving on `completed_games` written since 2026-10-31, and that the **live** database rules include the `aiTelemetry` block. Live rules have lagged the repo before. If the live rules reject the field, v35 AI games may be failing to save. This needs Robi's Firebase access. |
+| T1 | **Checked 2026-11-03: telemetry is arriving.** Every Rust-AI game since 2026-11-01 03:35 UTC carries `aiTelemetry` (55 of 55 in the last 80 records; schema `v: 1`, `engineVersion: 35`, `byPly` stored by Firebase as an array indexed by turn number). The **live** rules do not contain the repo's `aiTelemetry` validation block, but the live `completed_games/$gameId` rule has no catch-all `$other` rule, so the field is accepted unvalidated. Deploying the repo rules would add the validation. |
 
 ---
 
 ### Step 0: Measure what v35 shipped
+
+**Tactical gate on v35 (2026-11-03, `tactical_gate.py`, single thread, 9/12):**
+*   QJLGQR: all pass. At `r 25`, depths 2–6 and 10 s, Red never allows the 3rd repetition. At `b 26`, Blue finds the mate in 1. The repetition fixes work.
+*   GWSMF5 G2 passes: Blue does not replay `b11, Charge` at depth 5 or at 10 s (10 s reaches only depth 3 single-threaded).
+*   **GWSMF5 G1 fails at depths 3, 4 and 5.** After Blue's blunder, Red's own search values the position at +0.52 / +1.07 / +0.52 stones, while the recorded refutation is worth +2.84 to +2.88. So v35 still does not see Red's `dash + Flourish`.
+    *   The dash itself is generated.
+    *   The missing piece is the **Flourish resolution**. `rank_of_result_budget` finds the exact turn only with a cast-outcome window of 4,096 (rank 31k–102k), not at 24, 64, 128 or 512.
+    *   This is the "cast resolution" generator gap from the 2026-09-26 surprise audit, and v35 did not touch it.
 
 Do this first: r6 self-play plays with whatever `SHIPPED_POLICY` and `SHIPPED_EVAL` say.
 
