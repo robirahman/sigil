@@ -69,7 +69,7 @@ Steps 0, 1 and 2 are independent and can run in parallel. Step 3 waits for Step 
 
 | # | Task | Depends on | Rough cost | Status |
 |---|---|---|---|---|
-| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **running** (arenas launched 2026-11-03 03:37 UTC, runs in `data/r6/step0_runs.txt`); tactical gate run: 9/12 (see below) |
+| 0 | Measure v35: v35 vs v34 (core + Dividend draws), `min_width` 32 vs 96, tactical gate | – | ~$20 | **arenas done: v35 is −24.3 Elo [−39.0, −9.7] vs v34 on core draws**; bisected to `min_width` 32 and the TurnIter stage order; confirmation arenas for branch `v35-fix` running (`data/r6/step0b_runs.txt`) |
 | 1 | Human-game audit (deep_review scan/flag/probe/report) and relabelled human chunks | – | ~$35 | **running** (529 games / 15,002 positions since 10-07; scan runs in `data/deep_review/scan_runs_2026-11.txt`) |
 | 2 | Phase 3a: re-prep `nnue_mt256`'s corpus with walls/bank, train `snn2` + `ctrl`, arenas | – | ~$20 | **running** (prep run in `data/r6/prep_run.txt`) |
 | 3 | r6 self-play on the corrected v35 (16 Spot c3d-90, depth 4, ~300k games) | 0 (and 2, optionally) | ~$80 | **todo** |
@@ -97,6 +97,29 @@ Open check (now resolved):
 ---
 
 ### Step 0: Measure what v35 shipped
+
+**Arena results (2026-11-03, `ab_version.py`, 10 s per move, `data/r6/step0_result.txt`):**
+
+| arena | games | Elo (arm vs base) | 95% interval | mean depth arm / base |
+|---|---|---|---|---|
+| v35 vs v34, core draws | 2,160 | **−24.3** | [−39.0, −9.7] | 5.97 / 6.33 |
+| v35 vs v34, Dividend draws | 1,080 | +8.4 | [−12.3, +29.1] | 5.96 / 6.34 |
+| v35 (min_width 32) vs v35 with 96, core | 2,160 | −11.6 | [−26.2, +3.1] | 5.86 / 6.06 |
+
+**Bisection by search depth** (dev VM, 90 positions from human games since 10-07, 2 s each, each build's shipped config). Each variant below is v35 at min_width 96 with one v35 change reverted:
+
+| build | mean depth | median nodes |
+|---|---|---|
+| v34 | 5.38 | 204k |
+| v35 | 5.06 | 106k |
+| v35, min_width 96 | 5.23 | 155k |
+| … + v34 TurnIter stage order (`Moves -> MoveCast -> Dash -> DashCast`) | **5.38** | 188k |
+| … + v34 dash sacrifice pairs | 5.24 | 164k |
+| … − key dashes in the policy branch | 5.24 | 156k |
+| … − repetition-mate prepass | 5.24 | 156k |
+| … − TT-hint cap | 5.19 | 161k |
+
+Two changes account for the whole depth loss: `min_width` 32 and putting `DashCast` before `Dash`. Branch `v35-fix` reverts both and keeps everything else in v35, including the repetition-mate fix and the bank cap. It is being arena-tested against v34 and against v35 (4 VMs each, core draws).
 
 **Tactical gate on v35 (2026-11-03, `tactical_gate.py`, single thread, 9/12):**
 *   QJLGQR: all pass. At `r 25`, depths 2–6 and 10 s, Red never allows the 3rd repetition. At `b 26`, Blue finds the mate in 1. The repetition fixes work.
