@@ -17,7 +17,8 @@
 #
 # Metadata: run-id, mode, branch, src, workers, max-hours, corpus, cases,
 # depth, time-ms (per-search cap, 0 = untimed), shard (k/n), resume, walk (scan:
-# backward / backward-plain / fresh), kinds (probe: only these task kinds),
+# backward / backward-plain / fresh), segment (scan: backward-walk segment
+# length, empty = whole games), kinds (probe: only these task kinds),
 # audit-engine (exported as SIGIL_AUDIT_ENGINE; `shipped` = search with the
 # build's SHIPPED_EVAL / SHIPPED_POLICY / SHIPPED_EXPLORE, `off` = eval_games'
 # legacy tfit search with the generator policy off, which no build since v24 ships).
@@ -33,6 +34,7 @@ DEPTH=$(md depth); TMS=$(md time-ms); SHARD=$(md shard); : "${SHARD:=}"
 RESUME=$(md resume); : "${RESUME:=}"
 WALK=$(md walk); : "${WALK:=backward}"
 KINDS=$(md kinds); : "${KINDS:=}"
+SEGMENT=$(md segment); : "${SEGMENT:=}"
 AUDIT=$(md audit-engine); : "${AUDIT:=shipped}"
 if [ "$AUDIT" != off ]; then export SIGIL_AUDIT_ENGINE="$AUDIT"; fi
 : "${RUN:=unknown}" "${MODE:=scan}" "${BRANCH:=main}" "${WORKERS:=$(nproc)}" "${MAXH:=4}" "${DEPTH:=6}" "${TMS:=0}"
@@ -133,6 +135,8 @@ if [ "$MODE" = probe ]; then
 else
   # A fresh walk is order-free, so it splits games into single positions.
   SPLIT=(); [ "$WALK" = fresh ] && SPLIT=(--split 1)
+  # A backward walk in segments (eval_games --segment): one long game no longer pins a worker.
+  [ -n "$SEGMENT" ] && [ "$WALK" != fresh ] && SPLIT=(--segment "$SEGMENT")
   echo "=== scan: $WALK walk, depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/eval_games.py eval --walk "$WALK" "${SPLIT[@]}" --lines $WORK/lines.json \
     --out "$OUTF" --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" "${SH[@]}" > $WORK/out/scan.log 2>&1

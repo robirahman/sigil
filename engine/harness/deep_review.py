@@ -165,11 +165,16 @@ def cmd_flag(a):
             if drop > a.threshold:
                 stats[side + ' falls'] += 1
                 r = rows[(gid, i)]
+                # A capped scan (--time-ms) can stop short of its requested depth.
+                r_j = rows.get((gid, i + 1)) if i + 1 < n else None
+                shallow = any(x is not None and x.get('d') and (x.get('depth') or 0) < x['d'] for x in (r, r_j))
+                if shallow:
+                    stats[side + ' falls on a capped (shallow) scan row'] += 1
                 telem_obj = g.get('aiTelemetry') or {}
                 t_i = telemetry_for(telem_obj, g['turnNumbers'][i] if g.get('turnNumbers') else i)
                 cases.append({'g': gid, 'i': i, 'ai': ai, 'side': side,
                               'v_i': sign * v_i, 'v_j': sign * v_j, 'drop': round(drop, 3),
-                              'terminal': i + 1 == n, 'scan_probe': r.get('probe'),
+                              'terminal': i + 1 == n, 'scan_probe': r.get('probe'), 'shallow': shallow,
                               'scan_best_is_played': (r.get('exp') is not None and
                                                       position_key(r['exp']) == position_key(pos[i + 1])),
                               'turn': g['turnNumbers'][i] if g.get('turnNumbers') else None,

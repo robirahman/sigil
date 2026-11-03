@@ -36,8 +36,15 @@ consistent along the game line (an eval drop then sits on the move that caused
 it). It does NOT make the walk much cheaper in Sigil: that entry covers one of
 the hundreds of root turns, and the siblings are the work (measured 0.88-1.00x
 the fresh walk's CPU; FINDINGS 2026-10-03). Results
-depend on the walk order, so a game is always one work item (`--split` is for
-`--walk fresh` only). The root searches the move actually played first
+depend on the walk order, so a game is one work item by default (`--split` is for
+`--walk fresh` only). `--segment N` splits a backward walk into N-position
+segments, each walked on its own table starting `--warm W` positions above the
+segment (those rows are recomputed by the segment above and discarded here):
+position i still sees i+1..i+W already searched, which is where the walk's
+consistency comes from, and one pathological game no longer pins one worker
+for hours (2026-11-03: the shipped v35 search took 3.3x the legacy scan's CPU
+on the same positions; one position took 98 min even on the legacy search).
+Rows from a segmented walk carry `seg: [lo, hi, warm]`. The root searches the move actually played first
 (`probe_first`): its value is already in the table, one ply deeper, so the
 rest of the root list runs against a tight window. `backward-plain` keeps the
 generator's order (A/B only).
@@ -277,6 +284,7 @@ def eval_game(item):
     one persistent table, 'fresh' gives every position its own."""
     gid, game, depth, time_ms, walk = item[:5]
     lo, hi = (item[5], item[6]) if len(item) > 5 else (0, None)
+    warm = item[7] if len(item) > 7 else 0
     import sigil_engine as se
     kw = _analyze_kwargs(se, depth, time_ms)
     session = None
@@ -286,12 +294,15 @@ def eval_game(item):
         session = se.SearchSession(WALK_TT_BITS)
     rows = []
     positions = game['positions']
-    order = range(len(positions) - 1)
+    n = len(positions) - 1
+    # A segmented backward walk starts `warm` positions above its segment: those
+    # searches only fill the table (the segment above emits their rows).
+    top = n if hi is None else min(n, hi + (warm if walk != 'fresh' else 0))
+    order = range(lo, top)
     if walk != 'fresh':
         order = reversed(order)
     for i in order:
-        if i < lo or (hi is not None and i >= hi):
-            continue
+        emit = hi is None or i < hi
         t0 = time.time()
         try:
             run = session.analyze if session is not None else se.analyze
@@ -299,9 +310,14 @@ def eval_game(item):
             ev = engine_eval(se)
             r = run(positions[i], ev, history_sfns=positions[:i], probe_sfn=positions[i + 1], **kw)
         except Exception as e:  # noqa: BLE001
-            rows.append({'g': gid, 'i': i, 'error': f'{type(e).__name__}: {e}'})
+            if emit:
+                rows.append({'g': gid, 'i': i, 'error': f'{type(e).__name__}: {e}'})
             continue
-        rows.append(eval_row(gid, i, r, t0, walk, ev, depth))
+        if emit:
+            row = eval_row(gid, i, r, t0, walk, ev, depth)
+            if walk != 'fresh' and hi is not None:
+                row['seg'] = [lo, hi, warm]
+            rows.append(row)
     rows.sort(key=lambda r: r['i'])
     return gid, rows
 
@@ -393,7 +409,12 @@ def cmd_eval(a):
         n = len(g['positions']) - 1
         if all((gid, i) in done for i in range(n)):
             continue
-        if a.split > 0 and a.walk == 'fresh':
+        if a.segment > 0 and a.walk != 'fresh':
+            for lo in range(0, n, a.segment):
+                hi = min(n, lo + a.segment)
+                if not all((gid, i) in done for i in range(lo, hi)):
+                    todo.append((gid, g, a.depth, a.time_ms, a.walk, lo, hi, a.warm))
+        elif a.split > 0 and a.walk == 'fresh':
             # Position-level work items: a 117-position game no longer pins one
             # worker for two hours while the other 87 sit idle.
             for lo in range(0, n, a.split):
@@ -402,8 +423,8 @@ def cmd_eval(a):
         else:
             todo.append((gid, g, a.depth, a.time_ms, a.walk))
     if a.walk != 'fresh':
-        # Whole games, longest first, so the last one to start is short.
-        todo.sort(key=lambda it: -len(it[1]['positions']))
+        # Whole games (or their segments), longest game first, so the last one to start is short.
+        todo.sort(key=lambda it: (-len(it[1]['positions']), -(it[5] if len(it) > 5 else 0)))
     print(f'{len(items)} games, {len(done)} positions already done, {len(todo)} work items to evaluate '
           f'({a.walk} walk)', flush=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or '.', exist_ok=True)
@@ -528,6 +549,8 @@ def main():
     e.add_argument('--depth', type=int, default=6); e.add_argument('--time-ms', type=int, default=0, help='0 = untimed fixed depth')
     e.add_argument('--workers', type=int, default=os.cpu_count() or 2); e.add_argument('--limit-games', type=int, default=0)
     e.add_argument('--split', type=int, default=0, help='--walk fresh only: work items of this many positions instead of whole games (0 = whole games)')
+    e.add_argument('--segment', type=int, default=0, help='backward walks: work items of this many positions, each on its own table (0 = whole games)')
+    e.add_argument('--warm', type=int, default=2, help='--segment: positions above a segment searched first to fill its table')
     e.add_argument('--walk', choices=('backward', 'backward-plain', 'fresh'), default='fresh',
                    help='fresh (default): a new table per position; backward: last position to first on one '
                         'persistent table, the played move searched first (stored game_evals); backward-plain: '
