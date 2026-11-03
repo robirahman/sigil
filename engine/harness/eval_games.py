@@ -229,6 +229,10 @@ def cmd_hydrate(a):
                 'turnNumbers': [x.get('turnNumber') for x in turns],
                 'positions': positions,
             }
+            if g.get('aiTelemetry'):
+                # engine v35+: the browser's per-AI-turn search metrics, keyed by turn
+                # number (Firebase returns integer-keyed maps as arrays with nulls).
+                out[k]['aiTelemetry'] = g['aiTelemetry']
         print(f'  hydrated {min(s + a.batch, len(keep))}/{len(keep)}', flush=True)
     n_pos = sum(len(g['positions']) for g in out.values())
     print(f'hydrated {len(out)} games / {n_pos} positions; skipped {dict(skipped)}')

@@ -182,6 +182,12 @@ def cmd_prep(a):
     os.replace(tmp, a.out)
     print(f"WROTE {a.out}: {len(out['y'])} positions from {len(parts)} chunks, "
           f"{len(np.unique(out['game']))} games, {time.time() - t0:.0f}s", flush=True)
+    # SNN2 input coverage: an SNN2 net can only learn its wall / bank rows from
+    # positions that have them, so say how many there are.
+    n = max(1, len(out['y']))
+    n_walls = int(np.count_nonzero(out['walls']))
+    n_bank = int(np.count_nonzero(out['bank'].any(axis=1)))
+    print(f"COVERAGE walls!=0 {n_walls} ({n_walls / n:.2%}), bank!=0 {n_bank} ({n_bank / n:.2%})", flush=True)
 
 
 # --------------------------------------------------------------------------- data

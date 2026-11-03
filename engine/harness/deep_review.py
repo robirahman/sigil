@@ -119,6 +119,18 @@ def final_value_red(g):
     return None
 
 
+def telemetry_for(telem_obj, turn):
+    """The browser's search metrics for the AI turn numbered `turn`, or None.
+    `byPly` is written keyed by turn number; Firebase hands integer-keyed maps
+    back as JSON arrays (null where no AI turn), so accept a list or a dict."""
+    by_ply = (telem_obj or {}).get('byPly')
+    if turn is None or not by_ply:
+        return None
+    if isinstance(by_ply, list):
+        return by_ply[turn] if 0 <= turn < len(by_ply) else None
+    return by_ply.get(str(turn))
+
+
 # -------------------------------------------------------------------- flag ---
 
 def cmd_flag(a):
@@ -151,8 +163,7 @@ def cmd_flag(a):
                 stats[side + ' falls'] += 1
                 r = rows[(gid, i)]
                 telem_obj = g.get('aiTelemetry') or {}
-                telem = telem_obj.get('byPly', {})
-                t_i = telem.get(str(i)) or telem.get(str(g['turnNumbers'][i] if g.get('turnNumbers') else i))
+                t_i = telemetry_for(telem_obj, g['turnNumbers'][i] if g.get('turnNumbers') else i)
                 cases.append({'g': gid, 'i': i, 'ai': ai, 'side': side,
                               'v_i': sign * v_i, 'v_j': sign * v_j, 'drop': round(drop, 3),
                               'terminal': i + 1 == n, 'scan_probe': r.get('probe'),

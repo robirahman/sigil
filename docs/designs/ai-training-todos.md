@@ -61,7 +61,7 @@ The earlier version had problems, found by checking it against the scripts and t
 *   **Measure throughput before scaling up.** Read games per shard-hour from the live logs after about 30 minutes.
 *   **Run heavy work on VMs.** Cloud Shell has about 360 MB free on `/home`. Locally you need only `gcloud`, `gh`, `python3` with numpy, and the Firebase service account for downloads.
 *   **Use Spot pricing.** `c3d-highcpu-90` costs about $0.82/h in us-central1, us-east1 and us-west1, about $1.60/h in us-east4, and about $2.12/h in europe-west4. Cost figures below are rough.
-*   **Command blocks:** each one starts from the repo root and assumes `export B=gs://focus-surfer-494820-g0-sigil`. The zones shown are examples; any zone that offers `c3d` works, within the per-region limit.
+*   **Command blocks:** each one starts from the repo root and assumes `export B=gs://focus-surfer-494820-g0-sigil`. The zones shown are examples; any zone that offers `c3d` works, within the per-region limit (`us-west1-b` does not offer it; `us-west1-a` was stocked out on 2026-11-03).
 
 ## To-do list
 
@@ -116,7 +116,7 @@ for i in 0 1 2 3; do SPOT=1 BRANCH=ai-training-plan BASE_BRANCH=base-v34 SHARD_B
   ./launch.sh sigil-v35ab-$i ab_version.py arms/release_ab_10s.txt "1,300" 45 us-central1-f 4 c3d-highcpu-90; done
 # A-bank: same, Dividend draws, where the bank-step cap acts (2 VMs, 1,080 games)
 for i in 0 1; do SPOT=1 BRANCH=ai-training-plan BASE_BRANCH=base-v34 SIGIL_REQUIRE_SPELL=42 SHARD_BASE=$((i*100)) \
-  ./launch.sh sigil-v35abk-$i ab_version.py arms/release_ab_10s.txt "1,300" 45 us-west1-b 4 c3d-highcpu-90; done
+  ./launch.sh sigil-v35abk-$i ab_version.py arms/release_ab_10s.txt "1,300" 45 us-west1-c 4 c3d-highcpu-90; done
 # B: v35 (min_width 32) vs v35 with 96, core draws (4 VMs)
 for i in 0 1 2 3; do SPOT=1 BRANCH=ai-training-plan BASE_BRANCH=base-v35-pol96 SHARD_BASE=$((i*100)) \
   ./launch.sh sigil-pol32-$i ab_version.py arms/release_ab_10s.txt "1,300" 45 us-east1-b 4 c3d-highcpu-90; done
@@ -226,7 +226,7 @@ cd engine/gcp
 for i in 0 1; do SPOT=1 BRANCH=ai-training-plan SIGIL_AB_BASE=shipped SIGIL_REQUIRE_SPELL=39 SHARD_BASE=$((i*100)) \
   ./launch.sh sigil-snn2f-$i ab_search.py arms/snn2_base_10s.txt "1,200,nnue_snn2_base:nnue_mt256,preset,1,0" 45 us-central1-f 4 c3d-highcpu-90; done
 for i in 0 1; do SPOT=1 BRANCH=ai-training-plan SIGIL_AB_BASE=shipped SIGIL_REQUIRE_SPELL=42 SHARD_BASE=$((i*100)) \
-  ./launch.sh sigil-snn2k-$i ab_search.py arms/snn2_base_10s.txt "1,200,nnue_snn2_base:nnue_mt256,preset,1,0" 45 us-west1-b 4 c3d-highcpu-90; done
+  ./launch.sh sigil-snn2k-$i ab_search.py arms/snn2_base_10s.txt "1,200,nnue_snn2_base:nnue_mt256,preset,1,0" 45 us-west1-c 4 c3d-highcpu-90; done
 for i in 0 1 2 3; do SPOT=1 BRANCH=ai-training-plan SIGIL_AB_BASE=shipped SHARD_BASE=$((i*100)) \
   ./launch.sh sigil-snn2c-$i ab_search.py arms/snn2_base_10s.txt "1,200,nnue_snn2_base:nnue_mt256,preset,1,0" 45 us-east1-b 4 c3d-highcpu-90; done
 ```
@@ -247,7 +247,7 @@ If it passes, set `SHIPPED_EVAL = "nnue_snn2_base"` on `ai-training-plan` so r6 
 cd engine/gcp
 BRANCH=ai-training-plan VM_PREFIX=sigil-r6d FIRST_VM=400 COMP_FRAC=0.67 \
 LINES_GS=$B/data/s3/human_starts_2026-10-07.json \
-  ./launch_s3_fleet.sh 4 18000 6 us-central1-f:4 us-east1-b:4 us-west1-b:4 northamerica-south1-a:4
+  ./launch_s3_fleet.sh 4 18000 6 us-central1-f:4 us-east1-b:4 us-west1-c:4 northamerica-south1-a:4
 ```
 
 *   **Size:** 16 Spot VMs x 90 shards, depth 4 (round 5's label-depth test found depth 4 as good as 5 or 6), a 5 h stop and a 6 h watchdog. At round 4's rate (~44 games per shard-hour) that is about 300k games, roughly 7M positions.
