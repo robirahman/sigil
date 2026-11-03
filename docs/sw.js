@@ -112,7 +112,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/position-rating.js?v=35',
+	'./static/scripts/engine/position-rating.js?v=36',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',

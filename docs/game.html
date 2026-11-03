@@ -195,6 +195,15 @@
 								</p>
 								<br />
 								<p>
+									<strong>Play On (Deathmatch)</strong><br />
+									When a regular game ends on the stone lead or the sixth spell, &ldquo;Play On
+									(Deathmatch)&rdquo; on the game-over screen continues from the final position
+									as a new Deathmatch game: same opponent, sides and clock, spell counters
+									removed, and the only way to win is to eliminate every enemy stone.
+									Deathmatch games are unrated.
+								</p>
+								<br />
+								<p>
 									<strong>Rematch From Here</strong><br />
 									In review, step to any position and press &ldquo;Rematch from here&rdquo; to
 									start a new game from it against the same opponent, or &ldquo;Play online
@@ -799,6 +808,8 @@
 					</div>
 					<div class="win-modal__actions">
 						<button class="win-modal__btn" x-on:click="openRematchMenu()" x-show="rematchStage !== 'rematch'">Rematch</button>
+						<button class="win-modal__btn" x-on:click="playOnDeathmatch()" x-show="canPlayOnDeathmatch && rematchStage !== 'rematch'"
+							title="Keep playing from this position under Deathmatch rules: the only win is eliminating every enemy stone">Play On (Deathmatch)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'">Review Game</button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('quick')"
@@ -1053,7 +1064,7 @@
 		<script src="static/scripts/engine/firebase-sync.js?v=35"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js?v=35"></script>
-		<script src="static/scripts/engine/position-rating.js?v=35"></script>
+		<script src="static/scripts/engine/position-rating.js?v=36"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
