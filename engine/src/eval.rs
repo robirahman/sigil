@@ -666,7 +666,11 @@ impl Board {
 /// [-18.9, +12.8] core (1,841 games), +3.2 [-17.5, +23.9] on Rock Slide draws (1,080);
 /// held-out outcome log-loss 0.58115 vs 0.58139; ~2% faster per node (no flood fill or
 /// liberty census at the leaves). engine/reports/2026-10-eval-simplification.md.
-pub const SHIPPED_EVAL: &str = "nnue_mt256";
+/// `nnue_snn2_base` on the v36 training branch (2026-11-03, docs/designs/ai-training-todos.md
+/// Step 2): nnue_mt256's recipe and corpus plus the SNN2 wall and bank rows, +20.3 Elo
+/// [+5.6, +35.0] on Fissure + Dividend draws pooled (2,158 games) and +5.8 [-8.9, +20.4] on
+/// core draws (2,160) at 10 s; held-out outcome log-loss 0.57883 vs 0.58119.
+pub const SHIPPED_EVAL: &str = "nnue_snn2_base";
 
 /// Every accepted preset name, in one place. Exported (via py.rs) as
 /// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate
@@ -683,11 +687,11 @@ pub const EVAL_NAMES: [&str; 27] = [
 ];
 
 #[cfg(target_arch = "wasm32")]
-pub const EVAL_NAMES: [&str; 23] = [
+pub const EVAL_NAMES: [&str; 24] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
-    "nnue_mt256",
+    "nnue_mt256", "nnue_snn2_base",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -724,7 +728,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // net on material + tempo alone -- no positional terms, no per-spell table.
         "nnue_mt256" => Weights { nn: Some(&crate::nn::NNUE_MT256), ..MATERIAL_TEMPO },
         // Training plan step 2 (2026-11-03): nnue_mt256's recipe and corpus with SNN2 wall and bank input rows; held-out outcome ll 0.57883 vs 0.58119 for the same-run control.
-        #[cfg(not(target_arch = "wasm32"))]
         "nnue_snn2_base" => Weights { nn: Some(&crate::nn::NNUE_SNN2_BASE), ..MATERIAL_TEMPO },
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,

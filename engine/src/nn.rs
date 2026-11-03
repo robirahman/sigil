@@ -76,7 +76,6 @@ pub static NNUE_SPELL4: NnSpec = NnSpec::new("nnue_spell4", include_bytes!("../n
 /// human positions and v31 self-play) on the material + tempo base, cap 256 cs.
 pub static NNUE_MT256: NnSpec = NnSpec::new("nnue_mt256", include_bytes!("../nets/nnue_mt256.bin"));
 /// Training plan step 2 (2026-11-03): nnue_mt256's recipe and corpus with SNN2 wall and bank input rows; held-out outcome ll 0.57883 vs 0.58119 for the same-run control.
-#[cfg(not(target_arch = "wasm32"))]
 pub static NNUE_SNN2_BASE: NnSpec = NnSpec::new("nnue_snn2_base", include_bytes!("../nets/nnue_snn2_base.bin"));
 
 /// A network by preset name (wasm parity export, tests).
@@ -89,7 +88,6 @@ pub fn by_name(name: &str) -> Option<&'static NnSpec> {
         #[cfg(not(target_arch = "wasm32"))]
         "nnue_spell4" => Some(&NNUE_SPELL4),
         "nnue_mt256" => Some(&NNUE_MT256),
-        #[cfg(not(target_arch = "wasm32"))]
         "nnue_snn2_base" => Some(&NNUE_SNN2_BASE),
         _ => None,
     }

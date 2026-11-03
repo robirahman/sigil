@@ -4224,10 +4224,11 @@ fn ordering_gives_no_fill_credit_in_a_dead_sigil() {
 
 #[test]
 fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
-    // The net has no wall input, so a wall alone would leave its evaluation equal to
+    // nnue_mt256 has no wall input, so a wall alone would leave its evaluation equal to
     // the unwalled board's. With the dead mask it equals the board whose slot is
-    // access-blocked for both colours instead.
-    let full = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    // access-blocked for both colours instead. (An SNN2 net reads the walls itself:
+    // see the shipped-eval check at the end.)
+    let full = crate::eval::weights_by_name("nnue_mt256").unwrap();
     let b = dead_sigil_board();
     let mut open = b;
     open.walls = 0;
@@ -4241,6 +4242,9 @@ fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
     assert_ne!(b.evaluate(Color::Red, &full), open.evaluate(Color::Red, &full));
     // No wall, no change: the ordinary fold still applies.
     assert_eq!(open.dead_slots(), 0);
+    // Whatever net ships, a wall must move its evaluation.
+    let shipped = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    assert_ne!(b.evaluate(Color::Red, &shipped), open.evaluate(Color::Red, &shipped));
 }
 
 #[test]
@@ -4803,7 +4807,6 @@ fn mt_network_matches_python_and_sits_on_material_tempo() {
         n += 1;
     }
     assert!(n >= 200, "only {n} golden vectors");
-    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_mt256");
     let w = crate::eval::weights_by_name("nnue_mt256").unwrap();
     let base = crate::eval::MATERIAL_TEMPO;
     assert_eq!(crate::search::even_offset(Color::Red, &w), 50);
@@ -4963,4 +4966,9 @@ fn nnue_snn2_base_matches_python_golden() {
     }
     assert!(n >= 50, "only {n} golden vectors");
     assert!(crate::eval::weights_by_name("nnue_snn2_base").is_ok());
+    // The v36 training branch ships this net (Step 2); same material + tempo base as nnue_mt256.
+    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_snn2_base");
+    let w = crate::eval::weights_by_name("nnue_snn2_base").unwrap();
+    assert_eq!(crate::search::even_offset(Color::Red, &w),
+               crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
 }
