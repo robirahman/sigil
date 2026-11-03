@@ -567,7 +567,7 @@ document.addEventListener('alpine:init', () => {
 				this.reviewIndex = 0;
 				this._showReviewPosition();
 			},
-			async _initReviewMode(spellNames, gameLog, winner, variant, finalSfn, setupSfn) {
+			async _initReviewMode(spellNames, gameLog, winner, variant, finalSfn, setupSfn, endReason) {
 				spellNames = normalizeSpellNames(spellNames);
 				if (!gameLog || gameLog.length === 0) {
 					this.messageHistory.push('No game log available for review.');
@@ -578,7 +578,8 @@ document.addEventListener('alpine:init', () => {
 				// legacy fat records pass through it untouched.
 				try {
 					gameLog = await hydrateGameLog(
-						spellNames, variant, setupSfn, finalSfn, gameLog, winner);
+						spellNames, variant, setupSfn, finalSfn, gameLog,
+						{ winner: winner || null, endReason: endReason || null });
 				} catch (e) {
 					console.warn('Room transcript replay failed:', e);
 					if (finalSfn) {
@@ -886,7 +887,8 @@ document.addEventListener('alpine:init', () => {
 						// Skip engine entirely — render finished game in review mode
 						_this.sendEvent = function() {};
 						_this._initReviewMode(spellNames || [], gameLog || [], winner || null,
-							normalizeVariant(variant), state.finalSfn || null, state.setupSfn || null);
+							normalizeVariant(variant), state.finalSfn || null, state.setupSfn || null,
+							state.endReason || null);
 						return;
 					}
 

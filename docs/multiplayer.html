@@ -1406,6 +1406,8 @@
 						winner: roomData.winner || null,
 						finalSfn: roomData.finalSfn || null,
 						setupSfn: roomData.setupSfn || null,
+						// How the game ended, for the review's replay check.
+						endReason: recordEnding(roomData).endReason,
 						shareUrl: this.shareUrl,
 						roomCode: code,
 						authManager: _authManager,
