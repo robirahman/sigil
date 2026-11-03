@@ -57,6 +57,19 @@ benchmark's test set.
     affordable) and Lichess-style winning-turn puzzles (one turn much better than every
     other); harder positions in every category; target Haiku-tier models below 10%.
     Every "correct" mate verdict is certified. Plan and progress: `bench/V3_PLAN.md`.
+  - **Revised 2026-11-03, after phase 0 (`bench/analysis/v3-phase0.md`):**
+    - The "drop a puzzle without a shortest-mate proof" rule is replaced for N ≥ 4. Such a
+      puzzle keeps the label "mate in N" and records which shorter wins are proven absent:
+      "no win within 2" must be proven exhaustively, and "no win within N−1" is attempted with
+      a budget.
+    - Grading is unchanged: a faster mate always counts as correct.
+    - Per-N reporting uses each puzzle's proven shortest mate (its category), from
+      `bench/tools/build_shortest.py`.
+    - N ≤ 3 still needs the full shortest-mate proof, or the puzzle is dropped.
+    - Every certificate gets the full Rust check (`sigil_engine::cert`). Every N ≤ 3
+      certificate and a deterministic 10% sample of N ≥ 4 also get the full browser-rules
+      check (`tools/check-mate-cert.js`).
+    - The Fissure-wall fix ships on its own (PR #69).
 - [x] **Answer format.** A single move: one complete Sigil turn, i.e. the turn's full action list.
 - [x] **Grading.** An answer is correct if and only if it leads to a forced mate in N. Correctness is
   checked by proof, not by matching a key:

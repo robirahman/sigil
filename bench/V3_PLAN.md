@@ -37,6 +37,7 @@ Dev v3 has to be **representative**. It is a random, stratified draw from the sa
    - The checker trusts nothing from Rust except the hints, so a gap in Rust's enumeration or a prover bug shows up as a failed certificate.
    - Certificates go to the private bucket. Dev-set certificates can be public.
    - Phase 0 measures certificate size and check time per N. Full checks are the target for every N. If that proves unaffordable at N ≥ 4, we check sampled subtrees and say so in the methodology.
+     **Decided 2026-11-03:** every certificate gets the full Rust check. The full JS check runs on every N ≤ 3 certificate and on a deterministic 10% sample of N ≥ 4 (`certs.py --js`).
 3. **Shortest mate.**
    - Each puzzle's N must be its shortest forced mate, and that has to be proven.
    - This needs the refutation prover CHECKLIST §3 already calls for: for every distinct first turn, a defender reply after which no mate in k−1 exists.
@@ -46,6 +47,9 @@ Dev v3 has to be **representative**. It is a random, stratified draw from the sa
      - a cheap refuting reply tried first;
      - static "no mate in k" bounds, from the maximum swing per turn against `winLead`.
    - A puzzle whose proof does not complete within budget is dropped (already settled).
+     **Revised 2026-11-03 for N ≥ 4:** such a puzzle keeps "mate in N". It must have an
+     exhaustive "no win within 2" proof, and it records whether "no win within N−1" was
+     proven. Its proven shortest mate is its reporting category.
 4. **Grading correctness.**
    - **Every "correct" verdict:** it already comes from a proof. For reported results it also carries a certificate that the JS checker re-verifies before the score is published.
    - **"Unproven" answers:** these are correct-but-unprovable risks. They go to an offline resolver with a large budget on VMs. The report states how many remain undecided, and the target is 0.
@@ -179,3 +183,10 @@ Target: Haiku-tier models below 10% while keeping mate-in-1.
   - One browser rules bug was found and fixed: a click on a Fissure wall spent the move.
   - The dev v2 labels are wrong for 6 puzzles (each has a shorter mate).
   - Mining at scale waits for Robi's decisions.
+- **2026-11-03: decisions taken (all five phase-0 recommendations).**
+  - Labels for N ≥ 4: see above.
+  - Dev v2 labels corrected in a v2.1 shortest-mate record (`bench/dev/dev_set_v2_shortest.json`). The per-N leaderboard columns use it.
+  - JS check: every N ≤ 3 certificate plus a 10% sample of N ≥ 4.
+  - The Fissure fix ships as its own PR (#69).
+  - Winning-turn puzzles use a two-stage root table.
+  - `bench/gcp/jobs/dev2verify.sh` finishes certifying dev v2's answer key.
