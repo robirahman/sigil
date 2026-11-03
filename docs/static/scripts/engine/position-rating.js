@@ -230,10 +230,12 @@ function makeStartPos(model, sfn, info, source) {
  * the stone lead or the sixth spell) re-tagged as Deathmatch, so play
  * continues from it until one side is eliminated. The spell counters are
  * zeroed (Deathmatch has none); stones, spells, locks, springlocks, the turn
- * and Providence banks carry over. Null when there is nothing to play on:
- * an unreadable SFN, a Deathmatch or Scramble game (not the regular end
- * condition), a side with no stones left, or a next mover who holds the Seal
- * of Destruction (which loses under every rule set).
+ * and Providence banks carry over. `sfn` is the after-turn SFN of the last
+ * turn (it carries the last mover's token). Null when there is nothing to
+ * play on: an unreadable SFN, a Deathmatch or Scramble game, a position the
+ * regular rules do not end on the stone lead or the sixth spell (threefold
+ * repetition, the Seal of Destruction, a game cut short), a side with no
+ * stones left, or a next mover who holds the Seal of Destruction.
  */
 function deathmatchPlayOnSfn(sfn) {
 	if (!sfn) return null;
@@ -241,6 +243,13 @@ function deathmatchPlayOnSfn(sfn) {
 	try { d = sfnToDict(String(sfn).trim()); } catch (e) { return null; }
 	const variant = normalizeVariant(d.variant);
 	if (variantHasDeathmatch(variant) || variantHasScramble(variant)) return null;
+	try {
+		// The regular end-of-turn check for the last mover: only the stone
+		// lead and the sixth spell (and elimination, excluded below) end here.
+		const reg = new SigilBoard(null, variant);
+		reg.loadFromSfn(String(sfn).trim());
+		if (!reg.checkGameOver(reg.whoseTurn)) return null;
+	} catch (e) { return null; }
 	const dm = composeVariant(variantHasCompetitive(variant), true, variantHasDuplicates(variant),
 		false, variantHasPentagon(variant));
 	const p = String(sfn).trim().split(/\s+/);

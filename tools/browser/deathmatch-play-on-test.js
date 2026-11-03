@@ -2,7 +2,8 @@
 //
 //   1. deathmatchPlayOnSfn: a regular final SFN becomes the same position
 //      tagged Deathmatch with the spell counters zeroed (Providence banks
-//      kept); Deathmatch / Scramble games and a side with no stones get null.
+//      kept); Deathmatch / Scramble games, positions the regular rules do not
+//      end (threefold repetition) and a side with no stones get null.
 //   2. game.html vs the AI: after a regular game ends on the board the
 //      game-over menu offers "Play On (Deathmatch)"; not after a forfeit.
 //   3. Pressing it opens a Deathmatch game from the final position with the
@@ -60,11 +61,16 @@ const playOnVisible = () => [...document.querySelectorAll('.win-modal__btn')]
 			scramble: deathmatchPlayOnSfn(fin + ' scramble'),
 			wiped: deathmatchPlayOnSfn('r.r.r.rr..r........................rr..r/' + sp + ' r 13 6:3 -:- -:- r1'),
 			junk: deathmatchPlayOnSfn('nonsense'),
+			// Level stones, 2 spells: not a regular ending (e.g. threefold repetition).
+			unended: deathmatchPlayOnSfn('r.........r..bbbbbbb.......rr.....rr..r/' + sp + ' r 13 2:1 Meteor:- -:- b1'),
+			sixth: deathmatchPlayOnSfn('r.........r..bbbbbbb.......rr.....rr..r/' + sp + ' r 13 6:3 Meteor:- -:- b1'),
 		}), FINAL, SPELLS);
 		check('regular SFN -> Deathmatch, counters zeroed', u.regular === PLAYON, u.regular);
 		check('Providence bank kept', u.bank === PLAYON + ' pm:1:0', u.bank);
 		check('competitive kept', u.competitive === PLAYON.replace(' deathmatch', ' competitive_deathmatch'), u.competitive);
 		check('no play-on from Deathmatch / Scramble', u.deathmatch === null && u.scramble === null, [u.deathmatch, u.scramble]);
+		check('no play-on from a position the regular rules do not end', u.unended === null, u.unended);
+		check('play-on after a sixth-spell ending', typeof u.sixth === 'string' && / 0:0 .* deathmatch$/.test(u.sixth), u.sixth);
 		check('no play-on with a side eliminated', u.wiped === null && u.junk === null, [u.wiped, u.junk]);
 
 		// 2. The game-over menu (a finished game's state, injected).
