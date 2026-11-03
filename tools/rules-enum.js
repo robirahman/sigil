@@ -25,7 +25,8 @@
  * since: the controller's state is a function of exactly those (each
  * _takeTurn call is a tail call). A token after which the controller re-asks
  * the same prompt with the same board is a rejected input (the UI's retry
- * loops) and is pruned.
+ * loops) and is pruned, and so is a longer cycle back to a prompt and board
+ * already on the path since the last _takeTurn entry.
  *
  * Output children are DISTINCT resulting positions, keyed by the SFN with the
  * side-to-move and turn-counter tokens dropped (normKey), the same key
@@ -226,7 +227,7 @@ async function enumerate(sfn, opts = {}) {
 	const nodes = G.NODE_ORDER().slice();
 	const children = new Map();
 	const seen = new Set();
-	const stack = [{ prefix: [], parent: null, entry: null, since: null }];
+	const stack = [{ prefix: [], parent: null, entry: null, since: null, path: [] }];
 	let runs = 0, pruned = 0, errors = 0;
 	while (stack.length) {
 		const it = stack.pop();
@@ -249,6 +250,11 @@ async function enumerate(sfn, opts = {}) {
 		}
 		if (r.kind !== 'prompt') continue;
 		if (parentBoard !== null && parentBoard === r.board) { pruned++; continue; }   // rejected input: same prompt again
+		// A cycle back to a prompt already on this path (same board, same
+		// prompt) within the same _takeTurn entry: e.g. Rock Slide's push prompt,
+		// a rejected click, the same source again. Nothing new is reachable.
+		const ancestors = it.entry === null || (r.entry && it.entry && r.entry.board === it.entry.board) ? it.path : [];
+		if (ancestors.includes(r.board)) { pruned++; continue; }
 		if (seen.has(r.state)) continue;
 		seen.add(r.state);
 		if (prefix.length >= MAX_TOKENS) { errors++; continue; }
@@ -256,7 +262,8 @@ async function enumerate(sfn, opts = {}) {
 		if (opts.prefer) toks = toks.filter(t => !opts.prefer.has(t)).concat(toks.filter(t => opts.prefer.has(t)));
 		else toks.reverse();
 		for (const tok of toks) {
-			stack.push({ prefix: prefix.concat([tok]), parent: r.board, entry: r.entry, since: r.since.concat([tok]) });
+			stack.push({ prefix: prefix.concat([tok]), parent: r.board, entry: r.entry, since: r.since.concat([tok]),
+				path: (r.since.length ? ancestors : []).concat([r.board]) });
 		}
 	}
 	return { sfn, children: [...children.values()], stats: { runs, states: seen.size, pruned_noop: pruned, errors, ms: Date.now() - t0 } };
