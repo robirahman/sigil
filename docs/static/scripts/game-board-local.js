@@ -105,6 +105,9 @@ document.addEventListener('alpine:init', () => {
 			reviewSfns: [],
 			reviewTurnLabels: [],
 			_spellNamesForExport: [],
+			// The finished game's end reason ('time' | 'forfeit'; null for a
+			// game played out on the board).
+			_lastEndReason: null,
 			_redNameForExport: 'Red',
 			_blueNameForExport: 'Blue',
 			_gameLogForExport: null,
@@ -632,6 +635,42 @@ document.addEventListener('alpine:init', () => {
 				} catch (e) { /* sessionStorage blocked */ }
 				gameLive = false;
 				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
+			},
+
+			// Play On as Deathmatch: a regular game played out on the board
+			// (stone lead or sixth spell; not a timeout or forfeit) continues
+			// from its final position under the Deathmatch rules, same
+			// opponent, sides and clock, until one side is eliminated.
+			get canPlayOnDeathmatch() {
+				if (!this.winner || this.puzzle || this.tutorial || this._lastEndReason) return false;
+				const n = this.reviewSfns.length;
+				return n > 0 && typeof deathmatchPlayOnSfn === 'function' && !!deathmatchPlayOnSfn(this.reviewSfns[n - 1]);
+			},
+
+			playOnDeathmatch() {
+				if (!this.canPlayOnDeathmatch) return;
+				const sfn = deathmatchPlayOnSfn(this.reviewSfns[this.reviewSfns.length - 1]);
+				try {
+					// Keep the sides, and skip the side picker (Deathmatch is unrated).
+					if (this.isAiGame && (this.myColor === 'red' || this.myColor === 'blue')) {
+						sessionStorage.setItem('sigil_rematch_human_color', this.myColor);
+					}
+					sessionStorage.setItem('sigil_playon_sfn', sfn);
+				} catch (e) { /* sessionStorage blocked: the side picker runs instead */ }
+				gameLive = false;
+				const params = new URLSearchParams(window.location.search);
+				params.delete('review');
+				// A new game: mint a fresh persistence id (see playAgain).
+				params.delete('id');
+				params.set('sfn', sfn);
+				params.set('variant', sfnToDict(sfn).variant);
+				// A resumed game's URL carries only its id: name the opponent and clock.
+				if (this.aiMode) params.set('ai', this.aiMode);
+				if (this.clockOpt && typeof GameClock !== 'undefined') {
+					const lbl = GameClock.label(this.clockOpt);
+					if (lbl) params.set('clock', lbl);
+				}
+				window.location.href = window.location.pathname + '?' + params.toString();
 			},
 
 			rematchStage: 'idle',  // 'idle' | 'rematch'
@@ -1216,7 +1255,16 @@ document.addEventListener('alpine:init', () => {
 				_this.myColor = _humanColor;
 				// A new game vs AI from a position: the player picks a side in
 				// the side picker (below) before the engine starts.
-				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn);
+				// Play On as Deathmatch keeps the finished game's sides instead.
+				let _playOn = false;
+				try {
+					const raw = sessionStorage.getItem('sigil_playon_sfn');
+					if (raw) {
+						sessionStorage.removeItem('sigil_playon_sfn');
+						_playOn = raw === _startSfnAtLoad;
+					}
+				} catch (e) { /* sessionStorage blocked */ }
+				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn && !_playOn);
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
 				// up here on next page load and feed it into the engine so the new match

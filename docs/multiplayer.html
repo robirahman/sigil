@@ -929,7 +929,9 @@
 					</div>
 					<p class="win-modal__rating" x-show="ratingText && !isSpectator" x-text="ratingText"></p>
 					<div class="win-modal__actions">
-						<a class="win-modal__btn" x-show="opponentPositionRoom && !isSpectator" x-bind:href="'multiplayer.html?id=' + opponentPositionRoom">Opponent offers a rematch from a position</a>
+						<a class="win-modal__btn" x-show="opponentPositionRoom && !isSpectator" x-bind:href="'multiplayer.html?id=' + opponentPositionRoom" x-text="opponentPositionRoomDeathmatch ? 'Opponent offers to play on as Deathmatch' : 'Opponent offers a rematch from a position'">Opponent offers a rematch from a position</a>
+						<button class="win-modal__btn" x-on:click="playOnDeathmatch()" x-show="canPlayOnDeathmatch && !opponentPositionRoomDeathmatch"
+							title="Keep playing from this position under Deathmatch rules: the only win is eliminating every enemy stone">Play On (Deathmatch)</button>
 						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
 						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === perType * 3">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
@@ -1136,6 +1138,7 @@
 				// review's "from here"): the start, its engine price and the
 				// creator's side; and the joiner's confirmation of such a room.
 				positionSfn: '',
+				_positionOffer: null,  // { ref, code }: our room offered through a finished room's rematch node
 				positionOffer: null,   // { loading, evalText, oddsText, payoffs, note, startPos, hist }
 				joinOffer: null,       // { code, side, evalText, oddsText, payoffs, note }
 				// Rated / Casual for the room code typed in (or offered), and
@@ -1188,7 +1191,23 @@
 					const urlSfn = new URLSearchParams(window.location.search).get('sfn');
 					if (urlSfn && !new URLSearchParams(window.location.search).get('id')) {
 						this.positionSfn = urlSfn;
-						this._pricePosition();
+						// Play On as Deathmatch (game-board-multiplayer.js): the
+						// finished game's sides and clock, no pricing (Deathmatch
+						// is unrated), and the room is created straight away.
+						let playOn = null;
+						try {
+							playOn = JSON.parse(sessionStorage.getItem('sigil_playon') || 'null');
+							sessionStorage.removeItem('sigil_playon');
+						} catch (e) { /* sessionStorage blocked or bad payload */ }
+						if (playOn && playOn.sfn === urlSfn && variantHasDeathmatch(sfnToDict(urlSfn).variant)) {
+							if (playOn.side === 'red' || playOn.side === 'blue') this.creatorSide = playOn.side;
+							this._applyTimeControl(playOn.timeControl);
+							this.positionOffer = { loading: false, evalText: 'Playing on from the final position as Deathmatch.',
+								oddsText: '', payoffs: null, note: 'Unrated: Deathmatch games do not affect rating.', startPos: null };
+							this._waitForAuth().then(() => this.createRoom());
+						} else {
+							this._pricePosition();
+						}
 					}
 
 					// "Play Again" from the win-modal returns here with a sessionStorage
@@ -1214,22 +1233,7 @@
 							if (tcRaw) {
 								try { rematchTc = JSON.parse(tcRaw); } catch (e) {}
 							}
-							if (rematchTc && rematchTc.type) {
-								this.tcType = rematchTc.type;
-								if (rematchTc.type === 'realtime' && rematchTc.initialTime) {
-									const min = rematchTc.initialTime / 60000;
-									const inc = Math.round((rematchTc.increment || 0) / 1000);
-									const label = min + '+' + inc;
-									if (this.tcLadder.includes(label)) {
-										this.tcPreset = label;
-									} else {
-										this.tcPreset = 'custom'; this.tcCustomMin = min; this.tcCustomInc = inc;
-									}
-								} else if (rematchTc.type === 'correspondence' && rematchTc.moveTimeout) {
-									const m = rematchTc.moveTimeout;
-									this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
-								}
-							}
+							this._applyTimeControl(rematchTc);
 							// Carry the previous game's variant into the rematch
 							// room, so "Play Again" reproduces it.
 							const rematchVariant = sessionStorage.getItem('sigil_rematch_variant') || '';
@@ -1472,7 +1476,8 @@
 							offer.note = signedIn ? 'Unrated: your opponent is a guest.' : 'Sign in to play this position rated.';
 						}
 					} else {
-						offer.note = 'Unrated: the start position was not priced.';
+						offer.note = variantHasDeathmatch(roomData.variant) ? 'Unrated: Deathmatch games do not affect rating.'
+							: 'Unrated: the start position was not priced.';
 					}
 					this.joinOffer = offer;
 					this.roomPreview = await this._roomPreviewFor(roomData);
@@ -1535,6 +1540,58 @@
 
 				setTimePreset(preset) {
 					this.tcPreset = preset;
+				},
+
+				/**
+				 * Offer a Play On room through the finished room's rematch node,
+				 * unless the opponent's Play On offer is already there: resolves
+				 * that offer's room code, or null once ours is written.
+				 */
+				async _claimPlayOn(ref, offer) {
+					// A transaction starts from the local cache: listen first so it
+					// sees the server's value, not null.
+					const keep = () => {};
+					ref.on('value', keep);
+					try {
+						await ref.once('value');
+						for (let attempt = 0; attempt < 3; attempt++) {
+							const res = await ref.transaction((cur) => {
+								if (cur && cur.deathmatch === true && cur.code && cur.by !== offer.by) return; // theirs stands
+								return offer;
+							});
+							if (res && res.committed) return null;
+							const cur = res && res.snapshot && res.snapshot.val();
+							if (!cur || !cur.code) continue;
+							// Theirs stands only while its room still waits for us.
+							const status = await firebase.database().ref('rooms/' + cur.code + '/status').once('value')
+								.then((x) => x.val(), () => null);
+							if (status === 'waiting') return cur.code;
+							const replaced = await ref.transaction((now) => (now && now.code === cur.code ? offer : undefined));
+							if (replaced && replaced.committed) return null;
+						}
+						return null;
+					} finally {
+						ref.off('value', keep);
+					}
+				},
+
+				/** Set the lobby's time-control fields from a room's timeControl. */
+				_applyTimeControl(tc) {
+					if (!tc || !tc.type) return;
+					this.tcType = tc.type;
+					if (tc.type === 'realtime' && tc.initialTime) {
+						const min = tc.initialTime / 60000;
+						const inc = Math.round((tc.increment || 0) / 1000);
+						const label = min + '+' + inc;
+						if (this.tcLadder.includes(label)) {
+							this.tcPreset = label;
+						} else {
+							this.tcPreset = 'custom'; this.tcCustomMin = min; this.tcCustomInc = inc;
+						}
+					} else if (tc.type === 'correspondence' && tc.moveTimeout) {
+						const m = tc.moveTimeout;
+						this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
+					}
 				},
 
 				_getTimeControl() {
@@ -1633,8 +1690,23 @@
 								const old = JSON.parse(sessionStorage.getItem('sigil_position_from_room') || 'null');
 								sessionStorage.removeItem('sigil_position_from_room');
 								if (old && /^[A-Z0-9]{4,10}$/.test(old.code || '') && (old.color === 'red' || old.color === 'blue')) {
-									firebase.database().ref('rooms/' + old.code + '/rematch/positionRoom')
-										.set({ code: this.roomCode, by: old.color }).catch(() => {});
+									const offer = { code: this.roomCode, by: old.color };
+									const ref = firebase.database().ref('rooms/' + old.code + '/rematch/positionRoom');
+									if (old.deathmatch === true) {
+										// Play On: both players may press it at once. The first
+										// offer wins; the other withdraws its room and joins it.
+										offer.deathmatch = true;
+										const theirs = await this._claimPlayOn(ref, offer).catch(() => null);
+										if (theirs && await _firebaseSync.withdrawRoom(this.roomCode).catch(() => false)) {
+											this.roomCode = '';
+											window.location.href = 'multiplayer.html?id=' + encodeURIComponent(theirs);
+											return;
+										}
+									} else {
+										ref.set(offer).catch(() => {});
+									}
+									// Cancelling the waiting room takes the offer back.
+									this._positionOffer = { ref, code: this.roomCode };
 								}
 							} catch (e) { /* sessionStorage blocked */ }
 						}
@@ -2027,6 +2099,17 @@
 						this.lobbyError = e.message;
 						return;
 					}
+					const po = this._positionOffer;
+					this._positionOffer = null;
+					if (po && po.code === code) {
+						// Listen first: a transaction starts from the local cache.
+						const keep = () => {};
+						po.ref.on('value', keep);
+						po.ref.once('value')
+							.then(() => po.ref.transaction((cur) => (cur && cur.code === code ? null : undefined)))
+							.catch(() => {})
+							.then(() => po.ref.off('value', keep));
+					}
 					this.roomCode = '';
 					this.shareUrl = '';
 					this.phase = 'lobby';
@@ -2195,7 +2278,7 @@
 	<script src="static/scripts/engine/game-review.js?v=39"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
-	<script src="static/scripts/engine/position-rating.js?v=35"></script>
+	<script src="static/scripts/engine/position-rating.js?v=36"></script>
 	<script src="static/scripts/engine/room-clock.js?v=35"></script>
 	<script src="static/scripts/engine/firebase-sync.js?v=35"></script>
 	<script src="static/scripts/engine/multiplayer-controller.js?v=35"></script>
@@ -2205,7 +2288,7 @@
 	<script src="static/scripts/board-marks.js?v=35"></script>
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js?v=35"></script>
-	<script src="static/scripts/game-board-multiplayer.js?v=39"></script>
+	<script src="static/scripts/game-board-multiplayer.js?v=40"></script>
 	<script src="static/scripts/rules-reference.js?v=35"></script>
 	<script src="static/scripts/help.js?v=35"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
