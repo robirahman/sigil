@@ -97,6 +97,10 @@ def main():
             median_seconds=secs[len(secs) // 2],
         ))
     for b in man['baselines']:
+        if cat and b.get('by_n'):
+            # A baseline's per-N cells are aggregates by stated N; they cannot be
+            # regrouped by category without per-puzzle results.
+            sys.exit(f"baseline {b['id']} has a stated-N by_n breakdown, which --categories cannot regroup")
         if b.get('pending'):
             entries.append({'id': b['id'], 'kind': 'baseline', 'label': b['label'], 'config': b['config'], 'pending': True})
             continue
@@ -115,8 +119,9 @@ def main():
         'set_label': man.get('set_label', 'Dev set v1'),
         'split_counts': ({str(n): sum(1 for v in cat.values() if v == n) for n in sorted(set(cat.values()))}
                          if cat else dev['counts']),
-        # 'shortest_mate': the shortest mate the proofs establish; a puzzle whose
-        # shorter mate is not excluded (exact false) stays under its stated N.
+        # 'shortest_mate': each puzzle under the shortest forced win proven for it
+        # (its category); 'unresolved' counts those where a still shorter mate is
+        # not excluded (exact false), so their column is an upper bound.
         'columns': 'shortest_mate' if cat else 'stated_n',
         'recategorized': sum(1 for p in dev['puzzles'] if cat[p['id']] != p['n']) if cat else 0,
         'unresolved': sum(1 for v in rec.values() if not v.get('exact')) if cat else 0,
