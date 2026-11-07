@@ -124,6 +124,11 @@ class SpectatorController {
 			return;
 		}
 		this.board.allLoopingSnapshotCounts = Object.assign({}, replayBoard.allLoopingSnapshotCounts);
+		// Silence is state the SFN cannot carry, and it is part of the
+		// repetition key (board.js takeSnapshot): without it, a join right after
+		// a Silence cast would count the next position under the unsilenced key
+		// and could declare a threefold the players' boards do not.
+		if (replayBoard.silenced) this.board.silenced = Object.assign({}, replayBoard.silenced);
 		this.emit({ type: 'history', sfns: [start.sfn].concat(rebuilt.slice(0, -1).map((t) => t.sfnAfter)) });
 	}
 
