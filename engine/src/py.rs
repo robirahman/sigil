@@ -2540,6 +2540,17 @@ fn policy_diag(sfn: &str, result_sfn: &str, enum_cap: usize, max_turns: usize, w
     Ok(format!("[{}]", out.join(",")))
 }
 
+/// `policy::policy_diag` for one packed turn, without enumerating turns: JSON
+/// with `broken_stage` and `in_explore_tail`. `policy_train.py extract` uses it
+/// to leave explore-tail targets out of its primary-window drop check.
+#[pyfunction]
+#[pyo3(signature = (sfn, packed, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
+fn policy_diag_turn(sfn: &str, packed: Vec<u32>, window: usize, keep_window: usize) -> PyResult<String> {
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let t = turn_from_packed(&packed);
+    Ok(crate::policy::policy_diag(&b, b.to_move, &t, window, keep_window))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -2554,6 +2565,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(policy_rank_of_result, m)?)?;
     m.add_function(wrap_pyfunction!(policy_vs_stream_rank, m)?)?;
     m.add_function(wrap_pyfunction!(policy_diag, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_diag_turn, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_explore, m)?)?;
     m.add_class::<SearchSession>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
