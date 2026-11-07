@@ -46,6 +46,14 @@ def main():
                 if key in res and res[key] != r['result']:
                     sys.exit(f'contradictory proofs for {key}')
                 res[key] = r['result']
+    # Every N >= 2 puzzle was built with an exhaustive "no mate in 1" proof:
+    # make that an explicit input, so a contradicting k = 1 result fails below
+    # instead of being ignored.
+    for p in ps:
+        if p['n'] >= 2:
+            if res.get((p['id'], 1)) == 'mate':
+                sys.exit(f"contradictory proofs for {p['id']}: a mate in 1, but it was built with none (stated N = {p['n']})")
+            res[(p['id'], 1)] = 'none'
     # Proofs are monotone: a win within k is a win within every larger k, so a
     # "mate" at some k and a "none" at any k' >= k cannot both hold.
     by_id = {}
@@ -59,6 +67,15 @@ def main():
     out = {}
     for p in ps:
         n = p['n']
+        # The construction proves no mate in 1 for N >= 2 (full root enumeration),
+        # and the stated N is a proven win within N: an input saying otherwise is
+        # a contradiction, not a shorter mate.
+        d = by_id.get(p['id'], {})
+        if n >= 2 and d.get(1) == 'mate':
+            sys.exit(f"contradictory proofs for {p['id']}: a mate in 1, but N = {n} puzzles have none by construction")
+        bad = [k for k, v in d.items() if v == 'none' and k >= n]
+        if bad:
+            sys.exit(f"contradictory proofs for {p['id']}: no win within {min(bad)}, but it is a proven mate in {n}")
         # Proven absent / present wins, for k = 1 .. n-1. No mate in 1 is part of
         # every N >= 2 puzzle's construction (exhaustive root enumeration).
         none = {1} if n >= 2 else set()
