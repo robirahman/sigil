@@ -16,8 +16,9 @@
   "3": 21,
   "4": 24
  },
- "columns": "proven shortest mate",
+ "columns": "shortest_mate",
  "recategorized": 6,
+ "unresolved": 21,
  "resolver": "applied",
  "generated": "2026-11-07",
  "entries": [
