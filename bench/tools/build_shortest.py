@@ -11,15 +11,14 @@ over an inconclusive one, whichever file it is in.
 
 The label policy (Robi, 2026-11-03): a puzzle keeps its stated N, which is
 what the prompt says and what answers are graded against (a faster mate is
-always correct). Its CATEGORY, used for per-N reporting, is the shortest mate
-the proofs establish:
-  * no mate in 1 is always proven (the solver enumerates the root);
-  * a proven win within k < N moves the puzzle to the shortest such k still
-    consistent with the proofs (exactly k when "none within k-1" is proven or
-    k = 2);
-  * otherwise the category is N, and `not_excluded` lists the shorter wins no
-    proof has ruled out (for N >= 4, "within N-1" may stay open: the
-    exhaustive search often does not finish).
+always correct). Its CATEGORY, used for per-N reporting, is the shortest
+forced win PROVEN for it: N itself, or the smallest k < N with a proven win
+within k. `exact` says whether that is also a lower bound ("no win within
+category - 1" is proven, or the category is 1); when it is not, the category
+is an upper bound and `not_excluded_within` lists the shorter wins no proof
+has ruled out. No mate in 1 is always proven for N >= 2 (the solver
+enumerates the root). For N >= 4, "within N-1" often stays open: the
+exhaustive search does not finish.
 """
 import argparse
 import json
@@ -91,7 +90,7 @@ def main():
             exact = (k - 1) in none
             cat = k
             note = (f'mate in {k} (a forced win within {k} is proven, none within {k - 1})' if exact
-                    else f'a forced win within {k} is proven; none within {max(none)} -- category {k} is an upper bound')
+                    else f'a forced win within {k} is proven, none within {max(none)}: category {k} is an upper bound')
         else:
             cat = n
             note = f'mate in {n}' if n == 1 else f'mate in {n}; no forced win within {max(none)} (proven)'
