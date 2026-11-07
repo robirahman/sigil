@@ -44,7 +44,7 @@ Wrong mate-in-4 answers are not refuted. A refutation needs a reply after which 
 
 ## v2.1: proven shortest mates (2026-11-03)
 
-The SigilBench v3 work added exhaustive proofs that a position has no forced win within k turns (`cert_tool within`, k ≤ 3). Run on this set, they show that six puzzles have a faster mate than their stated N:
+The SigilBench v3 work (branch `sigil-bench-v3`, `engine/examples/cert_tool.rs within`, results in `bench/analysis/v3-phase0.md` there) added exhaustive proofs that a position has no forced win within k turns, for k ≤ 3. Run on this set, they show that six puzzles have a faster mate than their stated N:
 
 | Puzzle | Stated | Proven shortest |
 |---|---|---|
