@@ -92,6 +92,33 @@ focused button, "Confirm before ending a turn", the `?` overlay, the win-modal f
 layout. With a screenshot dir it saves the marked boards. A failed Firebase SDK download from
 gstatic is reported as a note, not a failure.
 
+## Live analysis
+
+```sh
+(cd docs && python3 -m http.server 8812) &
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/live-analysis-emulator-test.js http://localhost:8812'
+```
+
+Checks the "Live analysis" panel (live-analysis.js) with the real wasm engine: a
+developer account spectating an online game gets it and it deepens and follows
+new turns; a late joiner rebuilds the game's repetition counts and history from the
+room's turns (and falls back with a warning when they do not replay); a spectator without the flag and the players do not; the review of
+the finished game offers it to anyone and follows the reviewed position; game.html
+offers it in review only. `LIVE_ANALYSIS_SHOTS=<dir>` also saves screenshots.
+
+## Live analysis on early-return review paths
+
+```sh
+node <repo>/tools/browser/live-analysis-watchers-test.js docs
+```
+
+Live analysis must follow the reviewed position when a review starts on a path that returns early
+from the board's init(): game.html opened straight into review (`?review=<JSON>`, like
+`?review=session` and SGN-T imports), and multiplayer.html on an already-finished room (Firebase
+backends blocked). No engine runs: `liveAnalysisRefresh` is replaced by a counter, and stepping the
+review, or changing the watched winner, must call it.
+
 ## Springlock highlight
 
 ```sh

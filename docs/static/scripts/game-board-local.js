@@ -429,6 +429,19 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Live engine analysis (live-analysis.js) in the review of a
+			// finished game; never during play, the puzzles or the tutorial
+			// (the analysis board has its own engine panel).
+			...((!analysis && typeof liveAnalysisMixin === 'function') ? liveAnalysisMixin() : {}),
+			get canLiveAnalyse() {
+				if (analysis || this.puzzle || this.tutorial || typeof liveAnalysisMixin !== 'function') return false;
+				return this.reviewMode && this.reviewSfns.length > 0;
+			},
+			_liveAnalysisTarget() {
+				if (!this.reviewMode) return null;
+				return liveAnalysisReviewTarget(this.reviewSfns, this.reviewTurnLabels, this.reviewIndex, this.winner);
+			},
+
 			// Map-control readout: how many nodes each side's stones are
 			// strictly closer to (multi-source BFS; Fissure walls impassable
 			// and excluded — see features.js mapControl). Cheap and
@@ -1018,6 +1031,15 @@ document.addEventListener('alpine:init', () => {
 						}
 					});
 				});
+
+				// Live analysis follows the reviewed position. Registered before the
+				// direct-review entry below, which returns early (?review=session,
+				// inline JSON, SGN-T) and would otherwise leave the analysis on the
+				// first position it showed.
+				if (!analysis && typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
 
 				// Direct review-mode entry from import flow:
 				//   ?review=session  → JSON stashed in sessionStorage by importGame()
@@ -3395,38 +3417,8 @@ function puzzleImportSfn(sfn) {
 	return p.join(' ');
 }
 
-/** Human-readable rendering of an applyAITurn action list. */
-function describePuzzleActions(actions) {
-	if (!Array.isArray(actions)) return '';
-	const disp = (n) => (typeof displaySpellName === 'function' ? displaySpellName(n) : String(n || '').replace(/_/g, ' '));
-	const out = [];
-	for (const a of actions) {
-		if (!a || a.type === 'pass') continue;
-		switch (a.type) {
-			case 'move': out.push('move to ' + a.node); break;
-			case 'blink': out.push('blink to ' + a.node); break;
-			case 'hard_move':
-				out.push('move to ' + a.node + (a.pushed_to ? ' pushing to ' + a.pushed_to : ' crushing'));
-				break;
-			case 'dash':
-			case 'dash_lightning':
-				out.push('dash sacrificing ' + (a.sacrificed || []).join(', '));
-				break;
-			case 'cast':
-				out.push('cast ' + disp(a.spell) + ((a.kept && a.kept.length) ? ' keeping ' + a.kept.join(', ') : ''));
-				break;
-			case 'sacrifice': out.push('sacrifice ' + a.node); break;
-			case 'bewitch': out.push('bewitch ' + a.node + (a.node2 ? ', ' + a.node2 : '')); break;
-			case 'corrupt': out.push('corrupt ' + (a.converted || []).join(', ')); break;
-			case 'starfall': out.push('starfall ' + [a.node, a.node2].filter(Boolean).join(', ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'gust': out.push('gust' + ((a.kept && a.kept.length) ? ' placing at ' + a.kept.join(', ') : '') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'meteor_destroy': out.push('destroy ' + a.node); break;
-			default:
-				out.push(String(a.type).replace(/_/g, ' ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : (a.node ? ' ' + a.node : '')));
-		}
-	}
-	return out.join(', ');
-}
+// describePuzzleActions (an engine action list as text) lives in
+// live-analysis.js, which every page loading this file loads too.
 
 /**
  * The puzzle's opponent. On a stored line it plays the precomputed defence.

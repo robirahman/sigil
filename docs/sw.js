@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v102';
+const CACHE_VERSION = 'v103';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -175,14 +175,17 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/auth-status.js?v=35',
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
-	'./static/scripts/engine/firebase-sync.js?v=35',
-	'./static/scripts/engine/game-review.js?v=41',
+	'./static/scripts/engine/firebase-sync.js?v=36',
+	'./static/scripts/engine/game-review.js?v=42',
 	'./static/scripts/engine/multiplayer-controller.js?v=36',
 	'./static/scripts/engine/room-clock.js?v=35',
-	'./static/scripts/engine/spectator-controller.js?v=35',
+	'./static/scripts/engine/spectator-controller.js?v=36',
 	'./static/scripts/engine/vacation-bank.js?v=35',
-	'./static/scripts/game-board-local.js?v=43',
-	'./static/scripts/game-board-multiplayer.js?v=42',
+	'./static/scripts/game-board-local.js?v=44',
+	'./static/scripts/game-board-multiplayer.js?v=43',
+	// Live engine analysis (game reviews; spectating, for developers).
+	'./static/scripts/live-analysis.js?v=1',
+	'./static/css/live-analysis.css?v=1',
 	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/help.js?v=35',
 	'./static/scripts/profile-stats.js?v=35',
