@@ -44,7 +44,8 @@ def main():
     dev = load_json(a.dev_set)
     cat = None
     if a.categories:
-        cat = {pid: v['category'] for pid, v in load_json(a.categories)['puzzles'].items()}
+        rec = load_json(a.categories)['puzzles']
+        cat = {pid: v['category'] for pid, v in rec.items()}
         if set(cat) != {p['id'] for p in dev['puzzles']}:
             sys.exit('--categories does not cover the dev set exactly')
     col = (lambda x: cat[x['puzzle_id']]) if cat else (lambda x: x['n'])
@@ -114,8 +115,11 @@ def main():
         'set_label': man.get('set_label', 'Dev set v1'),
         'split_counts': ({str(n): sum(1 for v in cat.values() if v == n) for n in sorted(set(cat.values()))}
                          if cat else dev['counts']),
-        'columns': 'proven shortest mate' if cat else 'stated N',
+        # 'shortest_mate': the shortest mate the proofs establish; a puzzle whose
+        # shorter mate is not excluded (exact false) stays under its stated N.
+        'columns': 'shortest_mate' if cat else 'stated_n',
         'recategorized': sum(1 for p in dev['puzzles'] if cat[p['id']] != p['n']) if cat else 0,
+        'unresolved': sum(1 for v in rec.values() if not v.get('exact')) if cat else 0,
         'resolver': 'not applied (first-pass grading for every run)' if a.first_pass else 'applied',
         'generated': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d'),
         'entries': entries,
