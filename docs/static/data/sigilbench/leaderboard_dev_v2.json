@@ -12,12 +12,14 @@
  "set_label": "Dev set v2",
  "split_counts": {
   "1": 25,
-  "2": 25,
-  "3": 25,
-  "4": 25
+  "2": 30,
+  "3": 21,
+  "4": 24
  },
+ "columns": "proven shortest mate",
+ "recategorized": 6,
  "resolver": "applied",
- "generated": "2026-11-03",
+ "generated": "2026-11-07",
  "entries": [
   {
    "id": "engine_vh_v2",
@@ -61,30 +63,30 @@
      ]
     },
     "2": {
-     "correct": 22,
-     "total": 25,
-     "accuracy": 0.88,
+     "correct": 26,
+     "total": 30,
+     "accuracy": 0.8667,
      "ci95": [
-      0.7004,
-      0.9583
+      0.7032,
+      0.9469
      ]
     },
     "3": {
-     "correct": 20,
-     "total": 25,
-     "accuracy": 0.8,
+     "correct": 17,
+     "total": 21,
+     "accuracy": 0.8095,
      "ci95": [
-      0.6087,
-      0.9114
+      0.6,
+      0.9233
      ]
     },
     "4": {
-     "correct": 23,
-     "total": 25,
-     "accuracy": 0.92,
+     "correct": 22,
+     "total": 24,
+     "accuracy": 0.9167,
      "ci95": [
-      0.7503,
-      0.9778
+      0.7415,
+      0.9768
      ]
     }
    },

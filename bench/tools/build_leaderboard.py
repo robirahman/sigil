@@ -34,11 +34,20 @@ def main():
     ap.add_argument('--out', default=OUT)
     ap.add_argument('--manifest', default=os.path.join(BENCH, 'leaderboard', 'runs.json'))
     ap.add_argument('--dev-set', default=os.path.join(BENCH, 'dev', 'dev_set.json'))
+    ap.add_argument('--categories', default=None,
+                    help='per-puzzle shortest-mate file (bench/dev/dev_set_v2_shortest.json): group the per-N '
+                         'columns by proven shortest mate instead of the stated N')
     ap.add_argument('--first-pass', action='store_true',
                     help='ignore resolver records (use when the resolver did not finish every run alike)')
     a = ap.parse_args()
     man = load_json(a.manifest)
     dev = load_json(a.dev_set)
+    cat = None
+    if a.categories:
+        cat = {pid: v['category'] for pid, v in load_json(a.categories)['puzzles'].items()}
+        if set(cat) != {p['id'] for p in dev['puzzles']}:
+            sys.exit('--categories does not cover the dev set exactly')
+    col = (lambda x: cat[x['puzzle_id']]) if cat else (lambda x: x['n'])
     entries = []
     for r in man['runs']:
         d = os.path.join(a.runs_root, r['gcs'])
@@ -60,8 +69,8 @@ def main():
         for x in rows:
             st[x['status']] = st.get(x['status'], 0) + 1
         by_n = {}
-        for n in sorted({x['n'] for x in rows}):
-            rs = [x for x in rows if x['n'] == n]
+        for n in sorted({col(x) for x in rows}):
+            rs = [x for x in rows if col(x) == n]
             by_n[str(n)] = acc(sum(x['correct'] for x in rs), len(rs))
         tin = sum((x.get('usage') or {}).get('input_tokens', 0) for x in rows)
         tout = sum((x.get('usage') or {}).get('output_tokens', 0) for x in rows)
@@ -103,7 +112,10 @@ def main():
         'split': man['split'],
         'set_id': man.get('set_id', 'dev_v1'),
         'set_label': man.get('set_label', 'Dev set v1'),
-        'split_counts': dev['counts'],
+        'split_counts': ({str(n): sum(1 for v in cat.values() if v == n) for n in sorted(set(cat.values()))}
+                         if cat else dev['counts']),
+        'columns': 'proven shortest mate' if cat else 'stated N',
+        'recategorized': sum(1 for p in dev['puzzles'] if cat[p['id']] != p['n']) if cat else 0,
         'resolver': 'not applied (first-pass grading for every run)' if a.first_pass else 'applied',
         'generated': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d'),
         'entries': entries,
