@@ -1039,6 +1039,15 @@ document.addEventListener('alpine:init', () => {
 					});
 				});
 
+				// Live analysis follows the reviewed position. Registered before the
+				// direct-review entry below, which returns early (?review=session,
+				// inline JSON, SGN-T) and would otherwise leave the analysis on the
+				// first position it showed.
+				if (!analysis && typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
+
 				// Direct review-mode entry from import flow:
 				//   ?review=session  → JSON stashed in sessionStorage by importGame()
 				//   ?review=<json>   → inline JSON (fallback for short payloads / shared URLs)
@@ -1945,11 +1954,6 @@ document.addEventListener('alpine:init', () => {
 					const follow = () => _this.boardMarks.setKey(marksKey());
 					for (const prop of analysis ? ['anaCur', 'anaMode'] : ['reviewMode', 'reviewIndex']) _this.$watch(prop, follow);
 					follow();
-				}
-				// Live analysis follows the reviewed position.
-				if (!analysis && typeof _this.liveAnalysisRefresh === 'function') {
-					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
-					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
 				}
 
 				function handleIncomingEvent(payload) {

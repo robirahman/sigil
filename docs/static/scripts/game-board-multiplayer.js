@@ -952,6 +952,15 @@ document.addEventListener('alpine:init', () => {
 					_this.$nextTick(() => { if (_this.$refs.messageHistory) _this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight; });
 				});
 
+				// Live analysis follows the reviewed position and the access
+				// (entering or leaving review, the game ending). Registered before
+				// the state arrives: a finished room goes straight into review and
+				// returns before the live-game wiring below.
+				if (typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
+
 				// Wait for multiplayer state to be set by the lobby
 				const waitForState = setInterval(() => {
 					if (!window._multiplayerState) return;
@@ -1052,12 +1061,6 @@ document.addEventListener('alpine:init', () => {
 					_this.$watch('reviewMode', follow);
 					_this.$watch('reviewIndex', follow);
 					follow();
-				}
-				// Live analysis follows the reviewed position and the access
-				// (entering or leaving review, the game ending).
-				if (typeof _this.liveAnalysisRefresh === 'function') {
-					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
-					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
 				}
 
 				let _turnCount = 0;
