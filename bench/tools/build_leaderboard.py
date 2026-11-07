@@ -34,11 +34,21 @@ def main():
     ap.add_argument('--out', default=OUT)
     ap.add_argument('--manifest', default=os.path.join(BENCH, 'leaderboard', 'runs.json'))
     ap.add_argument('--dev-set', default=os.path.join(BENCH, 'dev', 'dev_set.json'))
+    ap.add_argument('--categories', default=None,
+                    help='per-puzzle shortest-mate file (bench/dev/dev_set_v2_shortest.json): group the per-N '
+                         'columns by proven shortest mate instead of the stated N')
     ap.add_argument('--first-pass', action='store_true',
                     help='ignore resolver records (use when the resolver did not finish every run alike)')
     a = ap.parse_args()
     man = load_json(a.manifest)
     dev = load_json(a.dev_set)
+    cat = None
+    if a.categories:
+        rec = load_json(a.categories)['puzzles']
+        cat = {pid: v['category'] for pid, v in rec.items()}
+        if set(cat) != {p['id'] for p in dev['puzzles']}:
+            sys.exit('--categories does not cover the dev set exactly')
+    col = (lambda x: cat[x['puzzle_id']]) if cat else (lambda x: x['n'])
     entries = []
     for r in man['runs']:
         d = os.path.join(a.runs_root, r['gcs'])
@@ -60,8 +70,8 @@ def main():
         for x in rows:
             st[x['status']] = st.get(x['status'], 0) + 1
         by_n = {}
-        for n in sorted({x['n'] for x in rows}):
-            rs = [x for x in rows if x['n'] == n]
+        for n in sorted({col(x) for x in rows}):
+            rs = [x for x in rows if col(x) == n]
             by_n[str(n)] = acc(sum(x['correct'] for x in rs), len(rs))
         tin = sum((x.get('usage') or {}).get('input_tokens', 0) for x in rows)
         tout = sum((x.get('usage') or {}).get('output_tokens', 0) for x in rows)
@@ -87,6 +97,10 @@ def main():
             median_seconds=secs[len(secs) // 2],
         ))
     for b in man['baselines']:
+        if cat and b.get('by_n'):
+            # A baseline's per-N cells are aggregates by stated N; they cannot be
+            # regrouped by category without per-puzzle results.
+            sys.exit(f"baseline {b['id']} has a stated-N by_n breakdown, which --categories cannot regroup")
         if b.get('pending'):
             entries.append({'id': b['id'], 'kind': 'baseline', 'label': b['label'], 'config': b['config'], 'pending': True})
             continue
@@ -103,7 +117,14 @@ def main():
         'split': man['split'],
         'set_id': man.get('set_id', 'dev_v1'),
         'set_label': man.get('set_label', 'Dev set v1'),
-        'split_counts': dev['counts'],
+        'split_counts': ({str(n): sum(1 for v in cat.values() if v == n) for n in sorted(set(cat.values()))}
+                         if cat else dev['counts']),
+        # 'shortest_mate': each puzzle under the shortest forced win proven for it
+        # (its category); 'unresolved' counts those where a still shorter mate is
+        # not excluded (exact false), so their column is an upper bound.
+        'columns': 'shortest_mate' if cat else 'stated_n',
+        'recategorized': sum(1 for p in dev['puzzles'] if cat[p['id']] != p['n']) if cat else 0,
+        'unresolved': sum(1 for v in rec.values() if not v.get('exact')) if cat else 0,
         'resolver': 'not applied (first-pass grading for every run)' if a.first_pass else 'applied',
         'generated': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d'),
         'entries': entries,
