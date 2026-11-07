@@ -614,8 +614,8 @@
 												src="static/images/spacer.gif"
 												x-bind:class="{
 													'spell--available': actionList.includes(spellDict[`charm${i}`]),
-													'spell--blue-lock': blueLock === spellDict[`charm${i}`],
-													'spell--red-lock': redLock === spellDict[`charm${i}`],
+													'spell--blue-lock': blueLock === spellDict[`charm${i}`] || springSealLock(`charm${i}`, 'blue'),
+													'spell--red-lock': redLock === spellDict[`charm${i}`] || springSealLock(`charm${i}`, 'red'),
 													'spell--visible': spells.images[`charm${i}`],
 													[`charm-spell--${i}`] : true
 												}"
@@ -1018,12 +1018,12 @@
 			// drop the caches, refetch the page's scripts past the HTTP cache, and
 			// reload once. The new worker deletes the stale cache when it activates.
 			(function () {
-				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 3) return;
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 4) return;
 				if (!window.caches || !window.fetch) return;
 				try {
 					// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
-					if (sessionStorage.getItem('sigilStaleAssetReload') === '3') return;
-					sessionStorage.setItem('sigilStaleAssetReload', '3');
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '4') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '4');
 				} catch (e) { return; }
 				document.addEventListener('DOMContentLoaded', function () {
 					var urls = ['static/scripts/engine/ai-worker.js'];
@@ -1058,8 +1058,8 @@
 		<script src="static/scripts/engine/rust-ai.js?v=35"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-clock.js"></script>
-		<script src="static/scripts/engine/game-controller.js"></script>
-		<script src="static/scripts/engine/game-review.js?v=40"></script>
+		<script src="static/scripts/engine/game-controller.js?v=1"></script>
+		<script src="static/scripts/engine/game-review.js?v=42"></script>
 		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
 		<script src="static/scripts/engine/firebase-sync.js?v=36"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
@@ -1073,8 +1073,8 @@
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
-		<script src="static/scripts/game-board-local.js?v=42"></script>
-		<script src="static/scripts/rules-reference.js?v=35"></script>
+		<script src="static/scripts/game-board-local.js?v=44"></script>
+		<script src="static/scripts/rules-reference.js?v=36"></script>
 		<script src="static/scripts/help.js?v=35"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

@@ -106,3 +106,14 @@ new turns; a late joiner rebuilds the game's repetition counts and history from 
 room's turns (and falls back with a warning when they do not replay); a spectator without the flag and the players do not; the review of
 the finished game offers it to anyone and follows the reviewed position; game.html
 offers it in review only. `LIVE_ANALYSIS_SHOTS=<dir>` also saves screenshots.
+
+## Springlock highlight
+
+```sh
+node <repo>/tools/browser/springlock-highlight-test.js http://localhost:8765
+```
+
+Seal of Spring takes a side's lock highlight while that side's locked spell is springlocked (cast a
+second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
+loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
+blocked, so it never reaches Firebase), and the analysis board.

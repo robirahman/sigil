@@ -28,6 +28,10 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Each side's springlock: its locked spell once cast a second time
+			// through Seal of Spring (springSealLock), or ''.
+			redSpringlock: '',
+			blueSpringlock: '',
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
@@ -795,6 +799,8 @@ document.addEventListener('alpine:init', () => {
 				this.blueSpellCounter = state.blue_spellcounter || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
+				this.redSpringlock = state.red_springlock || '';
+				this.blueSpringlock = state.blue_springlock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
 				this.pushSourceNode = '';
@@ -828,6 +834,12 @@ document.addEventListener('alpine:init', () => {
 					this.spellTooltip = Popper.createPopper(anchor, tooltip, { modifiers: [{ name: 'offset', options: { offset: [0, 8] } }], placement: 'auto' });
 					this.spellTooltip.forceUpdate();
 				});
+			},
+			// Seal of Spring takes a side's lock highlight while that side's
+			// locked spell is springlocked (spent, not just locked).
+			springSealLock(slot, color) {
+				const spring = color === 'red' ? this.redSpringlock : this.blueSpringlock;
+				return !!spring && !!this.spellDict[slot] && baseSpellName(this.spellDict[slot]) === 'Seal_of_Spring';
 			},
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
@@ -1142,11 +1154,13 @@ document.addEventListener('alpine:init', () => {
 						const changed = Object.keys(rest).reduce((acc, c) => { if (rest[c] !== _this.previousBoardState[c]) acc[c] = rest[c]; return acc; }, {});
 						// Non-node payload fields must be destructured out or the
 					// ...nodes rest treats them as node names.
-					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redbank, bluebank, ...nodes } = changed;
+					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redbank, bluebank, redspringlock, bluespringlock, ...nodes } = changed;
 						Object.keys(nodes).forEach(n => { _this.nodes[n] = nodes[n]; });
 						if (bluelock !== undefined) _this.blueLock = bluelock;
 						if (bluespellcounter !== undefined) _this.blueSpellCounter = bluespellcounter;
 						if (redlock !== undefined) _this.redLock = redlock;
+						if (redspringlock !== undefined) _this.redSpringlock = redspringlock || '';
+						if (bluespringlock !== undefined) _this.blueSpringlock = bluespringlock || '';
 						if (redspellcounter !== undefined) _this.redSpellCounter = redspellcounter;
 						if (score !== undefined) _this.score = score;
 						if (redbank !== undefined) _this.redBank = redbank;

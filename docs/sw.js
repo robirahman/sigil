@@ -25,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v98';
+const CACHE_VERSION = 'v103';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -110,7 +110,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/wasm/sigil_engine_bg.wasm?v=35',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
-	'./static/scripts/engine/game-controller.js',
+	// v=1: the Fissure-wall fix (a stale controller would still let a wall
+	// click spend the move on a returning user's first game).
+	'./static/scripts/engine/game-controller.js?v=1',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/position-rating.js?v=36',
 	'./static/images/game-board.webp',
@@ -169,18 +171,18 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/help.css?v=35',
 	'./static/css/rules.css?v=35',
 	'./static/css/styles.css?v=35',
-	'./static/scripts/analysis-board.js?v=35',
+	'./static/scripts/analysis-board.js?v=36',
 	'./static/scripts/auth-status.js?v=35',
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
 	'./static/scripts/engine/firebase-sync.js?v=36',
-	'./static/scripts/engine/game-review.js?v=40',
-	'./static/scripts/engine/multiplayer-controller.js?v=35',
+	'./static/scripts/engine/game-review.js?v=42',
+	'./static/scripts/engine/multiplayer-controller.js?v=36',
 	'./static/scripts/engine/room-clock.js?v=35',
 	'./static/scripts/engine/spectator-controller.js?v=36',
 	'./static/scripts/engine/vacation-bank.js?v=35',
-	'./static/scripts/game-board-local.js?v=42',
-	'./static/scripts/game-board-multiplayer.js?v=41',
+	'./static/scripts/game-board-local.js?v=44',
+	'./static/scripts/game-board-multiplayer.js?v=43',
 	// Live engine analysis (game reviews; spectating, for developers).
 	'./static/scripts/live-analysis.js?v=1',
 	'./static/css/live-analysis.css?v=1',
@@ -190,7 +192,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/puzzle-progress.js?v=35',
 	'./static/scripts/puzzle-rating.js?v=35',
 	'./static/scripts/report-dialog.js?v=35',
-	'./static/scripts/rules-reference.js?v=35',
+	'./static/scripts/rules-reference.js?v=36',
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
