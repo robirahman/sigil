@@ -1,5 +1,5 @@
 {
- "_comment": "Dev set v2 (bench/dev/dev_set_v2.json). Engine runs live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>. Rebuild: python3 bench/tools/build_leaderboard.py --manifest bench/leaderboard/runs_dev_v2.json --dev-set bench/dev/dev_set_v2.json --out docs/static/data/sigilbench/leaderboard_dev_v2.json --runs-root <local copy of the bucket>",
+ "_comment": "Dev set v2 (bench/dev/dev_set_v2.json). Engine runs live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>. Rebuild: python3 bench/tools/build_leaderboard.py --manifest bench/leaderboard/runs_dev_v2.json --dev-set bench/dev/dev_set_v2.json --out docs/static/data/sigilbench/leaderboard_dev_v2.json --runs-root <local copy of the bucket> --categories bench/dev/dev_set_v2_shortest.json",
  "split": "dev",
  "set_id": "dev_v2",
  "set_label": "Dev set v2",
