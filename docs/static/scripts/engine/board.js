@@ -136,6 +136,9 @@ class SigilBoard {
 		}
 		payload.redlock = this.lock.red;
 		payload.bluelock = this.lock.blue;
+		// The locked spell once cast a second time (Seal of Spring), or null.
+		payload.redspringlock = this.springlock.red;
+		payload.bluespringlock = this.springlock.blue;
 		payload.redspellcounter = this.spellCounter.red;
 		payload.bluespellcounter = this.spellCounter.blue;
 		payload.score = this.score;
