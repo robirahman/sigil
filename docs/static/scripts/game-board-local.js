@@ -438,15 +438,8 @@ document.addEventListener('alpine:init', () => {
 				return this.reviewMode && this.reviewSfns.length > 0;
 			},
 			_liveAnalysisTarget() {
-				const i = this.reviewIndex;
-				const sfns = this.reviewSfns;
-				if (!this.reviewMode || !sfns[i]) return null;
-				// Position 0 is a pre-turn SFN, the rest after-turn ones;
-				// rematchSfnAt gives every one in the after-turn form.
-				const at = (j) => (typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, j) : sfns[j]);
-				const earlier = [];
-				for (let j = 0; j < i; j++) earlier.push(at(j));
-				return { sfn: at(i), earlier, winner: (this.winner && i === sfns.length - 1) ? this.winner : null };
+				if (!this.reviewMode) return null;
+				return liveAnalysisReviewTarget(this.reviewSfns, this.reviewTurnLabels, this.reviewIndex, this.winner);
 			},
 
 			// Map-control readout: how many nodes each side's stones are

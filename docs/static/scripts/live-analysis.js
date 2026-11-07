@@ -70,6 +70,22 @@ function liveAnalysisAccess(o) {
 
 /** "Red 3" / "Blue 5": whose turn a side-to-move SFN is, numbered as the
  *  review labels them. */
+/**
+ * The analysis target for review position `i`: { sfn, earlier, winner }, every
+ * SFN in the after-turn form the search reads. Position 0 of a turn line is a
+ * pre-turn SFN and is rewound (rematchSfnAt); a final-only review (an old
+ * export or a failed replay: one position, not labelled 'Start') already holds
+ * an after-turn SFN and is left alone -- the rule openAnalysis() uses.
+ */
+function liveAnalysisReviewTarget(sfns, labels, i, winner) {
+	if (!sfns || !sfns[i]) return null;
+	const preTurn0 = sfns.length > 1 || (labels || [])[0] === 'Start';
+	const at = (j) => ((j > 0 || preTurn0) && typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, j) : sfns[j]);
+	const earlier = [];
+	for (let j = 0; j < i; j++) earlier.push(at(j));
+	return { sfn: at(i), earlier, winner: (winner && i === sfns.length - 1) ? winner : null };
+}
+
 function liveAnalysisTurnLabel(searchSfn) {
 	const p = String(searchSfn || '').trim().split(/\s+/);
 	const tc = parseInt(p[2], 10) || 0;

@@ -8,7 +8,8 @@
 // No engine runs: liveAnalysisRefresh is replaced by a counter, live analysis
 // is switched on, and the review index is stepped; every step must call it,
 // and so must a change of the (watched) winner, which nothing but the
-// watcher reacts to.
+// watcher reacts to. It also checks the analysed position: index 0 of a turn
+// line is rewound to the after-turn form, a final-only review is not.
 // multiplayer.html runs with every Firebase database and auth request blocked.
 //
 //   node tools/browser/live-analysis-watchers-test.js docs [port]
@@ -48,6 +49,7 @@ async function stepCount(page, sel) {
 		const c = document.querySelector(q)._x_dataStack[0];
 		window.__refreshes = 0;
 		c.liveAnalysisRefresh = function () { window.__refreshes++; };
+		c.reviewIndex = c.reviewSfns.length - 1;   // so every step below moves
 		c.liveAnaOn = true;
 		await new Promise((r) => setTimeout(r, 50));
 		window.__refreshes = 0;
@@ -82,6 +84,21 @@ async function stepCount(page, sel) {
 			return el && el._x_dataStack && el._x_dataStack[0].reviewMode;
 		}, { timeout: 60000 });
 		await sleep(300);
+		// The target position: index 0 of a turn line is rewound to the
+		// after-turn form; a final-only review is not (openAnalysis's rule).
+		const targets = (sel) => page.evaluate((q, sfns) => {
+			const c = document.querySelector(q)._x_dataStack[0];
+			const saved = [c.reviewSfns, c.reviewTurnLabels, c.reviewIndex];
+			c.reviewIndex = 0;
+			const line = c._liveAnalysisTarget().sfn;
+			c.reviewSfns = [sfns[2]]; c.reviewTurnLabels = ['Final position']; c.reviewIndex = 0;
+			const finalOnly = c._liveAnalysisTarget().sfn;
+			[c.reviewSfns, c.reviewTurnLabels, c.reviewIndex] = saved;
+			return { line, finalOnly };
+		}, sel, SFNS);
+		const tl = await targets('[x-data^="gameBoard"]');
+		check(tl.line !== SFNS[0] && tl.line.split(' ')[2] === '0', 'game.html: review position 0 is rewound to the after-turn form', tl.line);
+		check(tl.finalOnly === SFNS[2], 'game.html: a final-only review is analysed as shown, not rewound', tl.finalOnly);
 		const local = await stepCount(page, '[x-data^="gameBoard"]');
 		check(local.reviewMode && local.refreshes >= 3 && local.onWinner >= 1, 'game.html direct review: live analysis follows each review step', local);
 
@@ -112,6 +129,15 @@ async function stepCount(page, sel) {
 			return el && el._x_dataStack && el._x_dataStack[0].reviewMode && el._x_dataStack[0].reviewSfns.length > 1;
 		}, { timeout: 60000 });
 		await sleep(300);
+		const to = await mp.evaluate((sfns) => {
+			const c = document.querySelector('[x-data^="gameBoard"]')._x_dataStack[0];
+			const saved = [c.reviewSfns, c.reviewTurnLabels, c.reviewIndex];
+			c.reviewSfns = [sfns[2]]; c.reviewTurnLabels = ['Final position']; c.reviewIndex = 0;
+			const finalOnly = c._liveAnalysisTarget().sfn;
+			[c.reviewSfns, c.reviewTurnLabels, c.reviewIndex] = saved;
+			return finalOnly;
+		}, SFNS);
+		check(to === SFNS[2], 'multiplayer.html: a final-only review is analysed as shown, not rewound', to);
 		const online = await stepCount(mp, '[x-data^="gameBoard"]');
 		check(online.reviewMode && online.refreshes >= 3 && online.onWinner >= 1, 'multiplayer.html finished room: live analysis follows each review step', online);
 	} catch (e) {
