@@ -539,12 +539,17 @@
 				? 'Human experts: Robi Rahman (the game\'s developer) and Andy Voellmer (its creator) each played half of the set, ' +
 				  'without an engine; only the combined score is recorded, not a breakdown by mate length. '
 				: '';
+			const columnsNote = data.columns === 'shortest_mate'
+				? 'Columns group puzzles by the shortest forced win proven for each (v2.1): ' + data.recategorized +
+				  ' puzzles stated as a longer mate have a proven faster one and are counted under it; for ' + data.unresolved +
+				  ' a still faster mate is not yet excluded, so their column is an upper bound. Each puzzle still states, and is graded against, its original N; a faster mate always counts as correct. '
+				: '';
 			const m4Note = data.split_counts['4']
 				? 'Mate-in-4 answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
 				: '';
 			document.getElementById('table-note').textContent =
 				data.set_label + ': benchmark ' + data.benchmark.version + ', updated ' + data.generated + '. ' +
-				engineNote + humanNote + m4Note + reminderNote +
+				engineNote + humanNote + columnsNote + m4Note + reminderNote +
 				(data.resolver && data.resolver.indexOf('not applied') === 0
 					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
 					: '') +
