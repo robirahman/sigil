@@ -46,6 +46,16 @@ def main():
                 if key in res and res[key] != r['result']:
                     sys.exit(f'contradictory proofs for {key}')
                 res[key] = r['result']
+    # Proofs are monotone: a win within k is a win within every larger k, so a
+    # "mate" at some k and a "none" at any k' >= k cannot both hold.
+    by_id = {}
+    for (pid, k), v in res.items():
+        by_id.setdefault(pid, {})[k] = v
+    for pid, d in by_id.items():
+        mates = [k for k, v in d.items() if v == 'mate']
+        nones = [k for k, v in d.items() if v == 'none']
+        if mates and nones and min(mates) <= max(nones):
+            sys.exit(f'contradictory proofs for {pid}: a win within {min(mates)} and none within {max(nones)}')
     out = {}
     for p in ps:
         n = p['n']
