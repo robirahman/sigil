@@ -82,7 +82,10 @@ function buildRingLayout(zoneCount) {
 // (the inline script after each page's constants.js tag).
 // 3: the rules reference (help.js "This game's rules", rules-reference.js,
 // the tooltip handlers in game-board-local/multiplayer.js).
-const SIGIL_ASSET_EPOCH = 3;
+// 4: the boardstate payload's redspringlock/bluespringlock (engine/board.js,
+// unversioned), read by the springlock highlight in game-board-local and
+// game-board-multiplayer.js.
+const SIGIL_ASSET_EPOCH = 4;
 
 // Per-layout rules. `spellTarget`: casting this many spells ends the game
 // (the stone leader wins). `winLead`: a real-stone lead of this much over the

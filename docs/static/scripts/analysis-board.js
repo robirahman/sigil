@@ -394,6 +394,8 @@ function analysisMixin() {
 			if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(b.variant, b.spellNames);
 			this.redLock = b.lock.red || '';
 			this.blueLock = b.lock.blue || '';
+			this.redSpringlock = b.springlock.red || '';
+			this.blueSpringlock = b.springlock.blue || '';
 			this.redSpellCounter = b.spellCounter.red || 0;
 			this.blueSpellCounter = b.spellCounter.blue || 0;
 			this.redBank = b.providenceBank.red || 0;
