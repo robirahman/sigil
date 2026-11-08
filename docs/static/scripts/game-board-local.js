@@ -70,6 +70,10 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Each side's springlock: its locked spell once cast a second time
+			// through Seal of Spring (springSealLock), or ''.
+			redSpringlock: '',
+			blueSpringlock: '',
 			// Providence bank sizes (badge beside the dice).
 			redBank: 0,
 			blueBank: 0,
@@ -425,6 +429,19 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Live engine analysis (live-analysis.js) in the review of a
+			// finished game; never during play, the puzzles or the tutorial
+			// (the analysis board has its own engine panel).
+			...((!analysis && typeof liveAnalysisMixin === 'function') ? liveAnalysisMixin() : {}),
+			get canLiveAnalyse() {
+				if (analysis || this.puzzle || this.tutorial || typeof liveAnalysisMixin !== 'function') return false;
+				return this.reviewMode && this.reviewSfns.length > 0;
+			},
+			_liveAnalysisTarget() {
+				if (!this.reviewMode) return null;
+				return liveAnalysisReviewTarget(this.reviewSfns, this.reviewTurnLabels, this.reviewIndex, this.winner);
+			},
+
 			// Map-control readout: how many nodes each side's stones are
 			// strictly closer to (multi-source BFS; Fissure walls impassable
 			// and excluded — see features.js mapControl). Cheap and
@@ -482,6 +499,14 @@ document.addEventListener('alpine:init', () => {
 					});
 					this.spellTooltip.forceUpdate();
 				});
+			},
+
+			/** Seal of Spring takes a side's lock highlight while that side's
+			 *  locked spell is springlocked: cast a second time through the
+			 *  Seal, so spent rather than just locked. */
+			springSealLock(slot, color) {
+				const spring = color === 'red' ? this.redSpringlock : this.blueSpringlock;
+				return !!spring && !!this.spellDict[slot] && baseSpellName(this.spellDict[slot]) === 'Seal_of_Spring';
 			},
 
 			exportPosition() {
@@ -787,6 +812,8 @@ document.addEventListener('alpine:init', () => {
 				this.blueBank = state.blue_bank || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
+				this.redSpringlock = state.red_springlock || '';
+				this.blueSpringlock = state.blue_springlock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
 				this.pushSourceNode = '';
@@ -1004,6 +1031,15 @@ document.addEventListener('alpine:init', () => {
 						}
 					});
 				});
+
+				// Live analysis follows the reviewed position. Registered before the
+				// direct-review entry below, which returns early (?review=session,
+				// inline JSON, SGN-T) and would otherwise leave the analysis on the
+				// first position it showed.
+				if (!analysis && typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
 
 				// Direct review-mode entry from import flow:
 				//   ?review=session  → JSON stashed in sessionStorage by importGame()
@@ -2813,6 +2849,8 @@ document.addEventListener('alpine:init', () => {
 						// here or the ...nodes rest treats them as node names.
 						redbank,
 						bluebank,
+						redspringlock,
+						bluespringlock,
 						...nodes
 					} = changedBoardState;
 
@@ -2830,6 +2868,12 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (isValidStateKey(redlock)) {
 						_this.redLock = redlock;
+					}
+					if (isValidStateKey(redspringlock)) {
+						_this.redSpringlock = redspringlock || '';
+					}
+					if (isValidStateKey(bluespringlock)) {
+						_this.blueSpringlock = bluespringlock || '';
 					}
 					if (isValidStateKey(redspellcounter)) {
 						_this.redSpellCounter = redspellcounter;
@@ -3373,38 +3417,8 @@ function puzzleImportSfn(sfn) {
 	return p.join(' ');
 }
 
-/** Human-readable rendering of an applyAITurn action list. */
-function describePuzzleActions(actions) {
-	if (!Array.isArray(actions)) return '';
-	const disp = (n) => (typeof displaySpellName === 'function' ? displaySpellName(n) : String(n || '').replace(/_/g, ' '));
-	const out = [];
-	for (const a of actions) {
-		if (!a || a.type === 'pass') continue;
-		switch (a.type) {
-			case 'move': out.push('move to ' + a.node); break;
-			case 'blink': out.push('blink to ' + a.node); break;
-			case 'hard_move':
-				out.push('move to ' + a.node + (a.pushed_to ? ' pushing to ' + a.pushed_to : ' crushing'));
-				break;
-			case 'dash':
-			case 'dash_lightning':
-				out.push('dash sacrificing ' + (a.sacrificed || []).join(', '));
-				break;
-			case 'cast':
-				out.push('cast ' + disp(a.spell) + ((a.kept && a.kept.length) ? ' keeping ' + a.kept.join(', ') : ''));
-				break;
-			case 'sacrifice': out.push('sacrifice ' + a.node); break;
-			case 'bewitch': out.push('bewitch ' + a.node + (a.node2 ? ', ' + a.node2 : '')); break;
-			case 'corrupt': out.push('corrupt ' + (a.converted || []).join(', ')); break;
-			case 'starfall': out.push('starfall ' + [a.node, a.node2].filter(Boolean).join(', ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'gust': out.push('gust' + ((a.kept && a.kept.length) ? ' placing at ' + a.kept.join(', ') : '') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
-			case 'meteor_destroy': out.push('destroy ' + a.node); break;
-			default:
-				out.push(String(a.type).replace(/_/g, ' ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : (a.node ? ' ' + a.node : '')));
-		}
-	}
-	return out.join(', ');
-}
+// describePuzzleActions (an engine action list as text) lives in
+// live-analysis.js, which every page loading this file loads too.
 
 /**
  * The puzzle's opponent. On a stored line it plays the precomputed defence.

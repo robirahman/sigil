@@ -28,6 +28,10 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Each side's springlock: its locked spell once cast a second time
+			// through Seal of Spring (springSealLock), or ''.
+			redSpringlock: '',
+			blueSpringlock: '',
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
@@ -559,6 +563,44 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Live engine analysis (live-analysis.js): anyone in the review
+			// of a finished game; while a game is in progress, only a
+			// developer account spectating it (not one of its players).
+			...(typeof liveAnalysisMixin === 'function' ? liveAnalysisMixin() : {}),
+			// Positions the board has shown this session (loadable SFNs from
+			// sfn_update), for the live search's repetition history.
+			_liveAnaPositions: [],
+			get canLiveAnalyse() {
+				if (typeof liveAnalysisAccess !== 'function') return false;
+				const am = this._authManager;
+				return liveAnalysisAccess({
+					reviewMode: this.reviewMode,
+					isSpectator: this.isSpectator,
+					isDeveloper: this.isDeveloper,
+					viewerUid: (am && am.uid) || null,
+					playerUids: [this.redUid, this.blueUid].filter(Boolean),
+				});
+			},
+			_liveAnalysisTarget() {
+				if (this.reviewMode) {
+					return liveAnalysisReviewTarget(this.reviewSfns, this.reviewTurnLabels, this.reviewIndex, this.winner);
+				}
+				if (!this.currentSfn) return null;
+				const seen = this._liveAnaPositions;
+				const k = seen.lastIndexOf(this.currentSfn);
+				return { sfn: this.currentSfn, earlier: k > 0 ? seen.slice(0, k) : [], winner: this.winner || null };
+			},
+			_noteLiveAnalysisPosition(sfn) {
+				if (!sfn) return;
+				// SFNs carry the turn counter, so the same string again means
+				// the board was rebuilt (a takeback): drop what came after it.
+				const seen = this._liveAnaPositions;
+				const k = seen.indexOf(sfn);
+				if (k >= 0) seen.length = k + 1;
+				else seen.push(sfn);
+				if (seen.length > 200) seen.splice(0, seen.length - 200);
+			},
+
 			// Map-control readout: how many nodes each side's stones are
 			// strictly closer to (multi-source BFS; Fissure walls impassable
 			// and excluded — see features.js mapControl). Same pattern as
@@ -749,6 +791,8 @@ document.addEventListener('alpine:init', () => {
 				this.blueSpellCounter = state.blue_spellcounter || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
+				this.redSpringlock = state.red_springlock || '';
+				this.blueSpringlock = state.blue_springlock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
 				this.pushSourceNode = '';
@@ -782,6 +826,12 @@ document.addEventListener('alpine:init', () => {
 					this.spellTooltip = Popper.createPopper(anchor, tooltip, { modifiers: [{ name: 'offset', options: { offset: [0, 8] } }], placement: 'auto' });
 					this.spellTooltip.forceUpdate();
 				});
+			},
+			// Seal of Spring takes a side's lock highlight while that side's
+			// locked spell is springlocked (spent, not just locked).
+			springSealLock(slot, color) {
+				const spring = color === 'red' ? this.redSpringlock : this.blueSpringlock;
+				return !!spring && !!this.spellDict[slot] && baseSpellName(this.spellDict[slot]) === 'Seal_of_Spring';
 			},
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
@@ -893,6 +943,15 @@ document.addEventListener('alpine:init', () => {
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => { if (_this.$refs.messageHistory) _this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight; });
 				});
+
+				// Live analysis follows the reviewed position and the access
+				// (entering or leaving review, the game ending). Registered before
+				// the state arrives: a finished room goes straight into review and
+				// returns before the live-game wiring below.
+				if (typeof _this.liveAnalysisRefresh === 'function') {
+					const refreshLive = () => { if (_this.liveAnaOn) _this.liveAnalysisRefresh(); };
+					for (const prop of ['reviewIndex', 'reviewMode', 'winner', 'canLiveAnalyse']) _this.$watch(prop, refreshLive);
+				}
 
 				// Wait for multiplayer state to be set by the lobby
 				const waitForState = setInterval(() => {
@@ -1072,16 +1131,31 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${baseSpellName(v)}.png`; }); }
 					else if (type === 'spelltextsetup') { _this.spells.text = rest; }
-					else if (type === 'sfn_update') { _this.currentSfn = rest.sfn; }
+					else if (type === 'history') {
+						// A spectator who joined mid-game: the positions before
+						// the one it opened on (spectator-controller.js).
+						const seen = _this._liveAnaPositions;
+						const earlier = (rest.sfns || []).filter((x) => x && !seen.includes(x));
+						seen.splice(0, 0, ...earlier);
+						if (seen.length > 200) seen.splice(0, seen.length - 200);
+						if (_this.liveAnaOn) _this.liveAnalysisRefresh();
+					}
+					else if (type === 'sfn_update') {
+						_this.currentSfn = rest.sfn;
+						_this._noteLiveAnalysisPosition(rest.sfn);
+						if (_this.liveAnaOn) _this.liveAnalysisRefresh();
+					}
 					else if (type === 'boardstate') {
 						const changed = Object.keys(rest).reduce((acc, c) => { if (rest[c] !== _this.previousBoardState[c]) acc[c] = rest[c]; return acc; }, {});
 						// Non-node payload fields must be destructured out or the
 					// ...nodes rest treats them as node names.
-					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redbank, bluebank, ...nodes } = changed;
+					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redbank, bluebank, redspringlock, bluespringlock, ...nodes } = changed;
 						Object.keys(nodes).forEach(n => { _this.nodes[n] = nodes[n]; });
 						if (bluelock !== undefined) _this.blueLock = bluelock;
 						if (bluespellcounter !== undefined) _this.blueSpellCounter = bluespellcounter;
 						if (redlock !== undefined) _this.redLock = redlock;
+						if (redspringlock !== undefined) _this.redSpringlock = redspringlock || '';
+						if (bluespringlock !== undefined) _this.blueSpringlock = bluespringlock || '';
 						if (redspellcounter !== undefined) _this.redSpellCounter = redspellcounter;
 						if (score !== undefined) _this.score = score;
 						if (redbank !== undefined) _this.redBank = redbank;

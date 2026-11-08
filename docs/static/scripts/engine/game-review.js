@@ -1167,6 +1167,10 @@ function recordEnding(rec) {
  *   result — an object to receive how the transcript ends: { gameover,
  *            winner }, counting a Seal of Destruction still held when the
  *            next turn would start (the rating function's result check).
+ *   onBoard — called at the end with the replay board, whose
+ *            allLoopingSnapshotCounts hold the threefold-repetition counts of
+ *            every turn-start position (a spectator joining mid-game seeds
+ *            its own board with them).
  */
 async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
@@ -1178,7 +1182,9 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const normToken = tok => typeof tok === 'string' ? normalizeSpellName(tok) : tok;
 	const normAction = a => (a && a.spell)
 		? Object.assign({}, a, { spell: normalizeSpellName(a.spell) }) : a;
-	const gc = new GameController(emit, { variant });
+	// legacyReplay: a record replays the way the controller that recorded it
+	// played it (game-controller.js, the 2026-11 Fissure-wall fix).
+	const gc = new GameController(emit, { variant, legacyReplay: true });
 	const board = new SigilBoard(spellNames, variant || 'standard');
 	if (setupSfn) {
 		board.loadFromSfn(setupSfn);
@@ -1291,5 +1297,6 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 		opts.result.gameover = !!board.gameover;
 		opts.result.winner = board.winner || null;
 	}
+	if (opts && typeof opts.onBoard === 'function') opts.onBoard(board);
 	return rebuilt;
 }
