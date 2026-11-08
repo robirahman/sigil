@@ -3,13 +3,15 @@
 # mine_v3.py assemble output, $IN/<first arg>): a certificate per puzzle, the
 # independent Rust check, the browser-rules check (every N <= 3), and the
 # shortest-mate proof "no forced win within 2" for each mate in 3.
-#   args: <pool file name> [cert_ms=1800000] [within_ms=1800000]
+#   args: <pool file name> [cert_ms=1800000] [within_ms=1800000] [js_max_n=3] [js_sample=0.1]
+#   (a mined pool, before selection: js_max_n 0 and a small js_sample; every
+#   puzzle selected for a set gets the full JS check later)
 set -uo pipefail
 cd "$(dirname "$0")/../../.."
-POOL=$IN/$1; CMS=${2:-1800000}; WMS=${3:-1800000}
+POOL=$IN/$1; CMS=${2:-1800000}; WMS=${3:-1800000}; JSN=${4:-3}; JSS=${5:-0.1}
 W=${WORKERS:-$(nproc)}
 python3 bench/tools/certs.py "$POOL" --tool $BIN/cert_tool --out $OUT/certs.jsonl \
-  --jobs $((W * 2 / 3)) --time-ms "$CMS" --leaves --js > $OUT/certs.log 2>&1 &
+  --jobs $((W * 2 / 3)) --time-ms "$CMS" --leaves --js --js-max-n "$JSN" --js-sample "$JSS" > $OUT/certs.log 2>&1 &
 P1=$!
 python3 - "$BIN" "$OUT" "$POOL" "$WMS" $((W / 3)) <<'PY' > $OUT/within.log 2>&1 &
 import json, subprocess, sys, concurrent.futures as cf
