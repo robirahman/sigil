@@ -21,9 +21,10 @@ A candidate is a mate-in-k puzzle when the certificate checks, no mate-in-1
 exists, and no win within 2 exists (k >= 3) -- the labels say which shorter
 mates are excluded by proof and which are only not found.
 
-Game files: either {"<game id>": {"turns": [{"turnNumber", "sfnBefore",
-"sfnAfter", "color"}], ...}} or a list of {"key": <game id>, "sfns": [...]}
-(position before each turn, tools/hydrate output). Pools: a list or
+Game files: {"<game id>": {"turns": [{"turnNumber", "sfnBefore",
+"sfnAfter", "color"}], ...}}, a list of {"key": <game id>, "sfns": [...]}
+(position before each turn, tools/hydrate output), or a mine_v3.py corpus
+file ({"games": {gid: {"positions": [{"sfn"}...]}}}). Pools: a list or
 {"puzzles": [...]} of puzzles with "id", "sfn", "game": {"id"}.
 Everything this writes is private test-set material (canary included):
 keep it in the private bucket.
@@ -51,6 +52,11 @@ def load_games(files):
     out = {}
     for f in files:
         d = json.load(open(f))
+        if isinstance(d, dict) and isinstance(d.get('games'), dict):
+            # bench/tools/mine_v3.py corpus: {"games": {gid: {"positions": [{"sfn", ...}]}}}
+            for gid, g in d['games'].items():
+                out[gid] = [p['sfn'] for p in g['positions']]
+            continue
         if isinstance(d, list):
             for g in d:
                 out[g['key']] = list(g['sfns'])

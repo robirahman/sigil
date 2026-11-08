@@ -31,8 +31,14 @@ from sigilbench.common import BENCH  # noqa: E402
 REPO = os.path.dirname(BENCH)
 
 
+def ref_actions(p):
+    """The reference first turn: a dev set's reference_solution, or a mined
+    pool's first stored solution (bench/tools/mine_v3.py assemble)."""
+    return p['reference_solution'] if 'reference_solution' in p else p['solutions'][0]['actions']
+
+
 def after_sfns(puzzles):
-    inp = ''.join(json.dumps({'sfn': p['sfn'], 'actions': p['reference_solution']}) + '\n' for p in puzzles)
+    inp = ''.join(json.dumps({'sfn': p['sfn'], 'actions': ref_actions(p)}) + '\n' for p in puzzles)
     out = subprocess.run(['node', os.path.join(BENCH, 'grader', 'apply.js')], input=inp,
                          capture_output=True, text=True, check=True).stdout.splitlines()
     return [json.loads(l) for l in out]
@@ -106,6 +112,8 @@ def main():
     ap.add_argument('--list-js-sample', action='store_true', help='print the sampled ids above --js-max-n and exit')
     a = ap.parse_args()
     ps = json.load(open(a.puzzles))['puzzles']
+    for p in ps:                       # mined pools say "mate", dev sets "n"
+        p.setdefault('n', p.get('mate'))
     if a.ids:
         want = set(a.ids.split(','))
         ps = [p for p in ps if p['id'] in want]
