@@ -395,6 +395,25 @@ let wasm_bindgen = (function(exports) {
         wasm.set_policy_explore(mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every);
     }
     exports.set_policy_explore = set_policy_explore;
+
+    /**
+     * eval.rs `SHIPPED_EVAL`: the net the site's JS must name (rust-ai.js, game-review.js).
+     * tools/wasm-smoke.js fails when a JS literal names any other net.
+     * @returns {string}
+     */
+    function shipped_eval() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.shipped_eval();
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    exports.shipped_eval = shipped_eval;
     function __wbg_get_imports() {
         const import0 = {
             __proto__: null,
