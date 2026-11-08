@@ -3,7 +3,7 @@
 # mine_v3.py assemble output, $IN/<first arg>): a certificate per puzzle, the
 # independent Rust check, the browser-rules check (every N <= 3), and the
 # shortest-mate proof "no forced win within 2" for each mate in 3.
-#   args: <pool file name> [cert_ms=1800000] [within_ms=1800000] [js_max_n=3] [js_sample=0.1]
+#   args: <pool file name> [cert_ms=1800000] [within_ms=1800000 (0 = skip)] [js_max_n=3] [js_sample=0.1]
 #   (a mined pool, before selection: js_max_n 0 and a small js_sample; every
 #   puzzle selected for a set gets the full JS check later)
 set -uo pipefail
@@ -13,6 +13,7 @@ W=${WORKERS:-$(nproc)}
 python3 bench/tools/certs.py "$POOL" --tool $BIN/cert_tool --out $OUT/certs.jsonl \
   --jobs $((W * 2 / 3)) --time-ms "$CMS" --leaves --js --js-max-n "$JSN" --js-sample "$JSS" > $OUT/certs.log 2>&1 &
 P1=$!
+if [ "$WMS" = 0 ]; then true & P2=$!; else   # within_ms 0: shortest-mate proofs already done
 python3 - "$BIN" "$OUT" "$POOL" "$WMS" $((W / 3)) <<'PY' > $OUT/within.log 2>&1 &
 import json, subprocess, sys, concurrent.futures as cf
 bin_, out, pool, wms, jobs = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
@@ -26,5 +27,6 @@ with open(out + '/within.jsonl', 'a') as f, cf.ThreadPoolExecutor(max(1, jobs)) 
         r = fu.result(); f.write(json.dumps(r) + '\n'); f.flush(); print(r, flush=True)
 PY
 P2=$!
+fi
 wait $P1 $P2
 echo "verify_v3 done"

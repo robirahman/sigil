@@ -6,6 +6,7 @@
   "sbdev2-041",
   "sbdev2-070",
   "sbdev2-084",
+  "sbdev2-089",
   "sbdev2-094",
   "sbdev2-095",
   "sbdev2-097"
@@ -160,15 +161,14 @@
   "sbdev2-016": {
    "n": 4,
    "category": 4,
-   "exact": false,
+   "exact": true,
    "excluded_within": [
     1,
-    2
-   ],
-   "not_excluded_within": [
+    2,
     3
    ],
-   "note": "mate in 4; no forced win within 2 (proven); a forced win within 3 is NOT excluded"
+   "not_excluded_within": [],
+   "note": "mate in 4; no forced win within 3 (proven)"
   },
   "sbdev2-017": {
    "n": 1,
@@ -428,15 +428,14 @@
   "sbdev2-042": {
    "n": 4,
    "category": 4,
-   "exact": false,
+   "exact": true,
    "excluded_within": [
     1,
-    2
-   ],
-   "not_excluded_within": [
+    2,
     3
    ],
-   "note": "mate in 4; no forced win within 2 (proven); a forced win within 3 is NOT excluded"
+   "not_excluded_within": [],
+   "note": "mate in 4; no forced win within 3 (proven)"
   },
   "sbdev2-043": {
    "n": 3,
@@ -925,16 +924,14 @@
   },
   "sbdev2-089": {
    "n": 4,
-   "category": 4,
-   "exact": false,
+   "category": 3,
+   "exact": true,
    "excluded_within": [
     1,
     2
    ],
-   "not_excluded_within": [
-    3
-   ],
-   "note": "mate in 4; no forced win within 2 (proven); a forced win within 3 is NOT excluded"
+   "not_excluded_within": [],
+   "note": "mate in 3 (a forced win within 3 is proven, none within 2)"
   },
   "sbdev2-090": {
    "n": 3,
@@ -958,28 +955,26 @@
   "sbdev2-092": {
    "n": 4,
    "category": 4,
-   "exact": false,
+   "exact": true,
    "excluded_within": [
     1,
-    2
-   ],
-   "not_excluded_within": [
+    2,
     3
    ],
-   "note": "mate in 4; no forced win within 2 (proven); a forced win within 3 is NOT excluded"
+   "not_excluded_within": [],
+   "note": "mate in 4; no forced win within 3 (proven)"
   },
   "sbdev2-093": {
    "n": 4,
    "category": 4,
-   "exact": false,
+   "exact": true,
    "excluded_within": [
     1,
-    2
-   ],
-   "not_excluded_within": [
+    2,
     3
    ],
-   "note": "mate in 4; no forced win within 2 (proven); a forced win within 3 is NOT excluded"
+   "not_excluded_within": [],
+   "note": "mate in 4; no forced win within 3 (proven)"
   },
   "sbdev2-094": {
    "n": 4,

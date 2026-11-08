@@ -141,7 +141,11 @@ def cmd_solve(a):
     with open(a.work, 'a') as f, cf.ThreadPoolExecutor(a.workers) as ex:
         if not done:
             f.write(json.dumps({'id': '_canary', 'canary': CANARY}) + '\n')
-        for r in ex.map(lambda c: solve_one(a, c), todo):
+        # as_completed, not map: an ordered map holds every finished result
+        # behind the slowest earlier one (the 2026-11-08 chain run wrote 63 of
+        # its results in 8 h).
+        for fu in cf.as_completed([ex.submit(solve_one, a, c) for c in todo]):
+            r = fu.result()
             f.write(json.dumps(r) + '\n')
             f.flush()
             print(r['id'], r['make'].get('ok'), (r.get('check') or {}).get('ok'),

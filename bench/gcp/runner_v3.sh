@@ -63,7 +63,7 @@ export BIN=$WORK/repo/engine/target/release/examples
 # metadata python=1: the engine's Python binding (maturin), for jobs that play games.
 if [ "${PYBIND:-}" = 1 ]; then
   apt-get -qq install -y python3-venv >/dev/null 2>&1
-  python3 -m venv $WORK/venv && $WORK/venv/bin/pip -q install --upgrade pip maturin 2>&1 | tail -1
+  python3 -m venv $WORK/venv && $WORK/venv/bin/pip -q install --upgrade pip maturin numpy 2>&1 | tail -1
   ( cd engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2 )
   $WORK/venv/bin/python -c "import sigil_engine" || { echo "FATAL: python binding"; shutdown -h now; exit 1; }
   export PATH=$WORK/venv/bin:$PATH
