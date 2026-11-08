@@ -154,7 +154,8 @@ def judge(r, a):
     out['verdict'] = v
     # The playout set: the keys and the best alternatives.
     alts = sorted((k for k in ps if k not in keys), key=lambda k: -ps[k])[:a.alts]
-    out['playout'] = [{'after': k, 'role': 'key', 'p': round(ps[k], 4)} for k in keys] + \
+    top_keys = sorted(keys, key=lambda k: -ps[k])[:a.playout_keys]
+    out['playout'] = [{'after': k, 'role': 'key', 'p': round(ps[k], 4)} for k in top_keys] + \
                      [{'after': k, 'role': 'alt', 'p': round(ps[k], 4)} for k in alts]
     return out
 
@@ -169,6 +170,7 @@ def main():
     ap.add_argument('--max-keys', type=int, default=3)
     ap.add_argument('--stone-gap', type=float, default=0.75)
     ap.add_argument('--alts', type=int, default=3)
+    ap.add_argument('--playout-keys', type=int, default=2, help='keys played out per position (the best by P)')
     a = ap.parse_args()
     outs = []
     for line in open(a.tables):
