@@ -5,6 +5,12 @@
 //!     sfn  screen_depth  screen_ms  deep_depths(csv)  deep_ms  evals(csv)  margin  min_top  sample  threads  [screen_keep]
 //!   `screen_keep` (default all): how many screen entries to print, best first
 //!   (a wide position has tens of thousands; mining keeps the top few).
+//!   `alt_ideas` (default 3): the best-screened child of each of the next this
+//!   many IDEAS after the best child's (an idea = the placement nodes of the
+//!   regular move, dash moves and Providence plus the spells cast;
+//!   bench/tools/win_puzzle.py solution_signature) joins the deep set, so the
+//!   strongest other solutions are always searched deeply and can be played
+//!   out, even when they fall outside the margin.
 //!
 //! Stage 1 (screen): every distinct position the mover can reach (full browser
 //! rules) is searched once, from the opponent's side, with the shipped eval at
@@ -49,6 +55,28 @@ fn search(n: &Board, mover: Color, eval: &str, depth: i32, ms: u64, tt_bits: u32
               proven: r.proven, secs: t0.elapsed().as_secs_f64() })
 }
 
+/// One solution idea (bench/tools/win_puzzle.py solution_signature): the set
+/// of nodes the regular move, any dash's move and any Providence placement
+/// land on, and the spells cast. Moves after a cast are its resolution.
+fn idea_signature(acts: &[sigil_engine::actions::JsAct]) -> (Vec<u8>, Vec<&'static str>) {
+    let (mut places, mut spells, mut mode) = (Vec::new(), Vec::new(), 0u8);   // 0 move, 1 dash, 2 post, 3 resolve
+    for a in acts {
+        match a.t {
+            "pass" => {}
+            "cast" => { if let Some(sp) = a.spell { spells.push(sp); } mode = 3; }
+            "dash" | "dash_lightning" => { mode = 1; }
+            "move" | "hard_move" | "blink" => {
+                if a.providence { if let Some(n) = a.node { places.push(n); } }
+                else if mode <= 1 { if let Some(n) = a.node { places.push(n); } mode = 2; }
+            }
+            _ => {}
+        }
+    }
+    places.sort();
+    spells.sort();
+    (places, spells)
+}
+
 fn ev_json(e: &Option<Ev>) -> String {
     match e {
         None => "null".into(),
@@ -91,6 +119,7 @@ fn main() {
         let sample: usize = f[8].parse().expect("sample");
         let threads: usize = f[9].parse().expect("threads");
         let screen_keep: usize = f.get(10).map(|x| x.parse().expect("screen_keep")).unwrap_or(usize::MAX);
+        let alt_ideas: usize = f.get(11).map(|x| x.parse().expect("alt_ideas")).unwrap_or(3);
         let c = b.to_move;
 
         let t0 = std::time::Instant::now();
@@ -126,6 +155,19 @@ fn main() {
         let mut deep_set: Vec<usize> = order.iter().copied().enumerate()
             .filter(|&(rank, i)| rank < min_top || screen[i].map(|v| v >= best - margin).unwrap_or(false))
             .map(|(_, i)| i).collect();
+        // The best child of each of the next `alt_ideas` ideas joins too.
+        let sig_of = |i: usize| idea_signature(&b.emit_actions(&kids[i].0, c).0);
+        if !order.is_empty() && alt_ideas > 0 {
+            let mut seen_ideas = vec![sig_of(order[0])];
+            for &i in &order {
+                if won(&kids[i].1).is_some() { continue; }
+                let sg = sig_of(i);
+                if seen_ideas.contains(&sg) { continue; }
+                seen_ideas.push(sg);
+                if !deep_set.contains(&i) { deep_set.push(i); }
+                if seen_ideas.len() > alt_ideas { break; }
+            }
+        }
         // Plus a reproducible random sample of the rest (the screen's miss-rate check).
         let in_deep: HashSet<usize> = deep_set.iter().copied().collect();
         let mut rest: Vec<usize> = (0..kids.len()).filter(|i| !in_deep.contains(i) && won(&kids[*i].1).is_none()).collect();

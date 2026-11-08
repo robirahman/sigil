@@ -148,6 +148,37 @@ def cmd_candidates(a):
     print(f'{len(mates)} mate candidates, {len(wins)} winning-turn candidates; dropped {dict(dropped)}')
 
 
+def cmd_swing(a):
+    """Winning-turn candidates of the blunder kind: the winner to move with a
+    clear edge right after the opponent's turn let it appear -- the winner's
+    previous position (two plies back) was close, and the loser's own search
+    did not see it coming. A position that just turned is where one turn
+    punishes the mistake and the rest do not (the Lichess source of puzzles)."""
+    pub = public_keys(a.exclude) if a.exclude else set()
+    cands, dropped = [], Counter()
+    for gpath in a.games:
+        games = json.load(open(gpath))['games']
+        for gid, g in sorted(games.items()):
+            pos = g['positions']
+            if any(skey(p['sfn']) in pub for p in pos):
+                dropped['game shares a published position'] += 1
+                continue
+            n = len(pos)
+            for i in range(2, n - a.min_to_end):
+                p0, p1, p2 = pos[i - 2], pos[i - 1], pos[i]
+                if p2['mover'] != g['winner'] or p0['mover'] != g['winner']:
+                    continue
+                if not (a.hi <= p2['score'] < 4000):
+                    continue
+                if p0['score'] > a.before_max or -p1['score'] > a.loser_saw:
+                    continue
+                cands.append({'id': f'{gid}-p{i}', 'sfn': p2['sfn'], 'game': gid, 'plies_to_end': n - i,
+                              'mover': g['winner'], 'score': p2['score'], 'score_before': p0['score'],
+                              'loser_view': p1['score'], 'kind': 'swing'})
+    json.dump({'canary': CANARY, 'candidates': cands}, open(a.out, 'w'))
+    print(f'{len(cands)} swing candidates; dropped {dict(dropped)}')
+
+
 def tag_of(r):
     return ('error' if not r.get('ok') else 'm1' if r.get('mate1') else 'm2' if r.get('mate2')
             else 'm3' if r.get('mate3') else 'm4' if r.get('mate4') else 'none')
@@ -240,6 +271,14 @@ def main():
     p.add_argument('--win-hi', type=int, default=600)
     p.add_argument('--win-per-game', type=int, default=2)
     p.add_argument('--seed', type=int, default=20261108)
+    p = sub.add_parser('swing')
+    p.add_argument('--games', nargs='+', required=True)
+    p.add_argument('--exclude', nargs='*', default=[])
+    p.add_argument('--out', required=True)
+    p.add_argument('--hi', type=int, default=200, help='winner edge now (centistones, its side)')
+    p.add_argument('--before-max', type=int, default=50, help='winner edge two plies back at most')
+    p.add_argument('--loser-saw', type=int, default=50, help="loser's own score at its turn at least minus this")
+    p.add_argument('--min-to-end', type=int, default=6, help='plies left at least (closer is mate-puzzle land)')
     p = sub.add_parser('solve')
     p.add_argument('--candidates', required=True)
     p.add_argument('--bin', required=True)
@@ -253,7 +292,8 @@ def main():
     p.add_argument('--work', required=True)
     p.add_argument('--out', required=True)
     a = ap.parse_args()
-    {'corpus': cmd_corpus, 'candidates': cmd_candidates, 'solve': cmd_solve, 'assemble': cmd_assemble}[a.cmd](a)
+    {'corpus': cmd_corpus, 'candidates': cmd_candidates, 'swing': cmd_swing, 'solve': cmd_solve,
+     'assemble': cmd_assemble}[a.cmd](a)
 
 
 if __name__ == '__main__':

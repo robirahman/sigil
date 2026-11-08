@@ -235,11 +235,19 @@ def judge(r, a):
     else:
         v = 'puzzle'
     out['verdict'] = v
-    # The playout set: the keys and the best alternatives.
-    alts = sorted((k for k in ps if k not in keys), key=lambda k: -ps[k])[:a.alts]
+    # The playout set: the best executions of the key idea, and the best
+    # execution of each of the strongest OTHER ideas (by idea, so the
+    # alternatives are different solutions, not worse executions of the key).
     top_keys = sorted(keys, key=lambda k: -ps[k])[:a.playout_keys]
-    out['playout'] = [{'after': k, 'role': 'key', 'p': round(ps[k], 4)} for k in top_keys] + \
-                     [{'after': k, 'role': 'alt', 'p': round(ps[k], 4)} for k in alts]
+    best_of = {}
+    for k in sorted(ps, key=lambda k: -ps[k]):
+        sg = sigs[k]
+        if (a.by_idea and sg in key_sigs) or (not a.by_idea and k in keys):
+            continue
+        best_of.setdefault(sg if a.by_idea else k, k)
+    alts = list(best_of.values())[:a.alts]
+    out['playout'] = [{'after': k, 'role': 'key', 'p': round(ps[k], 4), 'idea': sig_text(sigs[k])} for k in top_keys] + \
+                     [{'after': k, 'role': 'alt', 'p': round(ps[k], 4), 'idea': sig_text(sigs[k])} for k in alts]
     return out
 
 
