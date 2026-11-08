@@ -207,7 +207,8 @@ def judge(r, a):
     # The screen's sample at the first deep depth.
     d0 = depths[0]
     if keys and sample:
-        kmin0 = min((p_of(c, mover, SHIPPED, d0) for c in deep if c['after'] in keys), default=None)
+        k0 = [p_of(c, mover, SHIPPED, d0) for c in deep if c['after'] in keys]
+        kmin0 = min((x for x in k0 if x is not None), default=None)
         sp = [p_of(c, mover, SHIPPED, d0) for c in sample]
         sp = [v for v in sp if v is not None]
         out['sample_max_p'] = round(max(sp), 4) if sp else None
