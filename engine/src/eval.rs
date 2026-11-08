@@ -670,7 +670,11 @@ impl Board {
 /// Step 2): nnue_mt256's recipe and corpus plus the SNN2 wall and bank rows, +20.3 Elo
 /// [+5.6, +35.0] on Fissure + Dividend draws pooled (2,158 games) and +5.8 [-8.9, +20.4] on
 /// core draws (2,160) at 10 s; held-out outcome log-loss 0.57883 vs 0.58119.
-pub const SHIPPED_EVAL: &str = "nnue_snn2_base";
+/// `nnue_r6` on the v36 candidate (2026-11-08, Step 5): the same recipe with SNN2 on
+/// es_mt256 + r6 self-play (668,964 games) + the 2026-11 human relabel, 31.4M positions.
+/// Net-only A/B vs `nnue_snn2_base` at 10 s: +21.9 Elo [+7.2, +36.6] core (2,160 games),
+/// +45.9 [+25.1, +66.8] Fissure draws (1,080), +32.3 [+11.5, +53.1] Dividend draws (1,080).
+pub const SHIPPED_EVAL: &str = "nnue_r6";
 
 /// Every accepted preset name, in one place. Exported (via py.rs) as
 /// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate
@@ -688,11 +692,11 @@ pub const EVAL_NAMES: [&str; 28] = [
 ];
 
 #[cfg(target_arch = "wasm32")]
-pub const EVAL_NAMES: [&str; 24] = [
+pub const EVAL_NAMES: [&str; 25] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
-    "nnue_mt256", "nnue_snn2_base",
+    "nnue_mt256", "nnue_snn2_base", "nnue_r6",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -729,7 +733,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // net on material + tempo alone -- no positional terms, no per-spell table.
         "nnue_mt256" => Weights { nn: Some(&crate::nn::NNUE_MT256), ..MATERIAL_TEMPO },
         // Step 5 r6 net: nnue_mt256 recipe + SNN2 (walls, bank) on es_mt256 + r6 self-play + human relabel (run 20261108T034101Z-sigil-r6-train)
-        #[cfg(not(target_arch = "wasm32"))]
         "nnue_r6" => Weights { nn: Some(&crate::nn::NNUE_R6), ..MATERIAL_TEMPO },
         // Training plan step 2 (2026-11-03): nnue_mt256's recipe and corpus with SNN2 wall and bank input rows; held-out outcome ll 0.57883 vs 0.58119 for the same-run control.
         "nnue_snn2_base" => Weights { nn: Some(&crate::nn::NNUE_SNN2_BASE), ..MATERIAL_TEMPO },
