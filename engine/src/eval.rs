@@ -678,12 +678,13 @@ pub const SHIPPED_EVAL: &str = "nnue_snn2_base";
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
 #[cfg(not(target_arch = "wasm32"))]
-pub const EVAL_NAMES: [&str; 27] = [
+pub const EVAL_NAMES: [&str; 28] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
     "nnue_spell3", "nnue_spell4", "nnue_mt256",
     "nnue_snn2_base",
+    "nnue_r6",
 ];
 
 #[cfg(target_arch = "wasm32")]
@@ -727,6 +728,9 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // Engine v32 (2026-10-20, engine/reports/2026-10-eval-simplification.md): the
         // net on material + tempo alone -- no positional terms, no per-spell table.
         "nnue_mt256" => Weights { nn: Some(&crate::nn::NNUE_MT256), ..MATERIAL_TEMPO },
+        // Step 5 r6 net: nnue_mt256 recipe + SNN2 (walls, bank) on es_mt256 + r6 self-play + human relabel (run 20261108T034101Z-sigil-r6-train)
+        #[cfg(not(target_arch = "wasm32"))]
+        "nnue_r6" => Weights { nn: Some(&crate::nn::NNUE_R6), ..MATERIAL_TEMPO },
         // Training plan step 2 (2026-11-03): nnue_mt256's recipe and corpus with SNN2 wall and bank input rows; held-out outcome ll 0.57883 vs 0.58119 for the same-run control.
         "nnue_snn2_base" => Weights { nn: Some(&crate::nn::NNUE_SNN2_BASE), ..MATERIAL_TEMPO },
         "tflip" => FLIP_AT_BUDGET,
@@ -746,6 +750,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, nnue_mt256, nnue_snn2_base, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, nnue_mt256, nnue_snn2_base, nnue_r6, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }

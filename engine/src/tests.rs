@@ -4972,3 +4972,29 @@ fn nnue_snn2_base_matches_python_golden() {
     assert_eq!(crate::search::even_offset(Color::Red, &w),
                crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
 }
+
+/// `nnue_r6` (added by engine/harness/add_net_preset.py): the Rust forward pass equals
+/// the Python integer forward pass on every golden vector, SNN2 walls / bank included.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn nnue_r6_matches_python_golden() {
+    let net = crate::nn::by_name("nnue_r6").unwrap().net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_r6_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let (got, want) = if f.len() == 8 {
+            let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), f[3].parse().unwrap(),
+                               f[4].parse().unwrap(), f[5].parse().unwrap(), c), f[7].parse::<i32>().unwrap())
+        } else {
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c), f[4].parse::<i32>().unwrap())
+        };
+        assert_eq!(got, want, "nnue_r6 {line}");
+        n += 1;
+    }
+    assert!(n >= 50, "only {n} golden vectors");
+    assert!(crate::eval::weights_by_name("nnue_r6").is_ok());
+}
