@@ -2,14 +2,16 @@
 # Finish certifying dev set v2's answer key (bench/V3_PLAN.md decisions, 2026-11-03).
 # Input $IN/dev2verify_in.json: {"cert_ids": [...], "within": [[id, k, time_ms], ...]}.
 #   certs   certificates + Rust check for cert_ids; JS check for N <= 3 and the
-#           10% sample above (certs.py defaults); 2 h extraction budget
+#           10% sample above (certs.py defaults); extraction budget = first
+#           job argument in ms (default 2 h)
 #   within  shortest-mate proofs: no win within 2 for every mate-in-4, and longer
 #           budgets for the checks phase 0 left open
 set -uo pipefail
 cd "$(dirname "$0")/../../.."
+CERT_MS=${1:-7200000}   # certificate extraction budget per puzzle
 IDS=$(python3 -c "import json;print(','.join(json.load(open('$IN/dev2verify_in.json'))['cert_ids']))")
 python3 bench/tools/certs.py bench/dev/dev_set_v2.json --tool $BIN/cert_tool --out $OUT/certs.jsonl \
-  --ids "$IDS" --jobs 30 --time-ms 7200000 --leaves --js > $OUT/certs.log 2>&1 &
+  --ids "$IDS" --jobs 30 --time-ms "$CERT_MS" --leaves --js > $OUT/certs.log 2>&1 &
 P1=$!
 python3 - "$BIN" "$OUT" "$IN" <<'PY' > $OUT/within.log 2>&1 &
 import json, subprocess, sys, concurrent.futures as cf
