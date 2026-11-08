@@ -168,7 +168,7 @@ self.onmessage = async (e) => {
 			if (typeof eng.set_root_split === 'function') eng.set_root_split(0, 1);
 			const r = JSON.parse(eng.ponder_begin(
 				msg.sfn, (msg.widthScale || 4) >>> 0, msg.historySfns || [],
-				msg.evalName || 'nnue_mt256', a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0));
+				msg.evalName || api.shipped_eval(), a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0));
 			if (!r.ok) return;                 // out-of-scope position: nothing to ponder
 			_ponder.sliceMs = (msg.sliceMs || 250) >>> 0;
 			_ponder.maxDepth = (msg.maxDepth || 12) | 0;
@@ -216,7 +216,7 @@ self.onmessage = async (e) => {
 			}
 			const raw = eng.search(
 				msg.sfn, msg.timeMs >>> 0, (msg.widthScale || 4) >>> 0,
-				msg.historySfns || [], msg.evalName || 'nnue_mt256',
+				msg.historySfns || [], msg.evalName || api.shipped_eval(),
 				a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth);
 			const res = JSON.parse(raw);
 			res.threads = effectiveThreads;
