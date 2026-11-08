@@ -4966,8 +4966,7 @@ fn nnue_snn2_base_matches_python_golden() {
     }
     assert!(n >= 50, "only {n} golden vectors");
     assert!(crate::eval::weights_by_name("nnue_snn2_base").is_ok());
-    // The v36 training branch ships this net (Step 2); same material + tempo base as nnue_mt256.
-    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_snn2_base");
+    // Same material + tempo base as nnue_mt256.
     let w = crate::eval::weights_by_name("nnue_snn2_base").unwrap();
     assert_eq!(crate::search::even_offset(Color::Red, &w),
                crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
@@ -4997,4 +4996,9 @@ fn nnue_r6_matches_python_golden() {
     }
     assert!(n >= 50, "only {n} golden vectors");
     assert!(crate::eval::weights_by_name("nnue_r6").is_ok());
+    // The v36 candidate ships this net (Step 5); same material + tempo base as nnue_mt256.
+    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_r6");
+    let w = crate::eval::weights_by_name("nnue_r6").unwrap();
+    assert_eq!(crate::search::even_offset(Color::Red, &w),
+               crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
 }
