@@ -3111,3 +3111,21 @@ humans' 4%). `Board::dead_slots` now clears walled slots from both sides' access
 at every heuristic site; the rules keep `uncontrolled_count`. +21.9 Elo [+10.0, +33.9] on
 Fissure draws at 10 s (3,285 games); identical moves without walls. A wall input plane is the
 round-5 follow-up. engine/reports/2026-10-fissure-dead-spells.md.
+
+## Human-game audit of v28-v35: most falls are already fixed; the rest are horizon and generator gaps (2026-11-08)
+522 Rust-AI games against humans since 2026-10-07 (318 Easy, 106 Medium, 98 Hard; the AI won 69%),
+walked backwards at depth 6 by the v36 base engine (v35-fix search + `nnue_snn2_base`, branch
+`audit-r6`), then every flagged case probed at depth 8 (30-minute cap, 5,941 searches).
+*   **Own turns:** 970 falls of more than one stone; depth 8 confirms 795. Of those, the base engine
+    at depth 6 already plays better in 579 (73%), so most are the tiers' shallow budgets and older
+    engines, not missing knowledge. 195 need depth 8 (horizon); 21 are deeper than 8. 64 were missed
+    forced wins (4 proven; a fresh depth-6 search finds all 64).
+*   **Opponent turns:** 89 falls, 80 confirmed. 59 of the 80 refutations were never generated
+    (28 a dash landing with a different sacrifice or cast resolution, 17 outside the stream, 14
+    outside the capped enumeration), 19 were searched and misjudged, 2 were past the root width.
+    The generator gap from the 2026-09-26 surprise audit is still the main source of surprises.
+*   **By version, Hard tier:** confirmed own falls per 100 own turns 7.6 (v28-v31, 57 games),
+    5.6 (v32-v34, 17), 3.9 (v35, 24). AI losses with a confirmed fall: 151/161.
+*   **Telemetry:** 55 games carry `aiTelemetry`, all engine 35 on `nnue_mt256`, so the field is saved.
+The cases (`gs://…/data/deep_review/cases_2026-11.json`) are the human regression set for releases.
+Report: `reports/2026-11-deep-review.md`.
