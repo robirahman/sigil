@@ -559,6 +559,16 @@ class FirebaseSync {
 		this.ranked = !!data.ranked;
 		this.unratedWhy = this.ranked ? null : roomUnratedReason(data);
 
+		// The turns played before we joined, in play order: the board starts
+		// at currentSfn, and SpectatorController replays these to recover the
+		// game's earlier positions (threefold repetition, live analysis).
+		// Exactly the turns _listenForAllTurns skips.
+		const turns = data.turns || {};
+		this.spectatorJoinTurns = syncOrderTurnKeys(turns, data.seq === true).map((k) => ({
+			color: turns[k] && turns[k].color,
+			actions: ((turns[k] && turns[k].actions) || []).map(normalizeSpellName),
+		}));
+
 		// Register spectator presence
 		const specRef = this.roomRef.child('spectators').push();
 		specRef.set({ joined: firebase.database.ServerValue.TIMESTAMP });

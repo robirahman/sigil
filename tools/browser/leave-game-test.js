@@ -201,7 +201,7 @@ const path = (page) => new URL(page.url()).pathname;
 		page = await newPage(browser, errors, dialogs, (r) => {
 			const u = r.url();
 			const old = u.endsWith('/static/scripts/game-keys.js') ? ['text/javascript', oldKeys]
-				: u.endsWith('/static/scripts/game-board-local.js?v=34') ? ['text/javascript', oldBoard]
+				: u.endsWith('/static/scripts/game-board-local.js?v=44') ? ['text/javascript', oldBoard]
 				: u.endsWith('/static/css/styles.css') ? ['text/css', oldCss] : null;
 			if (!old) return false;
 			oldServed.push(u.replace(BASE, ''));
