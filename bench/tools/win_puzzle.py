@@ -19,8 +19,12 @@ depth every child reached (D):
     make a different solution);
   * a PUZZLE needs, at once:
       - 1 to --max-keys solutions (ideas; --no-by-idea counts positions);
-      - every child of a different idea at least --gap below the weakest key
-        (a worse execution of the key's idea is reported, not counted);
+      - every child of a different idea at least --gap below the key idea's
+        best execution;
+    every execution of the key idea that still wins is an accepted answer,
+    and one that does not is a wrong answer (execution_matters: Robi counts
+    these among the best puzzles -- the solution is the idea AND an
+    execution of it that works);
       - the same key set at every deep depth (depth stability);
       - the other evaluators agree: under each, the best child is a key and
         the best key leads the best non-key by at least --stone-gap stones;
@@ -147,15 +151,27 @@ def judge(r, a):
     key_sigs = sorted({sigs[k] for k in keys})
     out['n_ideas'] = len(key_sigs)
     out['ideas'] = [sig_text(x) for x in key_sigs]
-    other_ideas = [v for k, v in ps.items() if k not in keys and sigs[k] not in key_sigs]
+    if a.by_idea and keys:
+        # The solution is the idea AND an execution of it that works (Robi,
+        # 2026-11-08): every execution of a key idea that still wins
+        # (P >= --win-p) is an accepted answer; one that does not is a wrong
+        # answer, and its existence makes the puzzle better, not ambiguous.
+        same = [k for k in ps if sigs[k] in key_sigs]
+        keys = sorted(k for k in same if ps[k] >= a.win_p)
+        failed = [k for k in same if ps[k] < a.win_p]
+        out['keys'] = [WT.key_of(k) for k in keys]
+        out['n_keys'] = len(keys)
+        out['failed_executions'] = len(failed)
+        out['execution_matters'] = bool(failed)
+        out['p_best_failed_execution'] = round(max(ps[k] for k in failed), 4) if failed else None
+    other_ideas = [v for k, v in ps.items() if sigs[k] not in key_sigs]
     out['p_second_idea'] = round(max(other_ideas), 4) if other_ideas else None
     if keys:
-        kmin = min(ps[k] for k in keys)
-        out['idea_gap'] = round(kmin - (max(other_ideas) if other_ideas else 0.0), 4)
-        # Same idea, executed worse: shown, and the ones in the grey zone counted.
-        same = [v for k, v in ps.items() if k not in keys and sigs[k] in key_sigs]
-        out['same_idea_below'] = len(same)
-        out['same_idea_grey'] = sum(1 for v in same if v > kmin - a.gap)
+        # The idea's strength against every other idea: its best execution
+        # against the best other idea. (Measured from the weakest accepted
+        # execution instead, a puzzle whose idea has many working executions
+        # of varying quality would fail for having them.)
+        out['idea_gap'] = round(max(ps[k] for k in keys) - (max(other_ideas) if other_ideas else 0.0), 4)
     # Depth stability.
     stable = {}
     for d in depths:
@@ -177,9 +193,15 @@ def judge(r, a):
         if not sc or not keys:
             continue
         top = max(sc, key=sc.get)
-        kmax = max((sc[k] for k in keys if k in sc), default=None)
-        omax = max((v for k, v in sc.items() if k not in keys), default=None)
-        agree[ev] = {'top_is_key': top in keys,
+        if a.by_idea:
+            # The other evaluator's best turn must carry a key idea, and the
+            # idea must lead every other idea.
+            in_key = lambda k: sigs.get(k) in key_sigs  # noqa: E731
+        else:
+            in_key = lambda k: k in keys  # noqa: E731
+        kmax = max((v for k, v in sc.items() if in_key(k)), default=None)
+        omax = max((v for k, v in sc.items() if not in_key(k)), default=None)
+        agree[ev] = {'top_is_key': in_key(top),
                      'stone_gap': None if kmax is None or omax is None else round(kmax - omax, 3)}
     out['agree'] = agree
     # The screen's sample at the first deep depth.

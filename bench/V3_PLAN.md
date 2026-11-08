@@ -97,7 +97,9 @@ These keys cannot be proven, so the claim is empirical. We make it as strong as 
 
 **What counts as one solution (Robi, 2026-11-08).** Winning turns that place stones on the same nodes and cast the same spells are one solution. The placements are the regular move, any dash's move and any Providence placement, taken as a set. Choices that are incidental to the idea do not make a different solution: which stones are sacrificed, which are kept on a cast, where a pushed stone goes, and what a spell's resolution does.
 
-`win_puzzle.py` therefore groups the keys by this signature (`solution_signature`). A puzzle needs one idea, and every turn with a different idea at least the gap below the weakest key. A worse execution of the key's own idea is reported but does not fail the puzzle. Grading still accepts exactly the key positions, so an execution of the right idea that the engine does not rate as winning is marked wrong.
+`win_puzzle.py` therefore groups the keys by this signature (`solution_signature`). A puzzle needs one winning idea, and the best other idea must sit at least the gap (0.30) below the key idea's best execution. The solution is the idea *and* an execution of it that works (Robi, 2026-11-08):
+- Every execution of the key idea that still wins (P ≥ 0.80) is an accepted answer, and grading accepts exactly those positions.
+- An execution that does not win is a wrong answer. Its existence (`execution_matters`, `failed_executions`) does not disqualify the puzzle; these are probably the best puzzles, and selection should favour them.
 
 **The pipeline as built** (`engine/examples/win_table2`, `bench/tools/win_puzzle.py`, `bench/tools/win_playouts.py`, `bench/gcp/jobs/winspike.sh`):
 - **Screen.** Every distinct child is screened at depth 2 with the shipped net, threaded.
