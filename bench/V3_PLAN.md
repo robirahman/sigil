@@ -95,6 +95,10 @@ These keys cannot be proven, so the claim is empirical. We make it as strong as 
    - **What happens next.** Any *another turn is as good* or *does not win* drops the puzzle, and the turn the reviewer named is run through the same root-table and playout checks. If more than 10% of the sample is disputed, the thresholds are tightened and the sets are re-selected before anything is frozen.
    - **Where it lives.** Test-set puzzles are reviewed from a page kept in the private bucket and opened locally, never on the site. Dev puzzles can use the Try panel.
 
+**What counts as one solution (Robi, 2026-11-08).** Winning turns that place stones on the same nodes and cast the same spells are one solution. The placements are the regular move, any dash's move and any Providence placement, taken as a set. Choices that are incidental to the idea do not make a different solution: which stones are sacrificed, which are kept on a cast, where a pushed stone goes, and what a spell's resolution does.
+
+`win_puzzle.py` therefore groups the keys by this signature (`solution_signature`). A puzzle needs one idea, and every turn with a different idea at least the gap below the weakest key. A worse execution of the key's own idea is reported but does not fail the puzzle. Grading still accepts exactly the key positions, so an execution of the right idea that the engine does not rate as winning is marked wrong.
+
 **The pipeline as built** (`engine/examples/win_table2`, `bench/tools/win_puzzle.py`, `bench/tools/win_playouts.py`, `bench/gcp/jobs/winspike.sh`):
 - **Screen.** Every distinct child is screened at depth 2 with the shipped net, threaded.
 - **Deep searches.** Every child within 1.5 stones of the best, and at least the 8 best, is searched at depths 4, 5 and 6 with `nnue_mt256`, `nnue_spell4` and `mtempo`.

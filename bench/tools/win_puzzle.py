@@ -13,9 +13,14 @@ the same conversion tools/winning_turns.py and the site use. At the deepest
 depth every child reached (D):
 
   * the keys are the children with P >= --win-p and within --band of the best;
+  * keys that place stones on the same nodes (regular move, dash moves,
+    Providence) and cast the same spells are ONE solution (solution_signature;
+    Robi's definition, 2026-11-08: sacrifices and incidental choices do not
+    make a different solution);
   * a PUZZLE needs, at once:
-      - 1 to --max-keys keys;
-      - every other deep child at least --gap below the weakest key;
+      - 1 to --max-keys solutions (ideas; --no-by-idea counts positions);
+      - every child of a different idea at least --gap below the weakest key
+        (a worse execution of the key's idea is reported, not counted);
       - the same key set at every deep depth (depth stability);
       - the other evaluators agree: under each, the best child is a key and
         the best key leads the best non-key by at least --stone-gap stones;
@@ -66,6 +71,40 @@ def stones_of(child, ev, depth):
     return e['stones']
 
 
+def solution_signature(actions):
+    """What makes two winning turns the SAME solution (Robi, 2026-11-08): the
+    nodes the mover places stones on -- the regular move, any dash's move and
+    any Providence placement, as a set -- and the spells cast. Sacrifices
+    (dash, cast keep), push destinations and what a spell's resolution does
+    are left out: they are execution details of one idea. The regular move is
+    the first move before any dash or cast, a dash's move the first one after
+    the dash; every move after a cast belongs to the spell's resolution."""
+    places, spells, mode = [], [], 'move'
+    for x in actions or []:
+        t = x.get('type')
+        if t == 'pass':
+            continue
+        if t == 'cast':
+            spells.append(x.get('spell'))
+            mode = 'resolve'
+            continue
+        if t in ('dash', 'dash_lightning'):
+            mode = 'dash'
+            continue
+        if t in ('move', 'hard_move', 'blink'):
+            if x.get('providence'):
+                places.append(x.get('node'))
+            elif mode in ('move', 'dash'):
+                places.append(x.get('node'))
+                mode = 'post'
+    return (tuple(sorted(places)), tuple(sorted(s or '' for s in spells)))
+
+
+def sig_text(sig):
+    places, spells = sig
+    return 'place ' + ','.join(places) + ((' + cast ' + ','.join(spells)) if spells else '')
+
+
 def judge(r, a):
     mover = mover_of(r['sfn'])
     out = {'id': r.get('id'), 'sfn': r['sfn'], 'children': r['children'], 'deep_count': r['deep_count'],
@@ -102,13 +141,33 @@ def judge(r, a):
     out['p_second'] = round(max(others), 4) if others else None
     if keys:
         out['gap'] = round(min(ps[k] for k in keys) - (max(others) if others else 0.0), 4)
+    # Solutions by idea: keys that share a signature are one solution.
+    acts = {c['after']: c.get('actions') for c in deep}
+    sigs = {k: solution_signature(acts.get(k)) for k in ps}
+    key_sigs = sorted({sigs[k] for k in keys})
+    out['n_ideas'] = len(key_sigs)
+    out['ideas'] = [sig_text(x) for x in key_sigs]
+    other_ideas = [v for k, v in ps.items() if k not in keys and sigs[k] not in key_sigs]
+    out['p_second_idea'] = round(max(other_ideas), 4) if other_ideas else None
+    if keys:
+        kmin = min(ps[k] for k in keys)
+        out['idea_gap'] = round(kmin - (max(other_ideas) if other_ideas else 0.0), 4)
+        # Same idea, executed worse: shown, and the ones in the grey zone counted.
+        same = [v for k, v in ps.items() if k not in keys and sigs[k] in key_sigs]
+        out['same_idea_below'] = len(same)
+        out['same_idea_grey'] = sum(1 for v in same if v > kmin - a.gap)
     # Depth stability.
     stable = {}
     for d in depths:
         if d > D:
             continue
         kd, _, _ = keys_at(d)
-        stable[str(d)] = (kd == keys)
+        if a.by_idea:
+            acts_d = {c['after']: c.get('actions') for c in deep}
+            stable[str(d)] = ({solution_signature(acts_d.get(k)) for k in kd}
+                              == {solution_signature(acts_d.get(k)) for k in keys})
+        else:
+            stable[str(d)] = (kd == keys)
     out['stable'] = stable
     # Other evaluators (stones; no calibration).
     agree = {}
@@ -137,11 +196,13 @@ def judge(r, a):
         out['published_is_keys'] = set(out['keys']) <= pub and bool(out['keys'])
 
     # Verdict: the first failed rule.
+    n_sol = out['n_ideas'] if a.by_idea else len(keys)
+    gap = out.get('idea_gap') if a.by_idea else out.get('gap')
     if best < a.win_p:
         v = 'not winning'
-    elif not keys or len(keys) > a.max_keys:
-        v = 'too many keys'
-    elif out.get('gap') is not None and out['gap'] < a.gap:
+    elif not keys or n_sol > a.max_keys:
+        v = 'too many solutions'
+    elif gap is not None and gap < a.gap:
         v = 'no gap'
     elif not all(stable.values()):
         v = 'unstable across depths'
@@ -167,7 +228,10 @@ def main():
     ap.add_argument('--win-p', type=float, default=0.80)
     ap.add_argument('--gap', type=float, default=0.30)
     ap.add_argument('--band', type=float, default=0.05)
-    ap.add_argument('--max-keys', type=int, default=3)
+    ap.add_argument('--max-keys', type=int, default=1,
+                    help='most distinct solutions (ideas with --by-idea, else key positions)')
+    ap.add_argument('--by-idea', action=argparse.BooleanOptionalAction, default=True,
+                    help='count solutions by idea (placements + spells), not by resulting position')
     ap.add_argument('--stone-gap', type=float, default=0.75)
     ap.add_argument('--alts', type=int, default=3)
     ap.add_argument('--playout-keys', type=int, default=2, help='keys played out per position (the best by P)')
