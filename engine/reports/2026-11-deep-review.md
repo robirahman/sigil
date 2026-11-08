@@ -73,4 +73,15 @@ depth reached by the D probes: {8: 569, 6: 664, 7: 740, 5: 106}
 
 ## By engine version and tier (engine from `aiTelemetry.engineVersion` when present, otherwise the commit time of the version bump on main)
 ```
+version source: {'date': 467, 'telemetry': 55}
+engine   tier    games  AI won own falls/100 fixed now horizon opp falls/100
+v28-v31  easy      270     69%          12.1  339/444       96           1.1
+v28-v31  medium     12     83%           4.5    7/7          0           0.0
+v28-v31  hard       57     72%           7.6   38/57        17           1.1
+v32-v34  easy       45     62%          16.9   95/143       42           1.1
+v32-v34  medium     65     68%           9.8   55/79        20           0.8
+v32-v34  hard       17     65%           5.6    7/11         4           1.5
+v35      easy        3     33%          10.2    4/5          1           4.0
+v35      medium     29     69%           7.9   26/35         9           2.5
+v35      hard       24     88%           3.9    8/14         6           0.3
 ```
