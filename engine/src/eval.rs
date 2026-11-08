@@ -692,11 +692,11 @@ pub const EVAL_NAMES: [&str; 28] = [
 ];
 
 #[cfg(target_arch = "wasm32")]
-pub const EVAL_NAMES: [&str; 25] = [
+pub const EVAL_NAMES: [&str; 24] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
-    "nnue_mt256", "nnue_snn2_base", "nnue_r6",
+    "nnue_mt256", "nnue_r6",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -735,6 +735,7 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // Step 5 r6 net: nnue_mt256 recipe + SNN2 (walls, bank) on es_mt256 + r6 self-play + human relabel (run 20261108T034101Z-sigil-r6-train)
         "nnue_r6" => Weights { nn: Some(&crate::nn::NNUE_R6), ..MATERIAL_TEMPO },
         // Training plan step 2 (2026-11-03): nnue_mt256's recipe and corpus with SNN2 wall and bank input rows; held-out outcome ll 0.57883 vs 0.58119 for the same-run control.
+        #[cfg(not(target_arch = "wasm32"))]
         "nnue_snn2_base" => Weights { nn: Some(&crate::nn::NNUE_SNN2_BASE), ..MATERIAL_TEMPO },
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
