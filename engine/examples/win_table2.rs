@@ -11,6 +11,8 @@
 //!   bench/tools/win_puzzle.py solution_signature) joins the deep set, so the
 //!   strongest other solutions are always searched deeply and can be played
 //!   out, even when they fall outside the margin.
+//!   `max_children` (default no limit): a position with more distinct children
+//!   is reported as skipped without searching (mining keeps its cost bounded).
 //!
 //! Stage 1 (screen): every distinct position the mover can reach (full browser
 //! rules) is searched once, from the opponent's side, with the shipped eval at
@@ -120,6 +122,7 @@ fn main() {
         let threads: usize = f[9].parse().expect("threads");
         let screen_keep: usize = f.get(10).map(|x| x.parse().expect("screen_keep")).unwrap_or(usize::MAX);
         let alt_ideas: usize = f.get(11).map(|x| x.parse().expect("alt_ideas")).unwrap_or(3);
+        let max_children: usize = f.get(12).map(|x| x.parse().expect("max_children")).unwrap_or(usize::MAX);
         let c = b.to_move;
 
         let t0 = std::time::Instant::now();
@@ -131,6 +134,12 @@ fn main() {
             if seen.insert(sigil_engine::mate::full_key(&n)) { kids.push((*t, n)); }
         }
         let t_enum = t0.elapsed().as_secs_f64();
+        if kids.len() > max_children {
+            // Too wide for a mining pass: say so, cheaply.
+            println!("{{\"sfn\":{:?},\"turns\":{},\"children\":{},\"skipped\":\"more than {} children\",\"deep\":[],\"seconds\":{{\"enumerate\":{:.2},\"screen\":0,\"deep\":0}}}}",
+                     f[0], turns.len(), kids.len(), max_children, t_enum);
+            continue;
+        }
 
         // Stage 1: screen every child with the shipped eval.
         let t1 = std::time::Instant::now();
