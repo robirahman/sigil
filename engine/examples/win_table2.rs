@@ -2,7 +2,9 @@
 //!
 //!   win_table2 < requests
 //!   one request per line, tab-separated:
-//!     sfn  screen_depth  screen_ms  deep_depths(csv)  deep_ms  evals(csv)  margin  min_top  sample  threads
+//!     sfn  screen_depth  screen_ms  deep_depths(csv)  deep_ms  evals(csv)  margin  min_top  sample  threads  [screen_keep]
+//!   `screen_keep` (default all): how many screen entries to print, best first
+//!   (a wide position has tens of thousands; mining keeps the top few).
 //!
 //! Stage 1 (screen): every distinct position the mover can reach (full browser
 //! rules) is searched once, from the opponent's side, with the shipped eval at
@@ -88,6 +90,7 @@ fn main() {
         let min_top: usize = f[7].parse().expect("min_top");
         let sample: usize = f[8].parse().expect("sample");
         let threads: usize = f[9].parse().expect("threads");
+        let screen_keep: usize = f.get(10).map(|x| x.parse().expect("screen_keep")).unwrap_or(usize::MAX);
         let c = b.to_move;
 
         let t0 = std::time::Instant::now();
@@ -174,9 +177,10 @@ fn main() {
                 screen[ci].map(|v| format!("{:.4}", v)).unwrap_or("null".into()),
                 n.outcome != Outcome::Ongoing, di >= n_deep, per_eval.join(",")));
         }
-        let screen_json: Vec<String> = kids.iter().zip(screen.iter()).map(|((_, n), s)|
+        let screen_json: Vec<String> = order.iter().take(screen_keep).map(|&i| {
+            let (n, s) = (&kids[i].1, &screen[i]);
             format!("[{:?},{},{}]", n.to_sfn(), s.map(|v| format!("{:.3}", v)).unwrap_or("null".into()),
-                    n.outcome != Outcome::Ongoing)).collect();
+                    n.outcome != Outcome::Ongoing) }).collect();
         println!("{{\"sfn\":{:?},\"turns\":{},\"truncated\":{},\"children\":{},\"best_screen\":{:.4},\"deep_count\":{},\"sample_count\":{},\"screen\":[{}],\"deep\":[{}],\"seconds\":{{\"enumerate\":{:.2},\"screen\":{:.2},\"deep\":{:.2}}}}}",
                  f[0], turns.len(), st.truncated || st.resolver_truncated, kids.len(), best, n_deep, picked.len(),
                  screen_json.join(","), deep_json.join(","), t_enum, t_screen, t_deep);
