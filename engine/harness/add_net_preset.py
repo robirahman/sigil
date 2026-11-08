@@ -82,7 +82,9 @@ def main():
         anchor = '        "nnue_mt256" => Weights { nn: Some(&crate::nn::NNUE_MT256), ..MATERIAL_TEMPO },\n'
         s = once(s, anchor, anchor + f'        // {a.doc}\n{arm_gate}        "{name}" => Weights {{ nn: Some(&crate::nn::{const}), '
                  '..MATERIAL_TEMPO },\n', 'eval.rs weights_by_name')
-        return once(s, 'nnue_mt256, hand, s01,', f'nnue_mt256, {name}, hand, s01,', 'eval.rs error text')
+        # Anchor on the names after the presets: each preset lands just before `hand`,
+        # so a second preset no longer misses an anchor the first one moved.
+        return once(s, ', hand, s01, s02,', f', {name}, hand, s01, s02,', 'eval.rs error text')
 
     def tests_rs(s):
         test = f'''
