@@ -34,10 +34,18 @@ gcs_get() { local t; t=$(tok) || return 1
     "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")?alt=media"; }
 # The eval SA may create but not overwrite objects: every upload gets a fresh
 # name (a sequence number), and the collector reads the newest.
-SEQ=0
-put_out() { SEQ=$((SEQ + 1)); local f
-  for f in "$OUT"/*; do [ -f "$f" ] && gcs_put "$f" "runs/$RUN/s$(printf %05d $SEQ)/$(basename "$f")" 2>/dev/null; done
-  gcs_put /var/log/sigil-v3.log "runs/$RUN/s$(printf %05d $SEQ)/runner.log" 2>/dev/null; }
+# Only files changed since the last upload go up (a big file is not re-sent
+# every two minutes): the newest copy of a file is in the highest sNNNNN that
+# holds it (bench/gcp/collect_v3.sh gathers them).
+SEQ=0; STAMP=/opt/sigil/.last_put
+put_out() { SEQ=$((SEQ + 1)); local f s
+  s=$(printf %05d $SEQ); touch /opt/sigil/.put_start
+  for f in "$OUT"/*; do
+    [ -f "$f" ] || continue
+    if [ ! -e "$STAMP" ] || [ "$f" -nt "$STAMP" ]; then gcs_put "$f" "runs/$RUN/s$s/$(basename "$f")" 2>/dev/null; fi
+  done
+  mv /opt/sigil/.put_start "$STAMP"
+  gcs_put /var/log/sigil-v3.log "runs/$RUN/s$s/runner.log" 2>/dev/null; }
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update; apt-get -qq install -y build-essential curl git python3 nodejs >/dev/null 2>&1
