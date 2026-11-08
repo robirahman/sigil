@@ -9,8 +9,8 @@ set -uo pipefail
 cd "$(dirname "$0")/../../.."
 TMS=${1:-120000}
 SAFE=${SHARD//\//of}
-mkdir -p $WORK/npz
-python3 - "$SHARD" "$WORK/npz" <<'PY' > $OUT/download_$SAFE.log 2>&1
+NPZ=/opt/sigil/npz; mkdir -p $NPZ
+python3 - "$SHARD" "$NPZ" <<'PY' > $OUT/download_$SAFE.log 2>&1
 import json, os, sys, urllib.parse, urllib.request
 shard, dest = sys.argv[1], sys.argv[2]
 i, n = (int(x) for x in shard.split('/'))
@@ -43,7 +43,7 @@ print(f'{len(bases)} bases, {len(mine)} mine, {got} files')
 PY
 tail -1 $OUT/download_$SAFE.log
 apt-get -qq install -y python3-numpy >/dev/null 2>&1
-python3 bench/tools/mine_v3.py corpus --npz-dir $WORK/npz --out $OUT/games_$SAFE.json > $OUT/corpus_$SAFE.log 2>&1
+python3 bench/tools/mine_v3.py corpus --npz-dir $NPZ --out $OUT/games_$SAFE.json > $OUT/corpus_$SAFE.log 2>&1
 python3 bench/tools/mine_v3.py candidates --games $OUT/games_$SAFE.json \
   --exclude docs/static/puzzles/mate_puzzles.json bench/dev/dev_set.json bench/dev/dev_set_v2.json \
   --out-mates $OUT/mate_cands_$SAFE.json --out-win $OUT/win_cands_$SAFE.json >> $OUT/corpus_$SAFE.log 2>&1

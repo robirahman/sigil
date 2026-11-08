@@ -85,6 +85,23 @@ These keys cannot be proven, so the claim is empirical. We make it as strong as 
    - Disputed puzzles are dropped.
    - The dispute rate is published as the key's estimated error rate.
 
+   **Procedure (2026-11-08):**
+   - **The sample.** 40 winning-turn puzzles, drawn at random from the selected sets with a fixed seed: 20 from dev v3 and 20 from the test set. Each reviewer gets 20, and 10 puzzles are shared so the two reviewers' agreement can be measured.
+   - **What the reviewer sees.** The position and the stored key or keys, without the engine's alternatives. The reviewer marks one of:
+     - *agree*: the key wins and nothing else comes close;
+     - *another turn is as good*: they name it;
+     - *the key does not win*;
+     - *unsure*.
+   - **What happens next.** Any *another turn is as good* or *does not win* drops the puzzle, and the turn the reviewer named is run through the same root-table and playout checks. If more than 10% of the sample is disputed, the thresholds are tightened and the sets are re-selected before anything is frozen.
+   - **Where it lives.** Test-set puzzles are reviewed from a page kept in the private bucket and opened locally, never on the site. Dev puzzles can use the Try panel.
+
+**The pipeline as built** (`engine/examples/win_table2`, `bench/tools/win_puzzle.py`, `bench/tools/win_playouts.py`, `bench/gcp/jobs/winspike.sh`):
+- **Screen.** Every distinct child is screened at depth 2 with the shipped net, threaded.
+- **Deep searches.** Every child within 1.5 stones of the best, and at least the 8 best, is searched at depths 4, 5 and 6 with `nnue_mt256`, `nnue_spell4` and `mtempo`.
+- **Miss-rate check.** 30 random children from the rest get a depth-4 search, to measure what the screen misses.
+- **Verdict.** The calibrated P from the shipped net must pass the win, gap, band, key-count, depth-stability, evaluator-agreement and sample rules.
+- **Playouts.** Very Hard vs Very Hard at 10 s a move from each key and the three best alternatives, 6 games each. The phase-0 run on 20 published winning-turn puzzles sets the numbers.
+
 ## Making it harder
 
 Target: Haiku-tier models below 10% while keeping mate-in-1.
