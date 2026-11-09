@@ -12,10 +12,11 @@
  * position `to` -- and everything else is established here:
  *   - at every defender node, EVERY reply the controller accepts is enumerated,
  *     and each must lose on the spot or reach a mover node that checks;
- *   - at a mover node, the hinted position must be reachable through the
+ *   - at a mover node, a hinted position must be reachable through the
  *     controller (a search that stops when it is reached: reaching it proves
  *     the turn legal) and must win, or with turns left be a defender node
- *     that checks.
+ *     that checks (a position that recurs in the proof can carry several
+ *     hints; each is tried, shortest first).
  * Nothing from the Rust engine is trusted: its enumerator, its outcome rules
  * and its prover are all re-derived from the controller.
  */
@@ -37,8 +38,17 @@ function preferTokens(actions) {
 async function check(cert) {
 	const t0 = Date.now();
 	const mover = cert.mover;
+	// A position can recur in a proof at different turn counts (a repetition:
+	// the counter is not part of the key), with one entry per occurrence made
+	// for a different remaining budget. Keep them all, shortest first; each one
+	// tried is checked in full, so trying several stays sound.
 	const hints = new Map();
-	for (const e of (cert.internal || []).concat(cert.leaves || [])) hints.set(E.normKey(e.at), e);
+	for (const e of (cert.internal || []).concat(cert.leaves || [])) {
+		const key = E.normKey(e.at);
+		if (!hints.has(key)) hints.set(key, []);
+		hints.get(key).push(e);
+	}
+	for (const hs of hints.values()) hs.sort((a, b) => (a.k || 0) - (b.k || 0));
 	const orOk = new Map();
 	const stats = { and_nodes: 0, or_nodes: 0, runs: 0 };
 	const fail = (why) => { throw new Error(why); };
@@ -60,8 +70,22 @@ async function check(cert) {
 		const key = E.normKey(sfn);
 		if (orOk.has(key) && orOk.get(key) <= k) return;
 		stats.or_nodes++;
-		const h = hints.get(key);
-		if (!h) fail('no hint at mover position ' + sfn);
+		const hs = hints.get(key);
+		if (!hs) fail('no hint at mover position ' + sfn);
+		let last;
+		for (const h of hs) {
+			try {
+				await tryHint(sfn, k, h);
+				orOk.set(key, k);
+				return;
+			} catch (e) {
+				last = e;
+			}
+		}
+		throw last;
+	}
+
+	async function tryHint(sfn, k, h) {
 		const target = E.normKey(h.to);
 		const r = await E.enumerate(sfn, { target, prefer: preferTokens(h.actions) });
 		stats.runs += r.stats.runs;
@@ -72,7 +96,6 @@ async function check(cert) {
 			if (k <= 1) fail('hinted turn does not mate with 1 turn left at ' + sfn);
 			await and(ch.sfn, k - 1);
 		}
-		orOk.set(key, k);
 	}
 
 	try {

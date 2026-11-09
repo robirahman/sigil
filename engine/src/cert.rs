@@ -8,10 +8,11 @@
 //! * at a defender node, EVERY legal reply is enumerated (full browser rules,
 //!   `cast_enum::set_full_rules` must be on) and each one must lose on the spot
 //!   or reach a verified mover node;
-//! * at a mover node with k turns left, the hinted position must be a legal
+//! * at a mover node with k turns left, a hinted position must be a legal
 //!   successor and either win outright or (k > 1) be a verified defender node
-//!   with k-1; without a hint, some legal successor must win outright (an
-//!   exhaustive mate-in-1 scan).
+//!   with k-1 (a position that recurs in the proof can carry several hints;
+//!   each is tried); without one that works, some legal successor must win
+//!   outright (an exhaustive mate-in-1 scan).
 //!
 //! An enumeration that hits a cap fails the check. The remaining shared
 //! dependency is the enumerator itself, which tools/rules-diff.py tests against
@@ -54,7 +55,7 @@ pub struct CheckStats {
 
 pub struct Checker {
     mover: Color,
-    hints: HashMap<FKey, FKey>,
+    hints: HashMap<FKey, Vec<FKey>>,
     or_ok: HashMap<FKey, u8>,
     used: std::collections::HashSet<FKey>,
     pub stats: CheckStats,
@@ -64,8 +65,11 @@ pub struct Checker {
 impl Checker {
     /// `hints`: (mover-to-move position, position after the mover's turn).
     pub fn new(mover: Color, hints: &[(Board, Board)], budget: u64) -> Self {
-        let mut h = HashMap::new();
-        for (a, t) in hints { h.insert(fkey(a), fkey(t)); }
+        let mut h: HashMap<FKey, Vec<FKey>> = HashMap::new();
+        for (a, t) in hints {
+            let v = h.entry(fkey(a)).or_default();
+            if !v.contains(&fkey(t)) { v.push(fkey(t)); }
+        }
         Checker { mover, hints: h, or_ok: HashMap::new(), used: Default::default(), stats: CheckStats::default(), budget }
     }
 
@@ -103,41 +107,59 @@ impl Checker {
     }
 
     /// Mover to move at `b` with `k` turns left. Turns are applied lazily: the
-    /// scan stops at the hinted position (legal: it came from the full
-    /// enumeration) or, without a hint, at the first outright win.
+    /// scan stops at a hinted position (legal: it came from the full
+    /// enumeration) or, without a working hint, at the first outright win.
+    ///
+    /// A position can recur in a proof at different turn counts (a repetition:
+    /// the counter is not part of the key), and the certificate then holds one
+    /// entry per occurrence, made for different remaining budgets. A single
+    /// hint per position would replay the longer line where the shorter one is
+    /// needed, so every hinted turn is tried; each is checked in full, which
+    /// keeps the check sound whichever one succeeds.
     pub fn or(&mut self, b: &Board, k: u8) -> Result<(), String> {
         let c = self.mover;
         let kb = fkey(b);
         if let Some(&kk) = self.or_ok.get(&kb) { if kk <= k { return Ok(()); } }
         self.stats.or_nodes += 1;
-        let hint = self.hints.get(&kb).copied();
-        let turns = match (self.turns(b, c), hint) {
-            (Ok(t), _) => t,
-            (Err(e), Some(target)) if e.starts_with("enumeration capped") => {
-                // Too wide to enumerate: look for the hinted turn in the ordered generator.
-                let found = b.turns_ordered(c).take(1 << 20).map(|t| after(b, &t, c)).find(|n| fkey(n) == target);
-                match found {
-                    Some(n) => { self.stats.ordered_legality += 1; return self.finish_or(b, k, kb, n); }
-                    None => return Err(e),
+        let hints = self.hints.get(&kb).cloned().unwrap_or_default();
+        let turns = match self.turns(b, c) {
+            Ok(t) => t,
+            Err(e) if e.starts_with("enumeration capped") && !hints.is_empty() => {
+                // Too wide to enumerate: look for a hinted turn in the ordered generator.
+                let mut last = e;
+                for target in &hints {
+                    let found = b.turns_ordered(c).take(1 << 20).map(|t| after(b, &t, c)).find(|n| fkey(n) == *target);
+                    if let Some(n) = found {
+                        self.stats.ordered_legality += 1;
+                        match self.finish_or(b, k, kb, n) {
+                            Ok(()) => return Ok(()),
+                            Err(e2) if e2.starts_with("check budget") => return Err(e2),
+                            Err(e2) => last = e2,
+                        }
+                    }
                 }
+                return Err(last);
             }
-            (Err(e), _) => return Err(e),
+            Err(e) => return Err(e),
         };
-        if let Some(target) = hint {
-            let n = turns.iter().map(|t| after(b, t, c)).find(|n| fkey(n) == target)
-                .ok_or_else(|| format!("hinted turn is not legal at {}", b.to_sfn()))?;
-            self.stats.hints_used += 1;
-            self.used.insert(kb);
-            if !wins(n.outcome, c) {
-                if n.outcome != Outcome::Ongoing { return Err(format!("hinted turn loses at {}", b.to_sfn())); }
-                if k <= 1 { return Err(format!("hinted turn does not mate with 1 turn left at {}", b.to_sfn())); }
-                self.and(&n, k - 1)?;
+        let mut last = None;
+        for target in &hints {
+            let n = match turns.iter().map(|t| after(b, t, c)).find(|n| fkey(n) == *target) {
+                Some(n) => n,
+                None => { last = Some(format!("hinted turn is not legal at {}", b.to_sfn())); continue; }
+            };
+            match self.finish_or(b, k, kb, n) {
+                Ok(()) => return Ok(()),
+                Err(e) if e.starts_with("check budget") => return Err(e),
+                Err(e) => last = Some(e),
             }
-        } else if !turns.iter().any(|t| wins(after(b, t, c).outcome, c)) {
-            return Err(format!("no hint and no mate-in-1 at {}", b.to_sfn()));
         }
-        self.or_ok.insert(kb, k);
-        Ok(())
+        // No hint, or none that works within k: an exhaustive mate-in-1 scan.
+        if turns.iter().any(|t| wins(after(b, t, c).outcome, c)) {
+            self.or_ok.insert(kb, k);
+            return Ok(());
+        }
+        Err(last.unwrap_or_else(|| format!("no hint and no mate-in-1 at {}", b.to_sfn())))
     }
 
     fn finish_or(&mut self, b: &Board, k: u8, kb: FKey, n: Board) -> Result<(), String> {
