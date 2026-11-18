@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Finish certifying dev set v2's answer key (bench/V3_PLAN.md decisions, 2026-11-03).
-# Input $IN/dev2verify_in.json: {"cert_ids": [...], "within": [[id, k, time_ms], ...]}.
+# Input $IN/dev2verify_in.json: {"cert_ids": [...], "within": [[id, k, time_ms, threads?], ...]}.
 #   certs   certificates + Rust check for cert_ids; JS check for N <= 3 and the
 #           10% sample above (certs.py defaults); extraction budget = first
 #           job argument in ms (default 2 h)
@@ -19,11 +19,12 @@ bin_, out, inn = sys.argv[1:4]
 reqs = json.load(open(inn + '/dev2verify_in.json'))['within']
 sfn = {p['id']: p['sfn'] for p in json.load(open('bench/dev/dev_set_v2.json'))['puzzles']}
 def one(r):
-    pid, k, t = r
-    o = subprocess.run([bin_ + '/cert_tool', 'within'], input=f'{k}\t{sfn[pid]}\t20000000000000\t{t}\t1\n',
+    pid, k, t = r[:3]
+    threads = r[3] if len(r) > 3 else 1
+    o = subprocess.run([bin_ + '/cert_tool', 'within'], input=f'{k}\t{sfn[pid]}\t20000000000000\t{t}\t{threads}\n',
                        capture_output=True, text=True).stdout
     return dict(json.loads(o or '{}'), id=pid)
-with open(out + '/within.jsonl', 'a') as f, cf.ThreadPoolExecutor(len(reqs)) as ex:
+with open(out + '/within.jsonl', 'a') as f, cf.ThreadPoolExecutor(max(1, len(reqs))) as ex:
     for fu in cf.as_completed([ex.submit(one, r) for r in reqs]):
         r = fu.result()
         f.write(json.dumps(r) + '\n'); f.flush(); print(r, flush=True)

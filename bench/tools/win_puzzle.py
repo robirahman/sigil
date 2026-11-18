@@ -109,6 +109,24 @@ def sig_text(sig):
     return 'place ' + ','.join(places) + ((' + cast ' + ','.join(spells)) if spells else '')
 
 
+def winning_ideas_at(r, depth=4, p_min=0.9):
+    """How many distinct ideas (solution_signature) have a deep-searched child
+    with calibrated P(mover wins) >= p_min at `depth` under the shipped net.
+    The mining prefilter (2026-11-18) skips the full table when this is 2 or
+    more on a depth-4, shipped-net-only table: on 3,471 mined tables that
+    rejected 66% of positions (64% of table time) and none of the 36 table
+    puzzles or 17 playout-separated positions."""
+    mover = mover_of(r['sfn'])
+    best = {}
+    for c in r.get('deep') or []:
+        if c.get('sample') or c.get('over'):
+            continue
+        pr = p_of(c, mover, SHIPPED, depth)
+        if pr is not None and pr >= p_min:
+            best[solution_signature(c.get('actions'))] = True
+    return len(best)
+
+
 def judge(r, a):
     mover = mover_of(r['sfn'])
     out = {'id': r.get('id'), 'sfn': r['sfn'], 'children': r['children'], 'deep_count': r['deep_count'],

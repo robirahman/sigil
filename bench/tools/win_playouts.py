@@ -11,6 +11,8 @@ position after the mover's turn: the site's Very Hard engine on both sides
 tail, 21-bit table, no pondering) at --ms per move, --games times. Timing
 makes the games differ. One JSON line per game: id, after, role, winner,
 plies, seconds. Summaries (mover win rate per child) come from --summary.
+Games already in --out are skipped, so a rerun resumes, and a rerun with a
+larger --games (e.g. on --ids, the near misses to confirm) adds the rest.
 
 Needs the Python binding (maturin develop in engine/).
 """
@@ -69,20 +71,42 @@ def main():
     ap.add_argument('--max-plies', type=int, default=160)
     ap.add_argument('--workers', type=int, default=os.cpu_count() or 1)
     ap.add_argument('--only-puzzles', action='store_true')
+    ap.add_argument('--ids', help='file with one position id per line (or a JSONL file with "id"): play only these')
     ap.add_argument('--summary', action='store_true', help='summarize --out and exit')
     a = ap.parse_args()
     if a.summary:
         for s in summary(a.out):
             print(json.dumps(s))
         return
+    want = None
+    if a.ids:
+        want = set()
+        for line in open(a.ids):
+            line = line.strip()
+            if line:
+                want.add(json.loads(line)['id'] if line.startswith('{') else line)
+    # Resume: games already in --out (same position, child and game number) are not replayed,
+    # so a rerun with a larger --games adds only the missing games.
+    done = set()
+    if os.path.exists(a.out):
+        for line in open(a.out):
+            try:
+                r = json.loads(line)
+                done.add((r['id'], r['after'], r['game']))
+            except Exception:  # noqa: BLE001
+                pass
     jobs = []
     for line in open(a.verdicts):
         v = json.loads(line)
         if a.only_puzzles and v.get('verdict') != 'puzzle':
             continue
+        if want is not None and v['id'] not in want:
+            continue
         mover = 'red' if v['sfn'].split()[1] == 'r' else 'blue'
         for c in v.get('playout') or []:
             for g in range(a.games):
+                if (v['id'], c['after'], g) in done:
+                    continue
                 jobs.append({'id': v['id'], 'after': c['after'], 'role': c['role'], 'p': c.get('p'),
                              'mover': mover, 'game': g, 'ms': a.ms, 'max_plies': a.max_plies})
     print(f'{len(jobs)} games on {a.workers} workers', flush=True)

@@ -12,9 +12,14 @@
 
 Corpus: the round-6 self-play shards (engine/harness self-play, `v2d4_*.npz`:
 per position the SFN, game id, ply, side to move, start ply and `y` = 1 when
-the side to move went on to win). Only games started from the empty board
-(start_ply 0) are used: games started from human positions could share a
-history with published puzzles. Games that hit the ply cap are skipped.
+the side to move went on to win). By default only games started from the
+empty board (start_ply 0) are used. `corpus --starts human|all` adds the games
+self-play started from a human game's position (2026-11-18, to widen the
+winning-turn supply): such a game is kept only if none of its positions is a
+published or dev-set position (swing --exclude), its candidates come at least
+--min-after-start plies after the start, and its "source" is the start
+position, so every game from one human start lands on the same side of the
+dev/test split. Games that hit the ply cap are skipped.
 
 Candidates:
   * mates: the winner to move 1, 3 or 5 plies before the end, with the turn
@@ -83,20 +88,22 @@ def cmd_corpus(a):
     games, skipped = {}, Counter()
     for (grp, g), rs in rows.items():
         rs.sort()
-        if any(r[5] != 0 for r in rs):
-            skipped['human start'] += 1
+        human = any(r[5] != 0 for r in rs)
+        if (human and a.starts == 'empty') or (not human and a.starts == 'human'):
+            skipped['human start' if human else 'empty-board start'] += 1
             continue
         if any(r[3] == 255 for r in rs):
             skipped['undecided'] += 1
             continue
         plies = [r[0] for r in rs]
-        if plies != list(range(plies[0], plies[0] + len(plies))) or plies[0] != 0:
+        if plies != list(range(plies[0], plies[0] + len(plies))) or plies[0] != rs[0][5]:
             skipped['gap'] += 1
             continue
         winner = ('red' if rs[-1][2] else 'blue') if rs[-1][3] == 1 else ('blue' if rs[-1][2] else 'red')
-        gid = 'sp6-' + hashlib.sha1(f'{grp}:{g}'.encode()).hexdigest()[:12]
-        games[gid] = {'winner': winner, 'positions': [{'sfn': browser_parity(r[1]), 'mover': 'red' if r[2] else 'blue',
-                                                       'score': r[4]} for r in rs]}
+        gid = ('sp6h-' if human else 'sp6-') + hashlib.sha1(f'{grp}:{g}'.encode()).hexdigest()[:12]
+        positions = [{'sfn': browser_parity(r[1]), 'mover': 'red' if r[2] else 'blue', 'score': r[4]} for r in rs]
+        games[gid] = {'winner': winner, 'positions': positions, 'start_ply': rs[0][5],
+                      'source': ('hs-' + hashlib.sha1(skey(positions[0]['sfn']).encode()).hexdigest()[:12]) if human else gid}
     json.dump({'canary': CANARY, 'source': a.npz_dir, 'games': games}, open(a.out, 'w'))
     print(f'{len(games)} games from {len(files)} files; skipped {dict(skipped)}')
 
@@ -164,7 +171,8 @@ def cmd_swing(a):
                 dropped['game shares a published position'] += 1
                 continue
             n = len(pos)
-            for i in range(2, n - a.min_to_end):
+            first = a.min_after_start if g.get('start_ply') else 2
+            for i in range(max(2, first), n - a.min_to_end):
                 p0, p1, p2 = pos[i - 2], pos[i - 1], pos[i]
                 if p2['mover'] != g['winner'] or p0['mover'] != g['winner']:
                     continue
@@ -172,7 +180,8 @@ def cmd_swing(a):
                     continue
                 if p0['score'] > a.before_max or -p1['score'] > a.loser_saw:
                     continue
-                cands.append({'id': f'{gid}-p{i}', 'sfn': p2['sfn'], 'game': gid, 'plies_to_end': n - i,
+                cands.append({'id': f'{gid}-p{i}', 'sfn': p2['sfn'], 'game': gid, 'source': g.get('source', gid),
+                              'plies_to_end': n - i,
                               'mover': g['winner'], 'score': p2['score'], 'score_before': p0['score'],
                               'loser_view': p1['score'], 'kind': 'swing'})
     json.dump({'canary': CANARY, 'candidates': cands}, open(a.out, 'w'))
@@ -262,6 +271,8 @@ def main():
     p = sub.add_parser('corpus')
     p.add_argument('--npz-dir', required=True)
     p.add_argument('--out', required=True)
+    p.add_argument('--starts', choices=['empty', 'human', 'all'], default='empty',
+                   help='which games: started from the empty board (default), from a human position, or both')
     p = sub.add_parser('candidates')
     p.add_argument('--games', required=True)
     p.add_argument('--exclude', nargs='*', default=[])
@@ -278,6 +289,8 @@ def main():
     p.add_argument('--hi', type=int, default=200, help='winner edge now (centistones, its side)')
     p.add_argument('--before-max', type=int, default=50, help='winner edge two plies back at most')
     p.add_argument('--loser-saw', type=int, default=50, help="loser's own score at its turn at least minus this")
+    p.add_argument('--min-after-start', type=int, default=4,
+                   help='in a game started from a human position, candidates at least this many plies in')
     p.add_argument('--min-to-end', type=int, default=6, help='plies left at least (closer is mate-puzzle land)')
     p = sub.add_parser('solve')
     p.add_argument('--candidates', required=True)
