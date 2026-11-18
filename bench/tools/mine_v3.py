@@ -167,14 +167,27 @@ def cmd_swing(a):
         games = json.load(open(gpath))['games']
         for gid, g in sorted(games.items()):
             pos = g['positions']
-            if any(skey(p['sfn']) in pub for p in pos):
-                dropped['game shares a published position'] += 1
-                continue
+            near_pub = set()
+            if a.exclude_scope == 'game':
+                if any(skey(p['sfn']) in pub for p in pos):
+                    dropped['game shares a published position'] += 1
+                    continue
+            else:
+                # human games (the published puzzles come from them): drop only
+                # positions within 2 plies of a published one
+                for j, p in enumerate(pos):
+                    if skey(p['sfn']) in pub:
+                        near_pub.update(range(j - 2, j + 3))
             n = len(pos)
             first = a.min_after_start if g.get('start_ply') else 2
             for i in range(max(2, first), n - a.min_to_end):
                 p0, p1, p2 = pos[i - 2], pos[i - 1], pos[i]
-                if p2['mover'] != g['winner'] or p0['mover'] != g['winner']:
+                if i in near_pub:
+                    dropped['near a published position'] += 1
+                    continue
+                if p2['mover'] != p0['mover']:
+                    continue
+                if not a.any_mover and p2['mover'] != g['winner']:
                     continue
                 if not (a.hi <= p2['score'] < 4000):
                     continue
@@ -182,7 +195,7 @@ def cmd_swing(a):
                     continue
                 cands.append({'id': f'{gid}-p{i}', 'sfn': p2['sfn'], 'game': gid, 'source': g.get('source', gid),
                               'plies_to_end': n - i,
-                              'mover': g['winner'], 'score': p2['score'], 'score_before': p0['score'],
+                              'mover': p2['mover'], 'score': p2['score'], 'score_before': p0['score'],
                               'loser_view': p1['score'], 'kind': 'swing'})
     json.dump({'canary': CANARY, 'candidates': cands}, open(a.out, 'w'))
     print(f'{len(cands)} swing candidates; dropped {dict(dropped)}')
@@ -289,6 +302,10 @@ def main():
     p.add_argument('--hi', type=int, default=200, help='winner edge now (centistones, its side)')
     p.add_argument('--before-max', type=int, default=50, help='winner edge two plies back at most')
     p.add_argument('--loser-saw', type=int, default=50, help="loser's own score at its turn at least minus this")
+    p.add_argument('--any-mover', action='store_true',
+                   help='human games: the side with the new edge need not be the eventual winner')
+    p.add_argument('--exclude-scope', choices=['game', 'near'], default='game',
+                   help='drop a whole game that shares a published position (self-play), or only positions within 2 plies of one (human games)')
     p.add_argument('--min-after-start', type=int, default=4,
                    help='in a game started from a human position, candidates at least this many plies in')
     p.add_argument('--min-to-end', type=int, default=6, help='plies left at least (closer is mate-puzzle land)')

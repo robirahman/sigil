@@ -11,6 +11,7 @@
 # summary_<shard>.json has every count the yield estimate needs.
 # Needs the Python binding (python=1).
 #   args: <prefix> [max_children=20000] [games=6] [ms=10000] [starts=empty|human|all] [prefilter=1]
+# prefix "human": the games are the human-game line dumps passed as INPUTS (*.json), scored on the VM.
 # Resume (Spot): pass the previous run's newest tables_/prefilter_/playouts_<shard>.jsonl
 # as INPUTS; they are copied into $OUT first and finished work is skipped.
 set -uo pipefail
@@ -22,11 +23,21 @@ for f in tables prefilter playouts; do
   [ -f "$IN/${f}_$SAFE.jsonl" ] && cp "$IN/${f}_$SAFE.jsonl" "$OUT/" && echo "resumed ${f}_$SAFE.jsonl: $(wc -l < $OUT/${f}_$SAFE.jsonl) lines"
 done
 apt-get -qq install -y python3-numpy >/dev/null 2>&1
-python3 bench/tools/fetch_private.py "$PREFIX" $NPZ --shard "$SHARD" > $OUT/download_$SAFE.log 2>&1
-python3 bench/tools/mine_v3.py corpus --npz-dir $NPZ --starts "$STARTS" --out $OUT/games_$SAFE.json > $OUT/corpus_$SAFE.log 2>&1
-python3 bench/tools/mine_v3.py swing --games $OUT/games_$SAFE.json \
-  --exclude docs/static/puzzles/mate_puzzles.json bench/dev/dev_set.json bench/dev/dev_set_v2.json \
-  --out $OUT/swing_$SAFE.json >> $OUT/corpus_$SAFE.log 2>&1
+if [ "$PREFIX" = human ]; then
+  # option (d): human games from the INPUTS line dumps, scored here (bench/tools/human_games.py)
+  : > $OUT/download_$SAFE.log
+  [ -f $OUT/games_$SAFE.json ] || python3 bench/tools/human_games.py $(ls $IN/*.json | grep -v -E '/(tables|prefilter|playouts)_') \
+    --out $OUT/games_$SAFE.json --workers "$W" > $OUT/corpus_$SAFE.log 2>&1
+  python3 bench/tools/mine_v3.py swing --games $OUT/games_$SAFE.json --any-mover --exclude-scope near \
+    --exclude docs/static/puzzles/mate_puzzles.json bench/dev/dev_set.json bench/dev/dev_set_v2.json \
+    --out $OUT/swing_$SAFE.json >> $OUT/corpus_$SAFE.log 2>&1
+else
+  python3 bench/tools/fetch_private.py "$PREFIX" $NPZ --shard "$SHARD" > $OUT/download_$SAFE.log 2>&1
+  python3 bench/tools/mine_v3.py corpus --npz-dir $NPZ --starts "$STARTS" --out $OUT/games_$SAFE.json > $OUT/corpus_$SAFE.log 2>&1
+  python3 bench/tools/mine_v3.py swing --games $OUT/games_$SAFE.json \
+    --exclude docs/static/puzzles/mate_puzzles.json bench/dev/dev_set.json bench/dev/dev_set_v2.json \
+    --out $OUT/swing_$SAFE.json >> $OUT/corpus_$SAFE.log 2>&1
+fi
 rm -rf $NPZ
 cat $OUT/download_$SAFE.log $OUT/corpus_$SAFE.log
 python3 - "$OUT/swing_$SAFE.json" "$OUT/tables_$SAFE.jsonl" "$W" "$BIN" "$MAXC" "$OUT/prefilter_$SAFE.jsonl" "$PREF" <<'PY' > $OUT/tables_$SAFE.log 2>&1
