@@ -3129,3 +3129,24 @@ walked backwards at depth 6 by the v36 base engine (v35-fix search + `nnue_snn2_
 *   **Telemetry:** 55 games carry `aiTelemetry`, all engine 35 on `nnue_mt256`, so the field is saved.
 The cases (`gs://…/data/deep_review/cases_2026-11.json`) are the human regression set for releases.
 Report: `reports/2026-11-deep-review.md`.
+
+## Engine v36: the r6 value net and the v35 search reverted (2026-11-08/18)
+
+The v35 -> v36 plan (`docs/designs/ai-training-todos.md`) measured what v35 shipped, retrained on fresh data and
+gated the result against the live engine.
+
+* **v35 lost Elo.** v35 was -24.3 [-39.0, -9.7] vs v34 (core draws, 10 s, 2,160 games). A depth bisection put it on
+  two search changes: `SHIPPED_POLICY` `min_width` 32 and `DashCast` ordered before `Dash`. Reverting both is
+  +28.0 [+13.4, +42.7] vs v35. v36 keeps the revert.
+* **More data beat a bigger change to the policy.** The r6 policy retrain (`r6_warm`) improved held-out NLL
+  (0.9801 vs 0.9907) but was +8.6 [-6.1, +23.3] in the arena, so the shipped policy weights stay.
+* **The r6 value net is the gain.** `nnue_r6` (r6 self-play, 668,964 games, plus the Step 1 human chunks; SNN2
+  wall and bank inputs) beat `nnue_snn2_base` by +21.9 [+7.2, +36.6] head to head. Against live v35 at 10 s:
+  core +66.8 [+51.8, +81.7], Fissure draws +92.9 [+71.4, +114.3], Dividend draws +75.1 [+53.9, +96.3].
+  `nnue_snn2_base` on the same seeds: +17.7 / +61.1 / +45.9.
+* **One tactical regression.** The tactical gate falls from 9/12 to 7/12: `nnue_r6` replays the recorded GWSMF5
+  turn-26 blunder (G2). G1 fails on every build. On the 795 confirmed human-game falls of Step 1, both candidate nets
+  avoid the played move in about 770 at depth 6.
+* **Win probability refitted.** `position_rescore.py` re-scored the 5,028 PR #28 starts with `nnue_r6` (about 6.4 h on
+  30 vCPU) instead of replaying the games; held-out log loss 0.521 / 0.516 / 0.514 at depth 4 / 5 / 6 against 0.678
+  for a constant.
