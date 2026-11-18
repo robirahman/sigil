@@ -23,6 +23,7 @@ import concurrent.futures as cf
 import json
 import os
 import subprocess
+import threading
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,8 +74,13 @@ def js_sampled(pid, fraction, seed):
     return h < fraction * 0x100000000
 
 
-def one(a, p, rep):
-    res = {'id': p['id'], 'n': p['n']}
+def one(a, p, rep, emit):
+    """Certificate, Rust check and (when due) JS check for one puzzle. A record
+    due a JS check is emitted twice: first with the Rust verdict ("final":
+    false; a JS check can take many hours, and a run that ends first must not
+    lose the Rust result), then complete ("final": true). Readers keep the
+    last record per id."""
+    res = {'id': p['id'], 'n': p['n'], 'final': True}
     if not rep.get('ok'):
         res['error'] = 'replay: ' + str(rep.get('error'))
         return res
@@ -88,9 +94,13 @@ def one(a, p, rep):
         res['make']['internal'] = len(c['internal'])
         res['make']['leaves'] = len(c['leaves'])
         res['check'] = check(a.tool, c)
-        if a.js and (p['n'] <= a.js_max_n or js_sampled(p['id'], a.js_sample, a.js_seed)):
-            res['check_js'] = check_js(c)
         res['cert'] = c
+        if a.js and (p['n'] <= a.js_max_n or js_sampled(p['id'], a.js_sample, a.js_seed)):
+            emit(dict(res, final=False))
+            try:
+                res['check_js'] = check_js(c)
+            except Exception as e:  # noqa: BLE001
+                res['check_js'] = {'ok': False, 'error': str(e)[-300:]}
     return res
 
 
@@ -122,14 +132,16 @@ def main():
         print(','.join(p['id'] for p in ps if p['n'] > a.js_max_n and js_sampled(p['id'], a.js_sample, a.js_seed)))
         return
     reps = after_sfns(ps)
+    lock = threading.Lock()
     with open(a.out, 'a') as f, cf.ThreadPoolExecutor(a.jobs) as ex:
-        futs = [ex.submit(one, a, p, r) for p, r in zip(ps, reps)]
+        def emit(r):
+            with lock:
+                f.write(json.dumps(r) + '\n')
+                f.flush()
+                print(json.dumps({k: v for k, v in r.items() if k != 'cert'}), flush=True)
+        futs = [ex.submit(one, a, p, r, emit) for p, r in zip(ps, reps)]
         for fu in cf.as_completed(futs):
-            r = fu.result()
-            f.write(json.dumps(r) + '\n')
-            f.flush()
-            brief = {k: v for k, v in r.items() if k != 'cert'}
-            print(json.dumps(brief), flush=True)
+            emit(fu.result())
 
 
 if __name__ == '__main__':
