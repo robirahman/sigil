@@ -205,6 +205,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		const bz = await until(async () => { const r = await rest('GET', 'rooms/' + code); return r && r.berserk && r.berserk.red === true ? r : null; }, 15000);
 		check('red berserked: the room says so and the clock halved', bz && bz.timer && bz.timer.red <= 90000, bz && bz.timer);
 		const seen = await until(() => blue.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).berserk.red === true), 10000);
+		if (process.env.TOUR_SHOTS) await blue.screenshot({ path: process.env.TOUR_SHOTS + '/game-bar-berserked.png' });
 		check('blue\'s page shows red\'s berserk', seen);
 		const gone = await until(() => red.evaluate(() => !Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canBerserk), 5000);
 		check('red cannot berserk twice', gone);
@@ -228,6 +229,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 			return tr ? tr.textContent.replace(/\s+/g, ' ') : null;
 		}, room.red.uid), 10000);
 		check('the standings show it', /2/.test(row || ''), row);
+		if (process.env.TOUR_SHOTS) await red.screenshot({ path: process.env.TOUR_SHOTS + '/arena-page.png', fullPage: true });
 
 		// ---- 5. A simul.
 		await open(alice, 'tournaments.html', '[x-data^="tournamentsPage"]');
@@ -252,6 +254,10 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 			return els.length === 2 && [...els].every((el) => el.querySelector('.mini-board')) ? els.length : null;
 		}), 20000);
 		check('the host sees both boards', boards === 2, boards);
+		if (process.env.TOUR_SHOTS) {
+			await sleep(1500);
+			await alice.screenshot({ path: process.env.TOUR_SHOTS + '/simul-page.png', fullPage: true });
+		}
 		const [sb, sc] = await Promise.all([onGame(bob), onGame(carol)]);
 		check('each opponent goes to their own board', !!sb && !!sc && sb !== sc, { sb, sc });
 		const next = await until(() => alice.evaluate(() => {

@@ -896,7 +896,7 @@ async function advance(db, tid, now, opts) {
 			await step(S, now || Date.now(), !!(opts && opts.full));
 			await save(S);
 			return { status: S.t.status, created: S.created };
-		}, (opts && opts.waitMs) || 15000);
+		}, opts && opts.waitMs ? opts.waitMs : 15000);
 	} catch (e) {
 		if (e && e.code === 'unavailable') return null;
 		throw e;
@@ -1053,7 +1053,9 @@ async function act(db, uid, data, ctx) {
 	const tid = data && data.id;
 	if (typeof tid !== 'string' || !/^[A-Za-z0-9_-]{1,40}$/.test(tid)) fail('invalid-argument', 'invalid-id');
 	if (action === 'poke') {
-		const res = await advance(db, tid, now, { waitMs: 4000 });
+		// One try: a poke while another writer holds the event is redundant,
+		// and pokes never queue behind the lock.
+		const res = await advance(db, tid, now, { waitMs: 1 });
 		return { ok: true, status: res ? res.status : null };
 	}
 	if (!['join', 'withdraw', 'start', 'cancel', 'kick'].includes(action)) fail('invalid-argument', 'invalid-action');

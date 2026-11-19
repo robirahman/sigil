@@ -129,3 +129,20 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Tournaments
+
+```sh
+(cd docs && python3 -m http.server 8807) &
+cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
+  'node ../tools/browser/tournament-emulator-test.js http://localhost:8807'
+```
+
+Runs an arena and a simul through the real pages with the `tournament` callable and the
+`tournamentGameEnd` trigger on the functions emulator: creating from `tournaments.html`, joining from
+`tournament.html` (a guest sees the standings and no Join), the start pairing two players and taking
+both into their game, the game page's tournament bar (Berserk, no Abort / Take back / +15 s), a
+berserk halving the clock on both pages, a resignation scored and both pages back on the event, then a
+simul whose host sees every board, follows "Next board" and keeps a live seat on each.
+`TOUR_FUNCTIONS_PORT` sets another functions port; `TOUR_SHOTS=<dir>` saves a screenshot of the game
+page.

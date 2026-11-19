@@ -152,18 +152,37 @@
 		html[data-theme="parchment"] .rated-badge--casual { color: #4a4a4a; }
 		.room-preview { margin-top: 8px; font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.9em; }
 		/* A tournament game: its event, berserk, a simul host's next board. */
+		/* A second row under the names and clocks (.ladder-details is absolute
+		   over the board): only the pill takes clicks. */
+		.ladder-details--tour { flex-wrap: wrap; pointer-events: none; }
+		.ladder-details--tour .ladder-details__card { pointer-events: auto; }
 		.tournament-bar {
 			display: flex;
+			justify-content: center;
+			flex-basis: 100%;
+			margin-top: 4px;
+			position: relative;
+			z-index: 4;
+		}
+		.tournament-bar__pill {
+			display: flex;
 			flex-wrap: wrap;
-			gap: 6px 12px;
+			gap: 4px 10px;
 			align-items: center;
 			justify-content: center;
-			margin: 6px auto 0;
+			padding: 2px 10px;
+			border-radius: 10px;
+			background: var(--color-bg-dark);
+			box-shadow: 0 2px 8px #000;
+			opacity: 0.92;
+			pointer-events: auto;
 			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
 			color: var(--color-text-dim);
 		}
 		.tournament-bar__name { color: var(--color-accent); font-family: 'Arvo', serif; }
 		.tournament-bar__tag { color: #ff8c00; }
+		.tournament-bar__pill .action-button { min-height: 0; padding: 2px 10px; font-size: 0.9em; line-height: 1.4; }
 		.tournament-bar__berserk { border-color: #ff8c00; }
 		.tournament-bar__simul { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 		.win-modal__tournament { display: contents; }
@@ -705,7 +724,7 @@
 				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-on:sigil-settings.window="isMuted = $event.detail.muted" x-bind:aria-label="isMuted ? 'Unmute sound' : 'Mute sound'" x-bind:title="isMuted ? 'Unmute sound' : 'Mute sound'" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: soundManager.muted }"></button>
 				<button class="in-game-share" x-on:click="copyGameLink" x-text="linkCopied ? 'Copied!' : 'Share game link'"></button>
 				<!-- Player names and timer bar -->
-				<div class="ladder-details" x-show="redName || blueName">
+				<div class="ladder-details" x-show="redName || blueName" x-bind:class="{ 'ladder-details--tour': !!tournament }">
 					<div class="ladder-details__inner">
 						<div class="ladder-details__card">
 							<div class="red">
@@ -767,21 +786,23 @@
 							</div>
 						</div>
 					</div>
-				</div>
-				<!-- A tournament game (functions/tournaments.js): its event, berserk, a simul host's next board. -->
-				<div class="tournament-bar" x-show="tournament" x-cloak data-testid="tournament-bar">
-					<a class="tournament-bar__name" x-bind:href="tournamentUrl()" x-text="tournamentLabel()"></a>
-					<span class="tournament-bar__tag" x-show="berserk.red" x-text="(myColor === 'red' ? 'You' : redName) + ' berserked'"></span>
-					<span class="tournament-bar__tag" x-show="berserk.blue" x-text="(myColor === 'blue' ? 'You' : blueName) + ' berserked'"></span>
-					<button type="button" class="action-button tournament-bar__berserk" data-testid="berserk" x-show="canBerserk" x-on:click="handleBerserk"
-						title="Halve your clock (and lose the increment) for 1 more point if you win. Only before your first move.">Berserk</button>
-					<template x-if="simulHost">
-						<span class="tournament-bar__simul">
-							<button type="button" class="action-button" data-testid="simul-next" x-on:click="simulNext()" x-bind:disabled="!simulQueue.length"
-								x-text="simulQueue.length ? 'Next board (' + simulQueue.length + ')' : 'No other board waits'"></button>
-							<label><input type="checkbox" x-model="simulAuto" x-on:change="saveSimulAuto()" /> Go on after each move</label>
-						</span>
-					</template>
+					<!-- A tournament game (functions/tournaments.js): its event, berserk, a simul host's next board. -->
+					<div class="tournament-bar" x-show="tournament" x-cloak data-testid="tournament-bar">
+						<div class="tournament-bar__pill">
+							<a class="tournament-bar__name" x-bind:href="tournamentUrl()" x-text="tournamentLabel()"></a>
+							<span class="tournament-bar__tag" x-show="berserk.red" x-text="(myColor === 'red' ? 'You' : redName) + ' berserked'"></span>
+							<span class="tournament-bar__tag" x-show="berserk.blue" x-text="(myColor === 'blue' ? 'You' : blueName) + ' berserked'"></span>
+							<button type="button" class="action-button tournament-bar__berserk" data-testid="berserk" x-show="canBerserk" x-on:click="handleBerserk"
+								title="Halve your clock (and lose the increment) for 1 more point if you win. Only before your first move.">Berserk</button>
+							<template x-if="simulHost">
+								<span class="tournament-bar__simul">
+									<button type="button" class="action-button" data-testid="simul-next" x-on:click="simulNext()" x-bind:disabled="!simulQueue.length"
+										x-text="simulQueue.length ? 'Next board (' + simulQueue.length + ')' : 'No other board waits'"></button>
+									<label><input type="checkbox" x-model="simulAuto" x-on:change="saveSimulAuto()" /> Go on after each move</label>
+								</span>
+							</template>
+						</div>
+					</div>
 				</div>
 				<div class="container"><div class="container__inner">
 					<template x-if="messageHistory.length > 0">
