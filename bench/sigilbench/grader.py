@@ -17,6 +17,18 @@ Outcomes (`status`):
   unproven     legal; neither proven nor refuted (mate-in-3+ only) -> counted
                wrong, flagged for re-check with a larger budget
   grader_error budget exhausted / enumeration cap -> counted wrong, flagged
+
+Winning-turn puzzles (kind "win", SigilBench v3) have no proof: the answer key
+is the set of positions reached by the executions of the one winning idea that
+the root table found winning (answer_keys). An answer is
+  correct  if its position is an answer key, or if it executes the same idea
+           (bench/tools/win_puzzle.py solution_signature: placement nodes and
+           spells cast) in a way the table did not search deeply and a fixed-
+           depth search of its position (bench_grade "w", the table's depth and
+           net, calibrated with the table's curve) gives P(mover wins) >=
+           win_p -- the rule the table used to choose the answer keys;
+  wrong    otherwise (another idea, or an execution of the idea that does not
+           win: "failed execution").
 """
 import json
 import os
@@ -24,6 +36,24 @@ import subprocess
 import threading
 
 from .common import BENCH, REPO
+
+import sys as _sys
+_sys.path.insert(0, os.path.join(BENCH, 'tools'))
+from win_puzzle import solution_signature, WT  # noqa: E402  (pins the nnue_mt256 calibration)
+
+
+def win_prob(sfn, after, g):
+    """P(mover wins) from a bench_grade "w" result (mover's side), with the
+    calibration the root tables used (win_puzzle.p_of)."""
+    mover = 'red' if sfn.split()[1] == 'r' else 'blue'
+    if g.get('over'):
+        return 1.0 if g.get('mover_wins') else 0.0
+    sign = 1 if mover == 'red' else -1
+    pr = WT.red_win_prob(after, g['depth'], g['stones'] * sign,
+                         None if not g.get('mate') else g['mate'] * sign, bool(g.get('proven')))
+    if pr is None:
+        return None
+    return pr if mover == 'red' else 1 - pr
 
 DEFAULT_GRADE_BIN = os.environ.get('SIGILBENCH_GRADE_BIN') or os.path.join(
     os.environ.get('CARGO_TARGET_DIR', os.path.join(REPO, 'engine', 'target')),
@@ -78,12 +108,37 @@ class Grader:
         return self.apply.ask(json.dumps({'sfn': sfn, 'actions': actions}))
 
     def grade(self, puzzle, actions):
-        """`puzzle` needs sfn, n, solution_keys. Returns a dict with `status`
-        and `correct` plus details."""
+        """`puzzle` needs sfn, n, solution_keys (mates) or answer_keys,
+        key_idea, win_p, depth, eval (kind "win"). Returns a dict with
+        `status` and `correct` plus details."""
         r = self.replay(puzzle['sfn'], actions)
         if not r.get('ok'):
             return {'status': 'invalid', 'correct': False, 'detail': r.get('error')}
+        if puzzle.get('kind') == 'win':
+            return self.grade_win(puzzle, actions, r['after'], r['key'])
         return self.grade_after(puzzle, r['after'], r['key'])
+
+    def grade_win(self, puzzle, actions, after, key=None):
+        key = key or sfn_key(after)
+        out = {'after': after, 'key': key}
+        if key in set(puzzle.get('answer_keys') or []):
+            return dict(out, status='correct', correct=True, proof='answer key')
+        sig = solution_signature(actions or [])
+        idea = (tuple(puzzle['key_idea'][0]), tuple(puzzle['key_idea'][1]))
+        out['idea'] = [list(sig[0]), list(sig[1])]
+        if actions is None or sig != idea:
+            return dict(out, status='wrong', correct=False, detail='another idea')
+        g = self.rust.ask(f"w\t{puzzle['sfn']}\t{after}\t{puzzle.get('depth', 5)}\t{puzzle.get('eval', 'nnue_mt256')}")
+        out['rust'] = g
+        if g.get('verdict') == 'illegal':
+            return dict(out, status='illegal', correct=False)
+        if g.get('verdict') != 'eval':
+            return dict(out, status='grader_error', correct=False, detail=g.get('error'))
+        p = win_prob(puzzle['sfn'], after, g)
+        out['p'] = p
+        if p is not None and p >= puzzle.get('win_p', 0.80):
+            return dict(out, status='correct', correct=True, proof='key idea, P %.3f' % p)
+        return dict(out, status='wrong', correct=False, detail='failed execution of the key idea')
 
     def grade_after(self, puzzle, after, key=None):
         """Grade a turn given by the position it produced (the engine

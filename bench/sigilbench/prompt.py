@@ -39,12 +39,19 @@ def system_prompt():
         'matters.',
         '# Sigil rules\n\n' + _read('rules.md'),
         '# Writing a turn as actions\n\n' + _read('actions.md'),
-        '# Your task\n\nEach puzzle gives a position and a number N. Find ONE turn for the side to move '
-        'that forces a win: whatever the opponent does, you can win within N of your own turns, counting '
-        'the turn you submit (N = 1 means your turn wins the game immediately). A turn that wins faster '
-        'than N also counts. There may be several correct turns; any one is enough. Think as long as you '
-        f'need, then call the `{TOOL_NAME}` tool exactly once with your turn. Your first call is final. '
-        'Do not ask questions; no further information will be given.',
+        '# Your task\n\nEach puzzle gives a position and asks for ONE turn for the side to move. There are '
+        'two kinds of puzzle, and each puzzle says which kind it is.\n\n'
+        '**Mate in N.** Find a turn that forces a win: whatever the opponent does, you can win within N '
+        'of your own turns, counting the turn you submit (N = 1 means your turn wins the game '
+        'immediately). A turn that wins faster than N also counts. There may be several correct turns; '
+        'any one is enough.\n\n'
+        '**Winning turn.** No forced mate is asked for. Exactly one plan wins: where you place stones '
+        '(your regular move, any dash move and any Providence placement) and which spells you cast. '
+        'Every other plan lets the opponent hold or turn the game. Submit a turn that carries out the '
+        'winning plan in a way that works: the right plan carried out badly (for example with the wrong '
+        'sacrifice, push or spell resolution) is a wrong answer.\n\n'
+        f'Think as long as you need, then call the `{TOOL_NAME}` tool exactly once with your turn. Your '
+        'first call is final. Do not ask questions; no further information will be given.',
     ])
 
 
@@ -73,6 +80,14 @@ def spells_section(spells):
 def user_prompt(puzzle):
     d = parse_sfn(puzzle['sfn'])
     mover = COLOR[d['to_move']]
+    if puzzle.get('kind') == 'win':
+        return '\n\n'.join([
+            f"Puzzle {puzzle['id']}: {mover} to move. Find the winning turn for {mover}. "
+            "(Winning turn: one plan wins; the others do not.)",
+            '# Position\n\n' + render(puzzle['sfn']),
+            '# The spells on this board\n\n' + spells_section(d['spells']),
+            f'Submit your turn with the `{TOOL_NAME}` tool.',
+        ])
     n = puzzle['n']
     goal = ('win the game with this turn' if n == 1 else
             f'force a win within {n} of your own turns (this one included), whatever {COLOR["b" if d["to_move"] == "r" else "r"]} replies')

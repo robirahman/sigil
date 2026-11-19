@@ -15,6 +15,16 @@
 //! spell counters, locks, springlocks, Providence banks). The verdict is a
 //! proof except "unproven" (see `mate::judge_turn`).
 //!
+//! Winning-turn puzzles (SigilBench v3) use a second request form:
+//!
+//!     w\t<puzzle SFN>\t<claimed after-SFN>\t<depth>\t<eval name>
+//!
+//! which checks legality the same way and then searches the after-position to
+//! exactly <depth> (no time limit; the shipped width and adaptive settings, the
+//! same search bench/tools/win_puzzle.py's tables use) and prints, from the
+//! MOVER's side, {"legal":true,"verdict":"eval","depth":D,"stones":S,"mate":M|null,"proven":bool}.
+//! bench/sigilbench/grader.py turns that into a calibrated win chance.
+//!
 //!     cargo build --release --no-default-features --example bench_grade
 use sigil_engine::board::Board;
 use sigil_engine::mate::{judge_turn, judge_turn_exhaustive, legal_successor, MateError, TurnVerdict};
@@ -47,6 +57,7 @@ fn main() {
         let t0 = std::time::Instant::now();
         let parts: Vec<&str> = line.split('\t').collect();
         let out = (|| -> String {
+            if parts.len() == 5 && parts[0].trim() == "w" { return eval_request(&parts, budget, time_ms); }
             if parts.len() != 3 { return "{\"verdict\":\"error\",\"error\":\"expected 3 tab-separated fields\"}".into(); }
             let n: u8 = match parts[0].trim().parse() { Ok(v) => v, Err(_) => return "{\"verdict\":\"error\",\"error\":\"bad n\"}".into() };
             let b = match Board::from_sfn(parts[1].trim()) { Ok(b) => b, Err(e) => return format!("{{\"verdict\":\"error\",\"error\":{:?}}}", format!("puzzle sfn: {}", e)) };
@@ -73,4 +84,45 @@ fn main() {
         writeln!(h, "{}", out).unwrap();
         h.flush().unwrap();
     }
+}
+
+/// `w` requests: legality, then a fixed-depth search of the after-position
+/// from the mover's side (see the module comment).
+fn eval_request(parts: &[&str], budget: u64, time_ms: u64) -> String {
+    let b = match Board::from_sfn(parts[1].trim()) { Ok(b) => b, Err(e) => return format!("{{\"verdict\":\"error\",\"error\":{:?}}}", format!("puzzle sfn: {}", e)) };
+    let claimed = match Board::from_sfn(parts[2].trim()) {
+        Ok(b) => b,
+        Err(e) => return format!("{{\"legal\":false,\"verdict\":\"illegal\",\"error\":{:?}}}", format!("after sfn: {}", e)),
+    };
+    let depth: i32 = match parts[3].trim().parse() { Ok(v) => v, Err(_) => return "{\"verdict\":\"error\",\"error\":\"bad depth\"}".into() };
+    let weights = match sigil_engine::eval::weights_by_name(parts[4].trim()) {
+        Ok(w) => w, Err(e) => return format!("{{\"verdict\":\"error\",\"error\":{:?}}}", format!("eval: {:?}", e)),
+    };
+    let after = match legal_successor(&b, &claimed, budget, time_ms) {
+        Ok(Some(a)) => a,
+        Ok(None) => return "{\"legal\":false,\"verdict\":\"illegal\"}".into(),
+        Err(e) => return format!("{{\"verdict\":\"error\",\"error\":{:?}}}", err(e)),
+    };
+    let mover = b.to_move;
+    match after.outcome {
+        sigil_engine::board::Outcome::Ongoing => {}
+        o => {
+            let won = (o == sigil_engine::board::Outcome::RedWins) == (mover == sigil_engine::board::Color::Red);
+            return format!("{{\"legal\":true,\"verdict\":\"eval\",\"over\":true,\"mover_wins\":{}}}", won);
+        }
+    }
+    let mut s = sigil_engine::search::Search::new(20);
+    s.weights = weights;
+    s.set_width_scale(sigil_engine::search::DEFAULT_WIDTH_SCALE);
+    let (p, e, h) = sigil_engine::search::SHIPPED_ADAPTIVE;
+    s.set_adaptive(p, e, h);
+    s.set_exact_clock(false);
+    s.set_elastic(None);
+    let (_, score, st) = s.go(&after, mover.other(), depth, 0);
+    if st.depth_completed < depth {
+        return format!("{{\"legal\":true,\"verdict\":\"error\",\"error\":\"depth {} not completed ({})\"}}", depth, st.depth_completed);
+    }
+    let r = sigil_engine::search::report(score, &st, mover.other(), &s.weights);
+    format!("{{\"legal\":true,\"verdict\":\"eval\",\"depth\":{},\"stones\":{:.4},\"mate\":{},\"proven\":{}}}",
+            st.depth_completed, -r.stones, r.mate_in.map(|m| (-(m as i64)).to_string()).unwrap_or("null".into()), r.proven)
 }

@@ -45,6 +45,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 import winning_turns as WT  # noqa: E402
 
 SHIPPED = 'nnue_mt256'
+# The calibration is pinned to the net the tables are searched with: the site's
+# docs/static/data/position-winprob.json follows whatever net ships (nnue_r6 from
+# engine v36), so SigilBench keeps its own copy of the nnue_mt256 fit (PR #28).
+WT.MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data',
+                             f'position-winprob-{SHIPPED}.json')
 
 
 def mover_of(sfn):
