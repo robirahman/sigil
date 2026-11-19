@@ -428,8 +428,11 @@ test('teams: requests to join a closed team', async () => {
 	await assertFails(get(ref(db('carol'), 'team_requests/blues')));
 	await assertSucceeds(get(ref(db('alice'), 'team_requests/blues')));
 	await assertSucceeds(get(ref(db('bob'), 'team_requests/blues/bob')));
-	// Staff admit only a player who asked.
+	// Staff admit only a player who asked, and not one whose account is
+	// being deleted.
 	await assertFails(update(ref(db('alice')), joining('carol', 'blues', 'alice')));
+	await seed({ 'team_requests/blues/dave': { at: 1 }, 'deleted_users/dave': 1 });
+	await assertFails(update(ref(db('alice')), joining('dave', 'blues', 'alice')));
 	await assertSucceeds(update(ref(db('alice')), Object.assign(joining('bob', 'blues', 'alice'), { 'team_requests/blues/bob': null })));
 	// Nobody else adds you.
 	await assertFails(update(ref(db('bob')), joining('carol', 'blues', 'bob')));
