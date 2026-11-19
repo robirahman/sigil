@@ -931,3 +931,133 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+// ---- private notes, bookmarks, badges and the feed, titles, streamers, site events ----
+
+test('private notes: only their owner reads or writes them', async () => {
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') } });
+	const note = { text: 'Plays Meteor early.', at: serverTimestamp() };
+	await assertSucceeds(set(ref(db('alice'), 'notes/alice/bob'), note));
+	await assertSucceeds(get(ref(db('alice'), 'notes/alice')));
+	await assertSucceeds(get(ref(db('alice'), 'notes/alice/bob')));
+	// Not Bob (the subject), nobody else, not a guest.
+	await assertFails(get(ref(db('bob'), 'notes/alice/bob')));
+	await assertFails(get(ref(db('bob'), 'notes/alice')));
+	await assertFails(get(ref(db(null), 'notes/alice/bob')));
+	await assertFails(get(ref(db('carol'), 'notes')));
+	await assertFails(set(ref(db('bob'), 'notes/alice/bob'), note));
+	await assertFails(set(ref(guestDb('gina'), 'notes/gina/bob'), note));
+	// Shape: text 1..1000 chars, the server's time, an existing player, not oneself.
+	await assertFails(set(ref(db('alice'), 'notes/alice/bob'), { text: '', at: serverTimestamp() }));
+	await assertFails(set(ref(db('alice'), 'notes/alice/bob'), { text: 'x'.repeat(1001), at: serverTimestamp() }));
+	await assertFails(set(ref(db('alice'), 'notes/alice/bob'), { text: 'hi', at: 5 }));
+	await assertFails(set(ref(db('alice'), 'notes/alice/bob'), { text: 'hi', at: serverTimestamp(), extra: 1 }));
+	await assertFails(set(ref(db('alice'), 'notes/alice/nobody'), note));
+	await assertFails(set(ref(db('alice'), 'notes/alice/alice'), note));
+	await assertSucceeds(remove(ref(db('alice'), 'notes/alice/bob')));
+});
+
+test('bookmarks: private to their owner, one per existing room', async () => {
+	await seed({ users: { alice: named('Alice') }, rooms: { ABCD12: Object.assign({}, waiting, { status: 'finished' }) } });
+	const bm = { title: 'Alice vs Bob', at: serverTimestamp() };
+	await assertSucceeds(set(ref(db('alice'), 'bookmarks/alice/ABCD12'), bm));
+	await assertSucceeds(get(ref(db('alice'), 'bookmarks/alice')));
+	await assertFails(get(ref(db('bob'), 'bookmarks/alice')));
+	await assertFails(get(ref(db(null), 'bookmarks/alice/ABCD12')));
+	await assertFails(set(ref(db('bob'), 'bookmarks/alice/ABCD12'), bm));
+	await assertFails(set(ref(guestDb('gina'), 'bookmarks/gina/ABCD12'), bm));
+	// A note added later keeps the time it was bookmarked.
+	const at = (await get(ref(db('alice'), 'bookmarks/alice/ABCD12/at'))).val();
+	await assertSucceeds(update(ref(db('alice'), 'bookmarks/alice/ABCD12'), { note: 'The Meteor sacrifice at turn 14.' }));
+	await assertSucceeds(set(ref(db('alice'), 'bookmarks/alice/ABCD12'), { title: 'Alice vs Bob', at, note: 'edited' }));
+	await assertFails(set(ref(db('alice'), 'bookmarks/alice/ABCD12'), { title: 'Alice vs Bob', at: at - 1000 }));
+	await assertFails(update(ref(db('alice'), 'bookmarks/alice/ABCD12'), { note: 'x'.repeat(501) }));
+	// No room, a malformed code, a missing title.
+	await assertFails(set(ref(db('alice'), 'bookmarks/alice/ZZZZ99'), bm));
+	await assertFails(set(ref(db('alice'), 'bookmarks/alice/abcd12'), bm));
+	await assertFails(set(ref(db('alice'), 'bookmarks/alice/ABCD12'), { at: serverTimestamp() }));
+	await assertSucceeds(remove(ref(db('alice'), 'bookmarks/alice/ABCD12')));
+});
+
+test('badges, activity and achievements: public, written by the server only', async () => {
+	await seed({ users: { alice: named('Alice') }, badges: { alice: { 'first-win': { at: 1 } } },
+		activity: { alice: { w_g1: { t: 'win', at: 1 } } }, achievements: { alice: { peakElo: 1200 } } });
+	for (const p of ['badges/alice', 'activity/alice', 'achievements/alice']) {
+		await assertSucceeds(get(ref(db(null), p)));
+		await assertFails(set(ref(db('alice'), p + '/x'), { at: 1 }));
+		await assertFails(remove(ref(db('alice'), p)));
+	}
+	await assertFails(set(ref(db('alice'), 'activity/alice/w_g2'), { t: 'win', at: serverTimestamp() }));
+	await assertFails(set(ref(db('alice'), 'badges/alice/giant-killer'), { at: serverTimestamp() }));
+	await assertFails(set(ref(db('alice'), 'achievements/alice/puzzleStreak'), { day: '2026-11-19', n: 100, best: 100 }));
+});
+
+test('verified titles: granted by admins only', async () => {
+	await seed({ admins: { root1: true }, users: { alice: named('Alice'), root1: named('Root') } });
+	const t = { title: 'Site Champion', by: 'root1', at: serverTimestamp() };
+	await assertFails(set(ref(db('alice'), 'titles/alice'), Object.assign({}, t, { by: 'alice' })));
+	await assertFails(set(ref(db('bob'), 'titles/alice'), Object.assign({}, t, { by: 'bob' })));
+	await assertSucceeds(set(ref(db('root1'), 'titles/alice'), t));
+	await assertSucceeds(get(ref(db(null), 'titles')));
+	// The granting admin is recorded truthfully; the title is short.
+	await assertFails(set(ref(db('root1'), 'titles/alice'), Object.assign({}, t, { by: 'someone' })));
+	await assertFails(set(ref(db('root1'), 'titles/alice'), Object.assign({}, t, { title: 'x'.repeat(33) })));
+	await assertFails(set(ref(db('root1'), 'titles/nobody'), t));
+	// The holder cannot remove or change it; an admin can.
+	await assertFails(remove(ref(db('alice'), 'titles/alice')));
+	await assertSucceeds(remove(ref(db('root1'), 'titles/alice')));
+});
+
+test('streamers: one listing per account, with a Twitch or YouTube channel URL', async () => {
+	await seed({ admins: { root1: true }, users: { alice: named('Alice'), bob: named('Bob') } });
+	const s = (url, extra) => Object.assign({ url, at: serverTimestamp() }, extra);
+	await assertSucceeds(set(ref(db('alice'), 'streamers/alice'), s('https://www.twitch.tv/alice_plays', { about: 'Sigil every Friday' })));
+	await assertSucceeds(set(ref(db('alice'), 'streamers/alice'), s('https://www.youtube.com/@AliceSigil')));
+	await assertSucceeds(set(ref(db('alice'), 'streamers/alice'), s('https://www.youtube.com/channel/UC1234567890abcdefghijAB')));
+	await assertSucceeds(get(ref(db(null), 'streamers')));
+	for (const bad of ['http://www.twitch.tv/alice', 'https://www.twitch.tv/al', 'https://www.twitch.tv/alice/videos',
+		'https://evil.example/twitch.tv/alice', 'javascript:alert(1)//www.twitch.tv/alice', 'https://www.youtube.com/watch?v=abc',
+		'https://www.youtube.com/@a', 'https://www.twitch.tv.evil.example/alice', 'https://www.twitch.tv/alice ']) {
+		await assertFails(set(ref(db('alice'), 'streamers/alice'), s(bad)));
+	}
+	// Someone else, a guest, no profile.
+	await assertFails(set(ref(db('bob'), 'streamers/alice'), s('https://www.twitch.tv/alice_plays')));
+	await assertFails(set(ref(guestDb('gina'), 'streamers/gina'), s('https://www.twitch.tv/gina_plays')));
+	await assertFails(set(ref(db('carol'), 'streamers/carol'), s('https://www.twitch.tv/carol_plays')));
+	// "Live now", self-declared, for up to 12 hours.
+	await assertSucceeds(update(ref(db('alice'), 'streamers/alice'), { liveUntil: Date.now() + 3 * 3600000 }));
+	await assertFails(update(ref(db('alice'), 'streamers/alice'), { liveUntil: Date.now() + 13 * 3600000 }));
+	await assertFails(update(ref(db('alice'), 'streamers/alice'), { liveUntil: Date.now() - 1000 }));
+	await assertSucceeds(update(ref(db('alice'), 'streamers/alice'), { liveUntil: null }));
+	await assertFails(update(ref(db('alice'), 'streamers/alice'), { viewers: 5 }));
+	// An admin can take a listing down, not change it.
+	await assertFails(set(ref(db('root1'), 'streamers/alice'), s('https://www.twitch.tv/root_plays')));
+	await assertSucceeds(remove(ref(db('root1'), 'streamers/alice')));
+	await assertSucceeds(set(ref(db('bob'), 'streamers/bob'), s('https://www.twitch.tv/bob_plays')));
+	await assertSucceeds(remove(ref(db('bob'), 'streamers/bob')));
+});
+
+test('site events and announcements: posted by admins, read by everyone', async () => {
+	await seed({ admins: { root1: true }, users: { alice: named('Alice') } });
+	const now = Date.now();
+	const ev = { kind: 'event', title: 'Friday Blitz', body: 'Arena, 3+2.', link: 'multiplayer.html', startsAt: now + 3600000,
+		endsAt: now + 7200000, by: 'root1', at: serverTimestamp() };
+	await assertFails(set(ref(db('alice'), 'site_events/e1'), Object.assign({}, ev, { by: 'alice' })));
+	await assertFails(set(ref(guestDb('gina'), 'site_events/e1'), Object.assign({}, ev, { by: 'gina' })));
+	await assertSucceeds(set(ref(db('root1'), 'site_events/e1'), ev));
+	await assertSucceeds(get(ref(db(null), 'site_events')));
+	const ann = { kind: 'announcement', title: 'New: puzzle streaks', startsAt: now, endsAt: now + 7 * 86400000, by: 'root1', at: serverTimestamp() };
+	await assertSucceeds(set(ref(db('root1'), 'site_events/a1'), Object.assign({}, ann, { link: 'https://discord.gg/abc' })));
+	// Shape: a known kind, a title, an end after the start, a safe link.
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { kind: 'popup' })));
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { title: '' })));
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { endsAt: now - 1 })));
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { endsAt: null })));
+	for (const link of ['javascript:alert(1)', 'http://example.com', '//evil.example', 'data:text/html,x', 'https://a b']) {
+		await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { link })));
+	}
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { by: 'alice' })));
+	await assertFails(set(ref(db('root1'), 'site_events/a2'), Object.assign({}, ann, { color: 'red' })));
+	await assertFails(remove(ref(db('alice'), 'site_events/e1')));
+	await assertSucceeds(remove(ref(db('root1'), 'site_events/e1')));
+});

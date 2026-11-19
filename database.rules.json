@@ -734,7 +734,7 @@
           ".validate": "newData.isString() && newData.val().length <= 1000"
         },
         "link": {
-          ".validate": "newData.isString() && newData.val().length <= 300 && (newData.val().matches(/^https:\\/\\/[^\\s]+$/) || newData.val().matches(/^[a-z0-9-]+\\.html([?#][^\\s]*)?$/))"
+          ".validate": "newData.isString() && newData.val().length <= 300 && (newData.val().matches(/^https:\\/\\/[^ ]+$/) || newData.val().matches(/^[a-z0-9-]+\\.html([?#][^ ]*)?$/))"
         },
         "startsAt": {
           ".validate": "newData.isNumber()"
