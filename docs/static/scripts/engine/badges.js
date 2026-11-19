@@ -80,15 +80,16 @@ function sigilGameBadges(entry, state) {
 }
 
 /**
- * The rating milestones crossed going from a peak of `peak` to `elo`
- * (multiples of SIGIL_FEED_RATING_STEP from SIGIL_FEED_RATING_FROM): each is
- * posted once, the first time the player gets there.
+ * The rating milestones a game crosses, from `before` to `after` (multiples
+ * of SIGIL_FEED_RATING_STEP from SIGIL_FEED_RATING_FROM). Each game's own
+ * crossing, so the answer does not depend on the order games are handled in;
+ * the server posts each milestone once (achievements/{uid}/milestones).
  */
-function sigilRatingMilestones(peak, elo) {
+function sigilRatingMilestones(before, after) {
 	var out = [];
-	if (typeof elo !== 'number' || typeof peak !== 'number' || elo <= peak) return out;
-	var m = Math.max(SIGIL_FEED_RATING_FROM, Math.floor(peak / SIGIL_FEED_RATING_STEP) * SIGIL_FEED_RATING_STEP + SIGIL_FEED_RATING_STEP);
-	for (; m <= elo; m += SIGIL_FEED_RATING_STEP) out.push(m);
+	if (typeof after !== 'number' || typeof before !== 'number' || after <= before) return out;
+	var m = Math.max(SIGIL_FEED_RATING_FROM, Math.floor(before / SIGIL_FEED_RATING_STEP) * SIGIL_FEED_RATING_STEP + SIGIL_FEED_RATING_STEP);
+	for (; m <= after; m += SIGIL_FEED_RATING_STEP) out.push(m);
 	return out;
 }
 
@@ -102,19 +103,57 @@ function sigilUtcDay(ms, offset) {
 	return new Date(ms + (offset || 0) * 86400000).toISOString().slice(0, 10);
 }
 
+function _sigilDayMs(day) { return Date.parse(day + 'T00:00:00Z'); }
+function _sigilRunLen(start, end) { return Math.round((_sigilDayMs(end) - _sigilDayMs(start)) / 86400000) + 1; }
+
 /**
- * The daily-puzzle streak after a 'solved' entry for `day` arrives at `now`,
- * from the stored one ({ day, n, best } or null). Only today's and
- * yesterday's (UTC) puzzle count, so a synced log of old days cannot build a
- * streak. Returns null when nothing changes.
+ * The daily-puzzle streak after a 'solved' entry for `day` arrives at `now`.
+ * Only today's and yesterday's (UTC) puzzle count, so a synced log of old
+ * days cannot build a streak.
+ *
+ * The stored record ({ day, n, best, runs } or null) keeps the recent runs of
+ * counted days, { <first day>: <last day> }, and a day joins (or bridges) the
+ * runs next to it, so the result is the same whichever order two days' solves
+ * are handled in (a browser coming back online syncs several at once). `day`
+ * and `n` are the latest run's last day and length, `best` the longest run.
+ *
+ * Returns null when nothing changes, else { state, start, len, prev }: the
+ * record to store, and the run the day is now in (its first day and length)
+ * with the longest of the runs it joined (`prev`, 0 for none).
  */
 function sigilNextPuzzleStreak(cur, day, now) {
 	if (day !== sigilUtcDay(now, 0) && day !== sigilUtcDay(now, -1)) return null;
-	var c = cur && typeof cur.day === 'string' ? cur : null;
-	if (c && c.day >= day) return null;
-	var prev = sigilUtcDay(Date.parse(day + 'T00:00:00Z'), -1);
-	var n = c && c.day === prev ? (c.n || 0) + 1 : 1;
-	return { day: day, n: n, best: Math.max(n, (c && c.best) || 0) };
+	var runs = {};
+	var c = cur && typeof cur === 'object' ? cur : null;
+	if (c && c.runs && typeof c.runs === 'object') {
+		for (var k in c.runs) if (typeof c.runs[k] === 'string') runs[k] = c.runs[k];
+	} else if (c && typeof c.day === 'string' && typeof c.n === 'number' && c.n > 0) {
+		// The first form of the record: the latest run only.
+		runs[sigilUtcDay(_sigilDayMs(c.day), 1 - c.n)] = c.day;
+	}
+	for (var a in runs) if (a <= day && day <= runs[a]) return null;
+	var dayMs = _sigilDayMs(day);
+	var before = sigilUtcDay(dayMs, -1);
+	var after = sigilUtcDay(dayMs, 1);
+	var start = day, end = day, prev = 0;
+	for (var b in runs) {
+		if (runs[b] === before) { start = b; prev = Math.max(prev, _sigilRunLen(b, runs[b])); delete runs[b]; }
+	}
+	if (runs[after]) { end = runs[after]; prev = Math.max(prev, _sigilRunLen(after, end)); delete runs[after]; }
+	runs[start] = end;
+	// A run that ended before the day before yesterday can never grow again
+	// (only today's and yesterday's solves count): its length lives on in best.
+	var keepFrom = sigilUtcDay(now, -2);
+	var latest = null;
+	for (var r in runs) {
+		if (runs[r] < keepFrom) { delete runs[r]; continue; }
+		if (!latest || runs[r] > runs[latest]) latest = r;
+	}
+	var len = _sigilRunLen(start, end);
+	return {
+		state: { day: runs[latest], n: _sigilRunLen(latest, runs[latest]), best: Math.max(len, (c && c.best) || 0), runs: runs },
+		start: start, len: len, prev: prev,
+	};
 }
 
 if (typeof module !== 'undefined' && module.exports) {

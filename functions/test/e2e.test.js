@@ -247,7 +247,7 @@ test('deleting an account removes its records and keeps its games anonymous', as
 		await a.ref().update({
 			['badges/' + dave.uid + '/first-win']: { at: 1 },
 			['activity/' + dave.uid + '/r_1100']: { t: 'rating', at: 1, elo: 1100 },
-			['achievements/' + dave.uid + '/peakElo']: 1100,
+			['achievements/' + dave.uid + '/milestones/r1100']: 1,
 			['titles/' + dave.uid]: { title: 'Coach', by: 'someone', at: 1 },
 			['streamers/' + dave.uid]: { url: 'https://www.twitch.tv/dave_plays', at: 1 },
 			['notes/' + dave.uid + '/' + erin.uid]: { text: 'x', at: 1 },

@@ -981,7 +981,7 @@ test('bookmarks: private to their owner, one per existing room', async () => {
 
 test('badges, activity and achievements: public, written by the server only', async () => {
 	await seed({ users: { alice: named('Alice') }, badges: { alice: { 'first-win': { at: 1 } } },
-		activity: { alice: { w_g1: { t: 'win', at: 1 } } }, achievements: { alice: { peakElo: 1200 } } });
+		activity: { alice: { w_g1: { t: 'win', at: 1 } } }, achievements: { alice: { milestones: { r1200: 1 } } } });
 	for (const p of ['badges/alice', 'activity/alice', 'achievements/alice']) {
 		await assertSucceeds(get(ref(db(null), p)));
 		await assertFails(set(ref(db('alice'), p + '/x'), { at: 1 }));

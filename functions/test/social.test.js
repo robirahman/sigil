@@ -126,13 +126,28 @@ test('rating milestones are posted once, the first time a player gets there', as
 	await play(db, 'alice', 3, ratedEntry(3, 'win', 1390, 1405));
 	a = db.dump().activity.alice;
 	assert.strictEqual(a.r_1400.at, t0 + 6000, 'not again');
-	assert.strictEqual(db.dump().achievements.alice.peakElo, 1410);
+	assert.deepStrictEqual(Object.keys(db.dump().achievements.alice.milestones), ['r1400']);
 	await play(db, 'alice', 4, ratedEntry(4, 'win', 1405, 1620));
 	a = db.dump().activity.alice;
 	assert.ok(a.r_1500 && a.r_1600 && !a.r_1700);
 	assert.deepStrictEqual(B.sigilRatingMilestones(1000, 1099), []);
 	assert.deepStrictEqual(B.sigilRatingMilestones(1050, 1120), [1100]);
 	assert.deepStrictEqual(B.sigilRatingMilestones(1500, 1500), []);
+});
+
+test('rating milestones survive games handled out of order', async () => {
+	// Two games end together and the later one's trigger runs first.
+	const db = fakeDb(players());
+	await play(db, 'alice', 2, ratedEntry(2, 'win', 1105, 1115));
+	await play(db, 'alice', 1, ratedEntry(1, 'win', 1090, 1105));
+	const a = db.dump().activity.alice;
+	assert.ok(a.r_1100 && a.r_1100.elo === 1100, 'the earlier game still posts 1100');
+	assert.ok(!a.r_1200);
+	// And the activity log being pruned does not let one post again.
+	await db.ref('activity/alice/r_1100').remove();
+	await play(db, 'alice', 3, ratedEntry(3, 'loss', 1115, 1095));
+	await play(db, 'alice', 4, ratedEntry(4, 'win', 1095, 1110));
+	assert.ok(!db.dump().activity.alice.r_1100);
 });
 
 test('a veteran\'s first game after the feature catches up badges without flooding the feed', async () => {
@@ -178,15 +193,55 @@ test('daily puzzle streaks count the server\'s days only', async () => {
 	const day7 = B.sigilUtcDay(t0 + 6 * DAY, 0);
 	const res = await social.onPuzzleDaily(db, 'alice', day7, 'solved', Date.parse(B.sigilUtcDay(t0 + 7 * DAY, 0) + 'T00:05:00Z'));
 	assert.strictEqual(res.streak, 7);
-	assert.deepStrictEqual(res.posted, ['p_7_' + day7]);
 	assert.deepStrictEqual(res.badges, ['puzzle-streak-7']);
-	assert.deepStrictEqual(db.dump().achievements.alice.puzzleStreak, { day: day7, n: 7, best: 7 });
+	const st = db.dump().achievements.alice.puzzleStreak;
+	assert.deepStrictEqual({ day: st.day, n: st.n, best: st.best }, { day: day7, n: 7, best: 7 });
+	assert.ok(res.posted[0] === 'p_7_' + B.sigilUtcDay(t0, 0), 'keyed by the run\'s first day');
 	// A missed day starts again from one, keeping the best.
 	const later = t0 + 9 * DAY;
 	const r2 = await social.onPuzzleDaily(db, 'alice', B.sigilUtcDay(later, 0), 'solved', later);
 	assert.strictEqual(r2.streak, 1);
 	assert.strictEqual(db.dump().achievements.alice.puzzleStreak.best, 7);
 	assert.strictEqual(today, B.sigilUtcDay(t0, 0));
+});
+
+test('daily puzzle streaks: yesterday\'s solve handled after today\'s still counts', async () => {
+	// Five days solved, then a browser comes back online after midnight and
+	// syncs yesterday's and today's solves; today's trigger runs first.
+	const db = fakeDb(players());
+	for (let d = 0; d < 5; d++) await social.onPuzzleDaily(db, 'alice', B.sigilUtcDay(t0 + d * DAY, 0), 'solved', t0 + d * DAY);
+	const now = t0 + 6 * DAY;
+	const today = B.sigilUtcDay(now, 0);
+	const yesterday = B.sigilUtcDay(now, -1);
+	const r1 = await social.onPuzzleDaily(db, 'alice', today, 'solved', now);
+	assert.strictEqual(r1.streak, 1, 'a gap, for now');
+	const r2 = await social.onPuzzleDaily(db, 'alice', yesterday, 'solved', now + 1000);
+	assert.strictEqual(r2.streak, 7, 'yesterday bridges the two runs');
+	assert.deepStrictEqual(r2.badges, ['puzzle-streak-7']);
+	assert.deepStrictEqual(r2.posted, ['p_7_' + B.sigilUtcDay(t0, 0)]);
+	const st = db.dump().achievements.alice.puzzleStreak;
+	assert.deepStrictEqual({ day: st.day, n: st.n, best: st.best }, { day: today, n: 7, best: 7 });
+	// Both orders give the same record.
+	const db2 = fakeDb(players());
+	for (let d = 0; d < 5; d++) await social.onPuzzleDaily(db2, 'alice', B.sigilUtcDay(t0 + d * DAY, 0), 'solved', t0 + d * DAY);
+	await social.onPuzzleDaily(db2, 'alice', yesterday, 'solved', now);
+	await social.onPuzzleDaily(db2, 'alice', today, 'solved', now + 1000);
+	assert.deepStrictEqual(db2.dump().achievements.alice.puzzleStreak, st);
+	// A bridge that jumps past a milestone posts it (6 + 1 + 1 = 8 passes 7).
+	const db3 = fakeDb(players());
+	for (let d = 0; d < 6; d++) await social.onPuzzleDaily(db3, 'alice', B.sigilUtcDay(t0 + d * DAY, 0), 'solved', t0 + d * DAY);
+	const n3 = t0 + 7 * DAY;
+	await social.onPuzzleDaily(db3, 'alice', B.sigilUtcDay(n3, 0), 'solved', n3);
+	const r3 = await social.onPuzzleDaily(db3, 'alice', B.sigilUtcDay(n3, -1), 'solved', n3);
+	assert.strictEqual(r3.streak, 8);
+	assert.deepStrictEqual(r3.posted, ['p_7_' + B.sigilUtcDay(t0, 0)]);
+	// Old runs are dropped from the record; the best stays.
+	const later = t0 + 20 * DAY;
+	await social.onPuzzleDaily(db3, 'alice', B.sigilUtcDay(later, 0), 'solved', later);
+	const st3 = db3.dump().achievements.alice.puzzleStreak;
+	assert.deepStrictEqual(Object.keys(st3.runs), [B.sigilUtcDay(later, 0)]);
+	assert.strictEqual(st3.best, 8);
+	assert.strictEqual(st3.n, 1);
 });
 
 test('tournament hooks: a join and a win', async () => {

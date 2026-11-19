@@ -10,19 +10,24 @@
  *                                           newest first), and a profile's
  *                                           "Recent activity". At most
  *                                           ACTIVITY_KEEP entries a player.
- *   achievements/{uid}: { peakElo, puzzleStreak: { day, n, best } }
- *                                           public; the server's own state for
- *                                           rating milestones and the daily
- *                                           puzzle streak
+ *   achievements/{uid}: { milestones: { r<rating>: at }, puzzleStreak:
+ *                         { day, n, best, runs } }
+ *                                           public; the server's own record of
+ *                                           the rating milestones posted and
+ *                                           the daily puzzle streak
  *
  * Activity keys are fixed per fact (w_<gameId>, r_<rating>, b_<badge>,
- * p_<n>_<day>, tj_/tw_<tournament>), so a retried event writes the same entry.
+ * p_<n>_<run's first day>, tj_/tw_<tournament>), so a retried event writes the
+ * same entry. Triggers for one player can run in any order (two games ending
+ * together, a day of puzzles synced at once), so nothing here assumes they
+ * arrive in time order.
  * `at` is always the server's time, never a client-supplied game timestamp, so
  * no one can pin an entry to the top of the feed.
  *
  * Entry types (t):
  *   win              { game, opp, oppName, oppAI, rated, change, elo }
- *   rating           { elo }            a new multiple of 100, first time there
+ *   rating           { elo }            a multiple of 100 crossed in a rated game,
+ *                                       posted once
  *   puzzle-streak    { n, day }         the daily puzzle n days in a row
  *   badge            { badge }          a badge earned (not rating or puzzle
  *                                       badges, which the two above announce)
@@ -156,22 +161,14 @@ async function onUserGame(db, uid, gameId, entry, now) {
 	const state = { gamesPlayed: typeof gamesPlayed === 'number' ? gamesPlayed : 0, wins: typeof wins === 'number' ? wins : 0, winStreak: 0 };
 	if (entry.rated === true) {
 		state.winStreak = entry.result === 'win' ? await winStreak(db, uid, entry) : 0;
-		if (typeof entry.eloAfter === 'number') {
-			// The peak before this game: the stored one, or (first time) the
-			// rating the game started from, so only a crossing in this game
-			// is news.
-			let crossed = [];
-			const res = await db.ref('achievements/' + uid + '/peakElo').transaction((cur) => {
-				const peak = typeof cur === 'number' ? cur : (typeof entry.eloBefore === 'number' ? entry.eloBefore : entry.eloAfter);
-				crossed = B.sigilRatingMilestones(peak, entry.eloAfter);
-				return Math.max(peak, entry.eloAfter);
-			});
-			if (res.committed) {
-				for (const elo of crossed) {
-					await recordActivity(db, uid, 'r_' + elo, { t: 'rating', at: now, elo });
-					out.posted.push('r_' + elo);
-				}
-			}
+		// The milestones this game crossed, each posted the first time
+		// (achievements/{uid}/milestones remembers, as the activity log is
+		// pruned). Per game, so games handled out of order lose none.
+		for (const elo of B.sigilRatingMilestones(entry.eloBefore, entry.eloAfter)) {
+			const res = await db.ref('achievements/' + uid + '/milestones/r' + elo).transaction((cur) => (cur ? undefined : now));
+			if (!res.committed) continue;
+			await recordActivity(db, uid, 'r_' + elo, { t: 'rating', at: now, elo });
+			out.posted.push('r_' + elo);
 		}
 	}
 
@@ -199,16 +196,18 @@ async function onPuzzleDaily(db, uid, day, status, now) {
 	let next = null;
 	const res = await db.ref('achievements/' + uid + '/puzzleStreak').transaction((cur) => {
 		next = B.sigilNextPuzzleStreak(cur, day, now);
-		return next === null ? undefined : next;
+		return next === null ? undefined : next.state;
 	});
 	if (!res.committed || !next) return { skipped: 'no-change' };
-	const out = { streak: next.n, posted: [], badges: [] };
-	if (B.SIGIL_FEED_PUZZLE_STREAKS.includes(next.n)) {
-		const key = 'p_' + next.n + '_' + day;
-		await recordActivity(db, uid, key, { t: 'puzzle-streak', at: now, n: next.n, day });
+	const out = { streak: next.len, posted: [], badges: [] };
+	// The milestones the run passed with this day (a day that bridges two
+	// runs can pass one without landing on it).
+	for (const k of B.SIGIL_FEED_PUZZLE_STREAKS.filter((k) => next.prev < k && k <= next.len)) {
+		const key = 'p_' + k + '_' + next.start;
+		await recordActivity(db, uid, key, { t: 'puzzle-streak', at: now, n: k, day: next.state.runs[next.start] });
 		out.posted.push(key);
 	}
-	for (const id of B.sigilPuzzleStreakBadges(next.n)) {
+	for (const id of B.sigilPuzzleStreakBadges(next.len)) {
 		if (await awardBadge(db, uid, id, now, null, false)) out.badges.push(id);
 	}
 	return undoIfGone(db, uid, out);
