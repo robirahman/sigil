@@ -532,6 +532,8 @@ class MultiplayerController {
 		this._inputResolve = null;
 		this._turnBuffer = [];
 		board.restoreSnapshot();
+		// The side of the last turn played, as on a board that ended there.
+		board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
 		board.gameover = true;
 		board.winner = winner;
 		board.update();

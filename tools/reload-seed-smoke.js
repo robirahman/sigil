@@ -187,8 +187,7 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	lost.sync.finish('blue', 'finished');
 	await until(() => over(lost), 'the room\'s result');
 	check(over(lost).winner === 'blue' && lost.board.gameover && lost.board.winner === 'blue', 'the room\'s result ends the game here');
-	check(E.boardToSfn(lost.board).split(' ').slice(0, 1).join() === ref.sync.final.finalSfn.split(' ').slice(0, 1).join()
-		&& lost.board.turnCounter === 8, 'on the position the game ended on', E.boardToSfn(lost.board));
+	check(E.boardToSfn(lost.board) === ref.sync.final.finalSfn, 'on the position the game ended on', E.boardToSfn(lost.board));
 	check(lost.sync.final === null, 'and nothing is written');
 	lost.handlePlayerAction('a6');
 	check(lost._turnBuffer.length <= 1 && lost.sync.sent.length === 1, 'a click after it does nothing');
