@@ -34,7 +34,8 @@ const TypedTurn = (() => {
 	/** Words of a typed turn (a leading "R12." / "B3." label dropped). */
 	function tokenize(text) {
 		const words = String(text || '').replace(/[,;]+/g, ' ').trim().split(/\s+/).filter(Boolean);
-		if (words.length && /^[RB]\d+[.*]?$/i.test(words[0])) words.shift();
+		// "R12." / "B3." (never a bare "b2": that is a node).
+		if (words.length && /^[RB]\d+[.*=]$/i.test(words[0])) words.shift();
 		return words;
 	}
 

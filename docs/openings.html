@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Opening Explorer - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.ox { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); max-width: 1080px; margin: 0 auto; padding: 8px 16px 48px; box-sizing: border-box; }
+		.ox h2 { font-family: 'Arvo', serif; margin: 0 0 4px; }
+		.ox__note { color: var(--color-text-muted, #aaa); font-size: 0.92em; margin: 2px 0 8px; }
+		.ox__sample { border: 1px solid var(--color-accent, #d4af37); border-radius: 6px; padding: 6px 10px; margin: 8px 0; }
+		.ox__bar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 10px 0; }
+		.ox__seg { display: inline-flex; border: 1px solid var(--color-border, #555); border-radius: 6px; overflow: hidden; }
+		.ox__seg button { background: transparent; border: 0; border-right: 1px solid var(--color-border, #555); color: inherit; font: inherit; padding: 5px 10px; cursor: pointer; }
+		.ox__seg button:last-child { border-right: 0; }
+		.ox__seg button[aria-pressed="true"] { background: var(--color-surface-raised, #333); font-weight: bold; }
+		.ox__grid { display: grid; grid-template-columns: minmax(240px, 380px) 1fr; gap: 18px; align-items: start; }
+		@media (max-width: 760px) { .ox__grid { grid-template-columns: 1fr; } }
+		.ox__board canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+		.ox__path { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0 0 8px; }
+		.ox__path button { background: transparent; border: 0; color: var(--color-link, #8af); cursor: pointer; font: inherit; padding: 0 2px; text-decoration: underline; }
+		.ox__path button[aria-current="step"] { color: inherit; font-weight: bold; text-decoration: none; }
+		.ox table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+		.ox th, .ox td { padding: 5px 6px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.08); vertical-align: middle; }
+		.ox th { font-weight: bold; color: var(--color-text-muted, #aaa); }
+		.ox th button { background: transparent; border: 0; color: inherit; cursor: pointer; font: inherit; font-weight: bold; padding: 0; }
+		.ox td.num, .ox th.num { text-align: right; white-space: nowrap; }
+		.ox__move { background: transparent; border: 0; color: var(--color-link, #8af); cursor: pointer; font: inherit; padding: 0; text-align: left; text-decoration: underline; }
+		.ox__wr { display: flex; height: 16px; min-width: 120px; border-radius: 3px; overflow: hidden; font-size: 11px; line-height: 16px; color: #fff; }
+		.ox__wr span { overflow: hidden; white-space: nowrap; text-align: center; }
+		.ox__wr .r { background: var(--color-red-player, #e84c3b); }
+		.ox__wr .b { background: var(--color-blue-player, #3b41e8); }
+		.ox__spells { font-size: 0.92em; }
+		.ox__spells b { color: var(--color-text-muted, #aaa); font-weight: normal; }
+		.ox__row--sel td { background: rgba(255, 255, 255, 0.06); }
+		.ox input[type=search], .ox input[type=text], .ox select { font: inherit; color: inherit; background: var(--color-bg-dark, #111); border: 1px solid var(--color-border, #555); border-radius: 4px; padding: 3px 6px; }
+		.ox__btn { background: var(--color-surface, #222); border: 1px solid var(--color-border, #555); border-radius: 5px; color: inherit; cursor: pointer; font: inherit; padding: 3px 9px; }
+		.ox__btn:disabled { opacity: 0.4; cursor: default; }
+		.ox__err { color: var(--color-error, #d66); }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="ox" x-data="openingExplorer()" x-cloak>
+			<h2>Opening Explorer</h2>
+			<p class="ox__note">How often each opening turn and each spell layout was played, and how each side did.
+				Turns are written as the game records them (Export Game): the nodes played, <code>dash</code> and its sacrifices, spells cast.
+				Turns that lead to the same position are counted together.</p>
+			<p class="ox__sample" x-show="data && data.sample && source !== 'player'">
+				These site-wide numbers are a <strong>synthetic sample</strong>, not real games: the real counts appear once
+				they are generated from the game records (tools/gen-opening-explorer.js). A player's own numbers
+				(from a profile's Insights tab, or <em>My games</em>) are real.</p>
+			<p class="ox__err" x-show="error" x-text="error"></p>
+
+			<div class="ox__bar">
+				<div class="ox__seg" role="group" aria-label="Games">
+					<button type="button" x-bind:aria-pressed="source === 'all'" x-on:click="setSource('all')">All games</button>
+					<button type="button" x-bind:aria-pressed="source === 'pvp'" x-on:click="setSource('pvp')">Player vs player</button>
+					<button type="button" x-bind:aria-pressed="source === 'player'" x-show="playerUid" x-on:click="setSource('player')"
+						x-text="playerName ? playerName + '’s games' : 'Player’s games'"></button>
+					<button type="button" x-show="myUid && myUid !== playerUid" x-on:click="loadPlayer(myUid)">My games</button>
+				</div>
+				<div class="ox__seg" role="group" aria-label="Played as" x-show="source === 'player' && segment">
+					<button type="button" x-bind:aria-pressed="playerSide === ''" x-on:click="setPlayerSide('')">Both colours</button>
+					<button type="button" x-bind:aria-pressed="playerSide === 'red'" x-on:click="setPlayerSide('red')">As red</button>
+					<button type="button" x-bind:aria-pressed="playerSide === 'blue'" x-on:click="setPlayerSide('blue')">As blue</button>
+				</div>
+				<div class="ox__seg" role="group" aria-label="Board" x-show="boardIds().length > 1">
+					<template x-for="b in boardIds()" x-bind:key="b">
+						<button type="button" x-bind:aria-pressed="board === b" x-on:click="setBoard(b)" x-text="b === 'pentagon' ? 'Cataclysm board' : 'Core board'"></button>
+					</template>
+				</div>
+				<span class="ox__note" x-show="loadingText" x-text="loadingText"></span>
+			</div>
+
+			<div class="ox__bar">
+				<div class="ox__seg" role="tablist" aria-label="View">
+					<button type="button" role="tab" x-bind:aria-selected="tab === 'openings'" x-bind:aria-pressed="tab === 'openings'" x-on:click="tab = 'openings'; drawPreview()">Opening turns</button>
+					<button type="button" role="tab" x-bind:aria-selected="tab === 'layouts'" x-bind:aria-pressed="tab === 'layouts'" x-on:click="tab = 'layouts'; drawPreview()">Spell layouts</button>
+				</div>
+				<span class="ox__note" x-show="segment" x-text="segment ? segment.games.toLocaleString() + ' games counted' + (source === 'player' && playerSide ? ' (as ' + playerSide + ')' : '') : ''"></span>
+			</div>
+
+			<div class="ox__grid" x-show="segment">
+				<div class="ox__board">
+					<canvas x-ref="preview" role="img" x-bind:aria-label="previewLabel()"></canvas>
+					<p class="ox__note" x-text="previewLabel()"></p>
+				</div>
+
+				<div>
+					<!-- ============ Opening turns ============ -->
+					<section x-show="tab === 'openings'">
+						<div class="ox__bar">
+							<label>Layout
+								<select x-model="layoutKey" x-on:change="path = []; drawPreview()">
+									<option value="">All layouts</option>
+									<template x-for="L in layoutsWithTrees()" x-bind:key="layoutId(L)">
+										<option x-bind:value="layoutId(L)" x-text="layoutShort(L) + ' (' + L.n + ')'"></option>
+									</template>
+								</select>
+							</label>
+						</div>
+						<nav class="ox__path" aria-label="Opening line">
+							<button type="button" x-on:click="path = []; drawPreview()" x-bind:aria-current="path.length === 0 ? 'step' : null">Start</button>
+							<template x-for="(step, i) in pathSteps()" x-bind:key="i + ':' + step.k">
+								<span>&rsaquo; <button type="button" x-on:click="path = path.slice(0, i + 1); drawPreview()"
+									x-bind:aria-current="i === path.length - 1 ? 'step' : null"
+									x-text="(i % 2 === 0 ? 'R ' : 'B ') + (step.m || '(no stone)')"></button></span>
+							</template>
+						</nav>
+						<p class="ox__note" x-show="node()" x-text="node() ? nodeSummary(node()) : ''"></p>
+						<table x-show="node() && node().c.length">
+							<thead><tr>
+								<th x-text="(path.length % 2 === 0 ? 'Red' : 'Blue') + '’s turn'"></th>
+								<th class="num">Games</th>
+								<th>Red / Blue wins</th>
+								<th class="num" x-show="source === 'player'">Player won</th>
+							</tr></thead>
+							<tbody>
+								<template x-for="c in node() ? node().c : []" x-bind:key="c.k">
+									<tr>
+										<td><button type="button" class="ox__move" x-on:click="path = path.concat([c.k]); drawPreview()" x-text="c.m || '(no stone)'"></button></td>
+										<td class="num" x-text="c.n"></td>
+										<td><div class="ox__wr" x-bind:title="winTitle(c)">
+											<span class="r" x-bind:style="'width:' + pct(c.r, c.n) + '%'" x-text="pct(c.r, c.n) >= 18 ? pct(c.r, c.n) + '%' : ''"></span>
+											<span class="b" x-bind:style="'width:' + (100 - pct(c.r, c.n)) + '%'" x-text="100 - pct(c.r, c.n) >= 18 ? (100 - pct(c.r, c.n)) + '%' : ''"></span>
+										</div></td>
+										<td class="num" x-show="source === 'player'" x-text="pct(c.p || 0, c.n) + '%'"></td>
+									</tr>
+								</template>
+							</tbody>
+						</table>
+						<p class="ox__note" x-show="node() && !node().c.length">No further turns with enough games here.</p>
+						<p class="ox__note" x-show="!node()">No games reach this position.</p>
+					</section>
+
+					<!-- ============ Spell layouts ============ -->
+					<section x-show="tab === 'layouts'">
+						<div class="ox__bar">
+							<div class="ox__seg" role="group" aria-label="Group layouts">
+								<button type="button" x-bind:aria-pressed="!bySet" x-on:click="bySet = false">Exact layouts</button>
+								<button type="button" x-bind:aria-pressed="bySet" x-on:click="bySet = true">Same spells, any places</button>
+							</div>
+							<label>Spell <input type="search" x-model="spellFilter" placeholder="e.g. Fireblast" /></label>
+						</div>
+						<table>
+							<thead><tr>
+								<th>Spells</th>
+								<th class="num"><button type="button" x-on:click="sortBy = 'n'" x-text="'Games' + (sortBy === 'n' ? ' ▾' : '')"></button></th>
+								<th><button type="button" x-on:click="sortBy = sortBy === 'red' ? 'blue' : 'red'" x-text="'Red / Blue wins' + (sortBy === 'red' ? ' (red ▾)' : sortBy === 'blue' ? ' (blue ▾)' : '')"></button></th>
+								<th></th>
+							</tr></thead>
+							<tbody>
+								<template x-for="L in layoutRows()" x-bind:key="layoutId(L)">
+									<tr x-bind:class="{ 'ox__row--sel': previewLayout === layoutId(L) }">
+										<td class="ox__spells"><button type="button" class="ox__move" x-on:click="previewLayout = layoutId(L); drawPreview()"
+											x-bind:aria-label="'Show ' + layoutText(L)" x-html="layoutHtml(L)"></button>
+											<span class="ox__note" x-show="bySet && L.a > 1" x-text="' (' + L.a + ' arrangements)'"></span></td>
+										<td class="num" x-text="L.n"></td>
+										<td><div class="ox__wr" x-bind:title="winTitle(L)">
+											<span class="r" x-bind:style="'width:' + pct(L.r, L.n) + '%'" x-text="pct(L.r, L.n) >= 18 ? pct(L.r, L.n) + '%' : ''"></span>
+											<span class="b" x-bind:style="'width:' + (100 - pct(L.r, L.n)) + '%'" x-text="100 - pct(L.r, L.n) >= 18 ? (100 - pct(L.r, L.n)) + '%' : ''"></span>
+										</div></td>
+										<td><button type="button" class="ox__btn" x-show="!bySet && L.t" x-on:click="openLayout(L)">Openings &rsaquo;</button></td>
+									</tr>
+								</template>
+							</tbody>
+						</table>
+						<p class="ox__note" x-show="!layoutRows().length">No layouts match.</p>
+					</section>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/board-geometry.js"></script>
+	<script src="static/scripts/board-image.js"></script>
+	<script src="static/scripts/opening-explorer.js"></script>
+
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+
+	<script>
+		// A player's games: the most recent this many, and the turns of each
+		// read from its public room (rooms/{code}; completed_games is not
+		// readable by clients). Finished rooms never change, so what was read
+		// is kept in localStorage.
+		const OX_PLAYER_GAMES = window.__OX_PLAYER_GAMES || 300;
+		const OX_FETCH_BATCH = 20;
+		const OX_ROOM_CACHE_KEY = 'sigil_openings_rooms_v1';
+		const OX_ROOM_CACHE_MAX = 2000;
+		const OX_ENGINE = ['board.js', 'moves.js', 'spells.js', 'ai-player.js', 'game-controller.js?v=1', 'game-review.js?v=42']
+			.map((f) => 'static/scripts/engine/' + f);
+
+		function oxLoadScript(src) {
+			return new Promise((resolve, reject) => {
+				const s = document.createElement('script');
+				s.src = src;
+				s.onload = resolve;
+				s.onerror = () => reject(new Error('could not load ' + src));
+				document.head.appendChild(s);
+			});
+		}
+		function oxCacheRead() {
+			try { return JSON.parse(localStorage.getItem(OX_ROOM_CACHE_KEY) || '{}') || {}; } catch (e) { return {}; }
+		}
+		function oxCacheWrite(cache) {
+			try {
+				const keys = Object.keys(cache);
+				if (keys.length > OX_ROOM_CACHE_MAX) {
+					keys.sort((a, b) => (cache[a].at || 0) - (cache[b].at || 0));
+					for (const k of keys.slice(0, keys.length - OX_ROOM_CACHE_MAX)) delete cache[k];
+				}
+				localStorage.setItem(OX_ROOM_CACHE_KEY, JSON.stringify(cache));
+			} catch (e) { /* storage full or blocked */ }
+		}
+		const oxList = (v) => (Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.keys(v).sort((a, b) => a - b).map((k) => v[k]) : []));
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('openingExplorer', () => ({
+				data: null,
+				error: '',
+				loadingText: 'Loading…',
+				source: 'all',          // all | pvp | player
+				board: 'core',
+				tab: 'openings',
+				path: [],               // position keys from the root
+				layoutKey: '',          // '' = all layouts, else layoutId of a layout with a tree
+				previewLayout: '',
+				bySet: false,
+				spellFilter: '',
+				sortBy: 'n',
+				// Per player
+				playerUid: '',
+				playerName: '',
+				playerSide: '',
+				playerEntries: null,
+				playerSegments: {},
+				myUid: '',
+
+				async init() {
+					const params = new URLSearchParams(window.location.search);
+					if (params.get('tab') === 'layouts') this.tab = 'layouts';
+					try {
+						const res = await fetch('static/data/opening-explorer.json', { cache: 'no-cache' });
+						if (!res.ok) throw new Error('HTTP ' + res.status);
+						this.data = await res.json();
+					} catch (e) {
+						this.error = 'Could not load the site-wide numbers (' + (e.message || e) + ').';
+					}
+					this.loadingText = '';
+					const ids = this.boardIds();
+					if (ids.length && !ids.includes(this.board)) this.board = ids[0];
+					firebase.auth().onAuthStateChanged((u) => { this.myUid = u && !u.isAnonymous ? u.uid : ''; });
+					const player = params.get('player');
+					if (player) await this.loadPlayer(player);
+					this.$nextTick(() => this.drawPreview());
+				},
+
+				// ---- Data in view ----
+				get segment() {
+					if (this.source === 'player') return this.playerSegments[this.playerSide || 'both'] || null;
+					return this.data && this.data.segments ? this.data.segments[this.source] || null : null;
+				},
+				boardIds() {
+					const seg = this.segment;
+					return seg ? Object.keys(seg.boards || {}).sort() : [];
+				},
+				layoutId(L) { return L.b + '|' + L.s.join(','); },
+				layoutsWithTrees() {
+					const seg = this.segment;
+					return seg ? seg.layouts.filter((L) => L.t && L.b === this.board) : [];
+				},
+				tree() {
+					const seg = this.segment;
+					if (!seg) return null;
+					if (this.layoutKey) {
+						const L = seg.layouts.find((x) => this.layoutId(x) === this.layoutKey);
+						return L && L.t ? L.t : null;
+					}
+					return seg.boards[this.board] ? seg.boards[this.board].tree : null;
+				},
+				node() { return OpeningExplorer.walk(this.tree(), this.path); },
+				pathSteps() {
+					const out = [];
+					let n = this.tree();
+					for (const k of this.path) {
+						n = n && n.c.find((c) => c.k === k);
+						if (!n) break;
+						out.push(n);
+					}
+					return out;
+				},
+				pct(a, n) { return n ? Math.round(100 * a / n) : 0; },
+				winTitle(x) {
+					return x.n + ' games: red won ' + x.r + ' (' + this.pct(x.r, x.n) + '%), blue won ' + (x.n - x.r) + ' (' + (100 - this.pct(x.r, x.n)) + '%)'
+						+ (this.source === 'player' && typeof x.p === 'number' ? '; the player won ' + x.p : '');
+				},
+				nodeSummary(n) {
+					return n.n + ' games reach this position: red won ' + this.pct(n.r, n.n) + '%, blue ' + (100 - this.pct(n.r, n.n)) + '%'
+						+ (this.source === 'player' ? '; the player won ' + this.pct(n.p || 0, n.n) + '%' : '') + '.';
+				},
+
+				// ---- Layouts ----
+				_groups(L) {
+					const Z = boardLayoutDef(L.b).perType;
+					return [['Rituals', L.s.slice(0, Z)], ['Sorceries', L.s.slice(Z, 2 * Z)], ['Charms', L.s.slice(2 * Z)]];
+				},
+				layoutText(L) {
+					if (this.bySet) return L.s.map(displaySpellName).join(', ');
+					return this._groups(L).map(([t, s]) => t + ': ' + s.map(displaySpellName).join(', ')).join('; ');
+				},
+				layoutShort(L) { return L.s.map((n) => displaySpellName(n)).join(', '); },
+				layoutHtml(L) {
+					const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+					if (this.bySet) return esc(L.s.map(displaySpellName).join(', '));
+					return this._groups(L).map(([t, s]) => '<b>' + t[0] + ':</b> ' + esc(s.map(displaySpellName).join(', '))).join(' ');
+				},
+				layoutRows() {
+					const seg = this.segment;
+					if (!seg) return [];
+					const q = this.spellFilter.trim().toLowerCase().replace(/[\s_]+/g, ' ');
+					let rows = (this.bySet ? seg.sets : seg.layouts).filter((L) => L.b === this.board);
+					if (q) rows = rows.filter((L) => L.s.some((n) => displaySpellName(n).toLowerCase().includes(q)));
+					const rate = (L) => (L.n ? L.r / L.n : 0);
+					if (this.sortBy === 'red') rows = rows.slice().sort((a, b) => rate(b) - rate(a) || b.n - a.n);
+					else if (this.sortBy === 'blue') rows = rows.slice().sort((a, b) => rate(a) - rate(b) || b.n - a.n);
+					return rows.slice(0, 200);
+				},
+				openLayout(L) {
+					this.layoutKey = this.layoutId(L);
+					this.previewLayout = this.layoutKey;
+					this.path = [];
+					this.tab = 'openings';
+					this.drawPreview();
+				},
+
+				// ---- The board preview ----
+				// The spells drawn: the chosen layout's, else none (the site-wide
+				// tree mixes layouts).
+				_previewSpells() {
+					const id = this.tab === 'openings' ? this.layoutKey : (this.bySet ? '' : this.previewLayout);
+					if (!id) return [];
+					const [b, s] = id.split('|');
+					return b === this.board && s ? s.split(',') : [];
+				},
+				previewLabel() {
+					if (this.tab === 'layouts') {
+						const seg = this.segment;
+						const L = seg && (this.bySet ? null : seg.layouts.find((x) => this.layoutId(x) === this.previewLayout));
+						return L ? this.layoutText(L) : 'Pick a layout to see it on the board.';
+					}
+					const steps = this.pathSteps();
+					return steps.length ? 'After ' + steps.map((s, i) => (i % 2 === 0 ? 'R ' : 'B ') + (s.m || '—')).join(', ') : 'The starting position';
+				},
+				_previewSfn() {
+					const def = boardLayoutDef(this.board);
+					const spells = this._previewSpells();
+					const steps = this.tab === 'openings' ? this.pathSteps() : [];
+					let key;
+					if (steps.length) key = steps[steps.length - 1].k;
+					else key = def.nodeOrder.map((n) => (n === 'a1' ? 'r' : n === 'b1' ? 'b' : '.')).join('') + ' 0:0 -:- -:- b1';
+					const p = key.split(' ');
+					return p[0] + '/' + spells.join(',') + ' r 1 ' + p.slice(1).join(' ') + (this.board === 'pentagon' ? ' pentagon' : '');
+				},
+				async drawPreview() {
+					await this.$nextTick();
+					const canvas = this.$refs.preview;
+					if (!canvas || !this.segment) return;
+					try {
+						const st = BoardImage.stateFromSfn(this._previewSfn());
+						const steps = this.tab === 'openings' ? this.pathSteps() : [];
+						if (steps.length) {
+							const prev = steps.length > 1 ? steps[steps.length - 2].k : null;
+							const before = prev ? BoardImage.stateFromSfn(prev.split(' ')[0] + '/ r 1 ' + prev.split(' ').slice(1).join(' ')) : null;
+							if (before) st.lastPlay = BoardImage.newStones(before, st);
+						}
+						await BoardImage.render(st, { canvas, size: Math.min(1000, Math.round((canvas.clientWidth || 380) * (window.devicePixelRatio || 1))) });
+					} catch (e) { console.warn('preview failed', e); }
+				},
+
+				// ---- Sources ----
+				setSource(s) { this.source = s; this.path = []; this.layoutKey = ''; this._fixBoard(); this.drawPreview(); },
+				setBoard(b) { this.board = b; this.path = []; this.layoutKey = ''; this.drawPreview(); },
+				setPlayerSide(c) { this.playerSide = c; this.path = []; this._buildPlayer(); this.drawPreview(); },
+				_fixBoard() {
+					const ids = this.boardIds();
+					if (ids.length && !ids.includes(this.board)) this.board = ids[0];
+				},
+
+				/** One player's games, from user_games and their rooms' first turns. */
+				async loadPlayer(uid) {
+					if (!uid) return;
+					this.playerUid = uid;
+					this.error = '';
+					this.loadingText = 'Reading the player’s games…';
+					const db = firebase.database();
+					try {
+						this.playerName = (await db.ref('users/' + uid + '/displayName').once('value')).val() || '';
+						const snap = await db.ref('user_games/' + uid).orderByChild('timestamp').limitToLast(OX_PLAYER_GAMES).once('value');
+						const games = [];
+						snap.forEach((c) => { const g = c.val(); if (g && g.roomCode && (g.color === 'red' || g.color === 'blue')) games.push(g); });
+						// The replayer, only for this view (the site-wide numbers need none).
+						if (typeof reconstructGameLog !== 'function') for (const src of OX_ENGINE) await oxLoadScript(src);
+						const depth = Math.max(OpeningExplorer.DEFAULTS.depth, OpeningExplorer.DEFAULTS.layoutDepth);
+						const cache = oxCacheRead();
+						const entries = [];
+						for (let i = 0; i < games.length; i += OX_FETCH_BATCH) {
+							this.loadingText = 'Reading the player’s games… ' + Math.min(i + OX_FETCH_BATCH, games.length) + '/' + games.length;
+							await Promise.all(games.slice(i, i + OX_FETCH_BATCH).map(async (g) => {
+								let room = cache[g.roomCode];
+								if (!room) {
+									const base = db.ref('rooms/' + g.roomCode);
+									const [sp, va, se, st, log] = await Promise.all([
+										base.child('spellNames').once('value'), base.child('variant').once('value'),
+										base.child('setupSfn').once('value'), base.child('startSfn').once('value'),
+										base.child('gameLog').orderByKey().limitToFirst(depth).once('value'),
+									]);
+									if (!sp.exists()) return;   // pruned room
+									room = { spellNames: oxList(sp.val()), variant: va.val() || 'standard', setupSfn: se.val() || null,
+										startSfn: st.val() || null, turns: oxList(log.val()), at: Date.now() };
+									cache[g.roomCode] = room;
+								}
+								if (room.startSfn || !room.turns.length) return;   // a game from a position
+								try {
+									const turns = room.turns.map((t) => Object.assign({}, t, { actions: oxList(t.actions) }));
+									const setup = room.setupSfn || (turns[0].sfnBefore || null);
+									if (!setup && turns[0].turnNumber !== 1) return;
+									const fat = turns.every((t) => t.sfnBefore && t.sfnAfter) ? turns
+										: await reconstructGameLog(normalizeSpellNames(room.spellNames), normalizeVariant(room.variant), setup, turns);
+									const winner = g.result === 'win' ? g.color : (g.color === 'red' ? 'blue' : 'red');
+									const e = OpeningExplorer.gameEntry({ spellNames: normalizeSpellNames(room.spellNames), winner, player: g.color }, fat, depth);
+									if (e) entries.push(e);
+								} catch (err) { /* a transcript the engine cannot replay: not counted */ }
+							}));
+						}
+						oxCacheWrite(cache);
+						this.playerEntries = entries;
+						this._buildPlayer();
+						this.source = 'player';
+						this.path = [];
+						this.layoutKey = '';
+						this._fixBoard();
+						this.loadingText = '';
+						if (!entries.length) this.error = 'No games of this player could be read (only games whose rooms are still stored count).';
+					} catch (e) {
+						this.loadingText = '';
+						this.error = 'Could not read the player’s games (' + (e.message || e) + ').';
+					}
+					this.drawPreview();
+				},
+				_buildPlayer() {
+					if (!this.playerEntries) return;
+					const side = this.playerSide || 'both';
+					const list = this.playerEntries.filter((e) => side === 'both' || e.player === side);
+					this.playerSegments = Object.assign({}, this.playerSegments, {
+						[side]: OpeningExplorer.aggregate(list, { minGames: 1, withPlayer: true, layoutTrees: 20 }),
+					});
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js" defer></script>
+</body>
+</html>

@@ -546,6 +546,9 @@
 						<template x-if="games.length === 0">
 							<p class="empty-msg">No games yet.</p>
 						</template>
+						<p class="ins-sub" x-show="games.length > 0 && user && user.uid">
+							<a x-bind:href="'openings.html?player=' + encodeURIComponent(user ? user.uid : '')">Opening explorer for these games &rsaquo;</a>
+							(the opening turns and spell layouts played, with the results)</p>
 						<template x-for="c in insightCharts" x-bind:key="c.key">
 							<div x-show="games.length > 0" x-bind:data-insight="c.key">
 								<h3 x-text="c.title"></h3>

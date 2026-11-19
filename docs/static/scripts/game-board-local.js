@@ -2789,7 +2789,11 @@ document.addEventListener('alpine:init', () => {
 					_this.message = payload.message;
 					// The prompt a typed turn answers (typed-turn.js).
 					if (payload.awaiting) {
-						_this._lastPrompt = payload;
+						// A copy: validMoves shares (and later edits) the payload's moveoptions.
+						_this._lastPrompt = Object.assign({}, payload, {
+							actionlist: (payload.actionlist || []).slice(),
+							moveoptions: Object.assign({}, payload.moveoptions || {}),
+						});
 						_this._promptSeq = (_this._promptSeq || 0) + 1;
 					}
 

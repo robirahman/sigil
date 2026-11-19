@@ -770,6 +770,16 @@
 				}
 				document.documentElement.classList.add('puzzle-embed');
 				window.SIGIL_PUZZLE_EMBED = true;
+				// The frame's ?theme=, applied but not saved as the viewer's choice.
+				const theme = params.get('theme');
+				if (theme && typeof THEMES !== 'undefined' && THEMES[theme]) {
+					const root = document.documentElement;
+					for (const t of Object.values(THEMES)) for (const k of Object.keys(t.vars || {})) root.style.removeProperty(k);
+					root.setAttribute('data-theme', theme);
+					for (const [k, v] of Object.entries(THEMES[theme].vars || {})) root.style.setProperty(k, v);
+					themeManager.current = theme;
+					themeManager.applyBoard();
+				}
 				window.SIGIL_PUZZLE = Object.assign({}, puzzle, { embed: true });
 				window.SIGIL_PUZZLE_NAV = {
 					prev: '', next: '', random: '', rated: '',

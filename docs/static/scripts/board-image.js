@@ -481,8 +481,16 @@ function boardExportMixin() {
 			if (code && this.reviewMode && this.reviewSfns && this.reviewSfns.length > 1) {
 				return 'game=' + encodeURIComponent(code) + (this.reviewIndex < this.reviewSfns.length - 1 ? '&ply=' + this.reviewIndex : '');
 			}
-			const sfn = this.reviewMode ? this.reviewSfns[this.reviewIndex]
-				: (typeof this.anaCurrentSfn === 'function' ? this.anaCurrentSfn() : '') || this.currentSfn;
+			let sfn;
+			if (this.reviewMode) {
+				// The loadable form, as openAnalysis() hands positions on: a
+				// turn line's first entry is a pre-turn SFN.
+				const sfns = this.reviewSfns || [], i = this.reviewIndex || 0;
+				const preTurn0 = sfns.length > 1 || (this.reviewTurnLabels || [])[0] === 'Start';
+				sfn = (i > 0 || preTurn0) && typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, i) : sfns[i];
+			} else {
+				sfn = (typeof this.anaCurrentSfn === 'function' ? this.anaCurrentSfn() : '') || this.currentSfn;
+			}
 			return sfn ? 'sfn=' + encodeURIComponent(sfn) : '';
 		},
 
