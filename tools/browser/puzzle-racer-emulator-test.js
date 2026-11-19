@@ -234,8 +234,12 @@ if (process.env.SIGIL_RACER_POOL) {
 		t = await text(pb);
 		check('every racer sees the countdown', /The race starts in \d/.test(t), t);
 		check('the puzzles stay hidden during the countdown', Date.now() < r.startAt - 500 ? await tryRead(pb, 'puzzle_race_seq/' + id) === 'denied' : true);
-		await open(watcher, '?tab=racer&race=' + encodeURIComponent(id));
 		await shot(pb, '4-countdown');
+		await pb.waitForFunction(() => window.SIGIL_RACER.phase !== 'countdown' || !!window.SIGIL_PUZZLE_BOARD, { timeout: 20000, polling: 100 }).catch(() => {});
+		const warm = await pb.evaluate(() => ({ phase: window.SIGIL_RACER.phase, board: !!window.SIGIL_PUZZLE_BOARD,
+			hidden: getComputedStyle(document.getElementById('puzzle-root')).visibility === 'hidden' }));
+		check('the board starts up out of sight during the countdown', warm.phase !== 'countdown' || (warm.board && warm.hidden), warm);
+		await open(watcher, '?tab=racer&race=' + encodeURIComponent(id));
 		const racers = [pa, pb, pc];
 		for (const p of racers) {
 			await p.waitForFunction(() => { const r = window.SIGIL_RACER; return r.phase === 'racing' && r.run && r.run.current && window.SIGIL_PUZZLE_BOARD; },
@@ -336,7 +340,8 @@ if (process.env.SIGIL_RACER_POOL) {
 		check('the watcher sees the result without a place', /Race over/.test(tv) && !/Rematch/.test(tv), tv.slice(0, 200));
 		const logLinks = await pa.evaluate(() => Array.from(document.querySelectorAll('#racer-root .storm-log a')).map((a) => a.className));
 		check('each racer can review their puzzles', logLinks.length === 2 && logLinks.every((c) => c === 'is-ok'), logLinks);
-		const boardHidden = await pa.evaluate(() => document.getElementById('puzzle-root').style.display === 'none' && !document.body.classList.contains('storm-mode'));
+		const boardHidden = await pa.evaluate(() => document.getElementById('puzzle-root').style.display === 'none' && !document.body.classList.contains('storm-mode')
+			&& !document.getElementById('puzzle-root').classList.contains('racer-warmup'));
 		check('the board is put away', boardHidden);
 		check('results: no horizontal scroll at phone width', await noHScroll(pa));
 		await shot(pa, '6-results');

@@ -12,6 +12,9 @@
 .racer-msg:empty { min-height: 0; }
 .racer-center { text-align: center; }
 
+/* The board starting up out of sight during the countdown */
+#puzzle-root.racer-warmup { position: absolute; left: -10000px; top: 0; width: 100%; visibility: hidden; pointer-events: none; }
+
 /* Open races */
 .racer-list { display: flex; flex-direction: column; gap: 6px; }
 .racer-race { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; overflow-wrap: anywhere; }

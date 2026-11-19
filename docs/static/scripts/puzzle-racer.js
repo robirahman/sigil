@@ -104,6 +104,8 @@ async function bootRacer(all, params) {
 		return u || (await firebase.auth().signInAnonymously()).user;
 	};
 	const myEntry = () => (R.race && R.race.players && R.uid && R.race.players[R.uid]) || null;
+	const logKey = () => 'sigil_racer_log_' + R.id;    // this tab's puzzles in the race, for the review links
+	let flashTimer = 0;
 	const setMsg = (t) => { R.msg = t || ''; const el = $('racer-msg'); if (el) el.textContent = R.msg; };
 
 	// Buttons carry data-racer="<action>".
@@ -238,6 +240,7 @@ async function bootRacer(all, params) {
 	function enter(phase) {
 		R.phase = phase;
 		const me = myEntry();
+		if (phase === 'countdown' && me && me.p) warmUp();
 		if (phase === 'racing' && me && me.p) runRace();
 		if (phase === 'done' || phase === 'closed' || phase === 'missing') {
 			stopRun();
@@ -384,8 +387,6 @@ async function bootRacer(all, params) {
 	// -------------------------------------------------------------------
 	// Racing: Storm's run on the race's sequence.
 	// -------------------------------------------------------------------
-	const logKey = () => 'sigil_racer_log_' + R.id;
-
 	async function runRace() {
 		if (R.run) return;
 		const me = myEntry();
@@ -399,9 +400,7 @@ async function bootRacer(all, params) {
 		}
 		if (!Array.isArray(run.seq)) { run.seq = null; run.over = true; setMsg('Could not load the race\'s puzzles.'); render(); return; }
 		if (R.phase !== 'racing') return;
-		window.SIGIL_PUZZLE_STORM = true;    // unrated, like Storm: the board leaves the solved list alone
-		window.SIGIL_PUZZLE_NAV = { prev: '', next: '', rated: '', random: '' };
-		window.SIGIL_PUZZLE_TITLE = window.SIGIL_PUZZLE_SOURCE = window.SIGIL_PUZZLE_TAGS = window.SIGIL_PUZZLE_PROGRESS = window.SIGIL_PUZZLE_FILTER_HTML = '';
+		boardGlobals();
 		window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 			if (!run.current || p.id !== run.current.id) return;
 			// A puzzle's first verdict only, as in Storm.
@@ -411,10 +410,38 @@ async function bootRacer(all, params) {
 		$('storm-end').style.display = 'none';
 		document.body.classList.add('storm-mode');
 		if (!load()) return;
+		$('puzzle-root').classList.remove('racer-warmup');
 		render();
-		if (window.SIGIL_PUZZLE_BOARD) window.SIGIL_PUZZLE_BOARD.puzzleLoad(run.current);
-		else startPuzzleBoard();     // Alpine, once: the board takes window.SIGIL_PUZZLE
-		$('puzzle-root').style.display = '';
+		if (!R.warm) { startPuzzleBoard(); return; }     // Alpine, once: the board takes window.SIGIL_PUZZLE
+		// The board warmed up in the countdown. One still starting starts on
+		// window.SIGIL_PUZZLE, already this puzzle, unless it read the
+		// warm-up puzzle first.
+		for (const t0 = Date.now(); !window.SIGIL_PUZZLE_BOARD && Date.now() - t0 < 30000;) await sleep(100);
+		const board = window.SIGIL_PUZZLE_BOARD;
+		if (board && board.puzzle && board.puzzle.id !== run.current.id && !run.over) board.puzzleLoad(run.current);
+	}
+
+	/** The board's page globals for a race: unrated like Storm, no puzzle panel. */
+	function boardGlobals() {
+		window.SIGIL_PUZZLE_STORM = true;    // the board leaves the solved list alone
+		window.SIGIL_PUZZLE_NAV = { prev: '', next: '', rated: '', random: '' };
+		window.SIGIL_PUZZLE_TITLE = window.SIGIL_PUZZLE_SOURCE = window.SIGIL_PUZZLE_TAGS = window.SIGIL_PUZZLE_PROGRESS = window.SIGIL_PUZZLE_FILTER_HTML = '';
+	}
+
+	/**
+	 * The countdown: the board and its engine start now, out of sight on a
+	 * puzzle of no consequence, so the first race puzzle shows at once and
+	 * a slow device does not lose the first seconds.
+	 */
+	function warmUp() {
+		if (R.warm || window.SIGIL_PUZZLE_BOARD) return;
+		const p = all.find(x => x.kind !== 'winning' && x.mate >= 1);
+		if (!p) return;
+		R.warm = true;
+		boardGlobals();
+		window.SIGIL_PUZZLE = p;
+		$('puzzle-root').classList.add('racer-warmup');
+		startPuzzleBoard();
 	}
 
 	/** The current puzzle onto window.SIGIL_PUZZLE; false when the sequence is done. */
@@ -437,7 +464,6 @@ async function bootRacer(all, params) {
 		if (load() && window.SIGIL_PUZZLE_BOARD) window.SIGIL_PUZZLE_BOARD.puzzleLoad(run.current);
 	}
 
-	let flashTimer = 0;
 	function flash(t) {
 		$('storm-flash').textContent = t;
 		clearTimeout(flashTimer);
