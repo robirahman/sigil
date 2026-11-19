@@ -474,6 +474,30 @@
 		<script src="static/scripts/game-keys.js?v=35"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
 		<script src="static/scripts/game-board-local.js?v=44"></script>
+		<script>
+			// The drills need this version of the board script (drillStepAccepts:
+			// pick, ask and why steps); a stale copy from the service worker's
+			// cache would refuse right answers. Drop the caches and reload once, as the
+			// stale-asset guard after constants.js does.
+			(function () {
+				if (typeof drillStepAccepts === 'function' || !window.caches || !window.fetch) return;
+				try {
+					if (sessionStorage.getItem('sigilStaleBoardReload') === '1') return;
+					sessionStorage.setItem('sigilStaleBoardReload', '1');
+				} catch (e) { return; }
+				var urls = [];
+				Array.prototype.forEach.call(document.scripts, function (s) {
+					if (s.src && s.src.indexOf(location.origin) === 0) urls.push(s.src);
+				});
+				caches.keys()
+					.then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+					.then(function () {
+						return Promise.all(urls.map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); }));
+					})
+					.catch(function () {})
+					.then(function () { location.reload(); });
+			})();
+		</script>
 		<script src="static/scripts/drill-lessons.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

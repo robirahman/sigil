@@ -1371,7 +1371,9 @@ document.addEventListener('alpine:init', () => {
 						_playOn = raw === _startSfnAtLoad;
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn && !_playOn && !_practiceSide);
+				// A practice game offers it from the standard start too (its side
+				// is the player's choice, not a coin flip).
+				const _offerSides = !!(aiMode && (_startSfnAtLoad || _practice) && !_saveLoadedSfn && !_playOn && !_practiceSide);
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
 				// up here on next page load and feed it into the engine so the new match
@@ -1833,7 +1835,7 @@ document.addEventListener('alpine:init', () => {
 					// The position as the game will start its first turn (the
 					// side to move and turn counter the engine searches).
 					let sfn;
-					try { sfn = positionTurnSfn(_startSfnAtLoad); } catch (e) { sfn = null; }
+					try { sfn = _startSfnAtLoad ? positionTurnSfn(_startSfnAtLoad) : null; } catch (e) { sfn = null; }
 					_this.sideOffer = { loading: true, evalText: 'Evaluating the position\u2026', oddsText: '', payoffs: null, note: '' };
 					let handed = null;
 					try {

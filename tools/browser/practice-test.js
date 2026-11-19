@@ -10,7 +10,7 @@
 //   5. the game over (a forfeit) is announced as unrated and NOTHING is queued
 //      for upload (no completed_games record, no rating);
 //   6. without ?side= the side picker says it is a practice game and shows no
-//      rating payoffs;
+//      rating payoffs, from a position and from the standard start;
 //   7. the analysis board and the review hand positions over (links).
 //
 //   (cd docs && python3 -m http.server 8803) &
@@ -149,6 +149,15 @@ async function waitG(page, pred, what, ms = 60000) {
 		await page.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).chooseSide('red'));
 		await waitG(page, s => s.myColor === 'red' && !s.sideOffer, 'the chosen side');
 		check(true, 'the side picker starts the game on the chosen side');
+		await page.evaluate(() => { window.onbeforeunload = null; });
+		// A new practice game (no position, no ?side=) asks for the side too.
+		await page.evaluate(() => { localStorage.clear(); });
+		await page.goto(BASE + '/game.html?ai=rust_easy&practice=1', { waitUntil: 'domcontentloaded' });
+		s = await waitG(page, s => s.sideOffer && !s.sideOffer.loading, 'the side picker of a new game', 60000);
+		check(/Practice game: unrated/.test(s.sideOffer.note), 'a new practice game offers the side picker');
+		await page.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).chooseSide('blue'));
+		await waitG(page, s => s.myColor === 'blue' && !s.sideOffer && s.whoseTurn, 'the new game on the chosen side');
+		check(true, 'the new practice game starts on the chosen side');
 		await page.evaluate(() => { window.onbeforeunload = null; });
 
 		// 7. Hand-offs: the analysis board's link, and the review's button.

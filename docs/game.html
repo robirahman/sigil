@@ -1110,6 +1110,31 @@
 		<script src="static/scripts/game-keys.js?v=35"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
 		<script src="static/scripts/game-board-local.js?v=44"></script>
+		<script>
+			// Practice mode (?practice=1) needs this version of the board script:
+			// a stale copy from the service worker's cache would play the game as
+			// an ordinary (rated) one. Drop the caches and reload once, as the
+			// stale-asset guard after constants.js does.
+			(function () {
+				if (typeof practiceGameHref === 'function' || !window.caches || !window.fetch) return;
+				if (new URLSearchParams(location.search).get('practice') !== '1') return;
+				try {
+					if (sessionStorage.getItem('sigilStaleBoardReload') === '1') return;
+					sessionStorage.setItem('sigilStaleBoardReload', '1');
+				} catch (e) { return; }
+				var urls = [];
+				Array.prototype.forEach.call(document.scripts, function (s) {
+					if (s.src && s.src.indexOf(location.origin) === 0) urls.push(s.src);
+				});
+				caches.keys()
+					.then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+					.then(function () {
+						return Promise.all(urls.map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); }));
+					})
+					.catch(function () {})
+					.then(function () { location.reload(); });
+			})();
+		</script>
 		<script src="static/scripts/rules-reference.js?v=36"></script>
 		<script src="static/scripts/help.js?v=35"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
