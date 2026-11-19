@@ -1,6 +1,10 @@
 /* Tournament pages (tournaments.html, tournament.html). */
 body > .main { padding-top: 80px; }
 .tour {
+	/* A width of its own: in a centring flex parent a grid of boards would
+	   otherwise size itself to one column. */
+	width: 100%;
+	box-sizing: border-box;
 	max-width: 860px;
 	margin: 0 auto;
 	padding: 24px;
