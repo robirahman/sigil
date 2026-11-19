@@ -327,6 +327,7 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		await typeTurn('R5. a3 dash c9');
 		st = await boardVal(page, '({ err: B.typedTurnError, a3: B.nodes.a3, text: B.typedTurnText, aw: B.awaiting, msg: B.message })');
 		check('typed: a word the game asks for again is reported, the rest played', /"c9" was not accepted/.test(st.err) && st.a3 === 'red' && st.text === 'c9' && st.aw === 'node', st);
+		check('typed: the part played can be reset, as after clicks', (await boardVal(page, 'B.showReset')) === true);
 		await typeTurn('a2 a6');
 		const dashTo = Object.keys(await boardVal(page, 'B._lastPrompt.moveoptions'))[0];
 		check('typed: the sacrifices are made, the dash move is asked for', !!dashTo && (await boardVal(page, 'B.nodes.a2')) === null && (await boardVal(page, 'B.nodes.a6')) === null, dashTo);

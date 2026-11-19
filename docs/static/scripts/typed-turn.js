@@ -191,7 +191,9 @@ function typedTurnMixin() {
 					const before = this._typedSnapshot();
 					const seq = this._promptSeq || 0;
 					// The click path: what handleNodeClick / handleDash / the spell
-					// and End Turn buttons send.
+					// and End Turn buttons send. handleNodeClick marks the mover first,
+					// so the placement counts as ours (Reset Turn appears).
+					this.currentPlayer = this.whoseTurn;
 					this.endTurnArmed = false;
 					this.sendEvent(r.token);
 					if (r.token === 'dash' || r.token === 'pass' || r.token === 'submit' || r.token === 'skip_providence') this.actionList = [];
