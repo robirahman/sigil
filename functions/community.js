@@ -230,6 +230,12 @@ async function joinRunningBattles(db, tid, uid, joined, now) {
 }
 
 async function onTeamRequest(db, tid, uid, now, send) {
+	// From an account being deleted (its deletion may have missed this
+	// request, not yet indexed): the request goes.
+	if (await val(db, 'deleted_users/' + uid)) {
+		await db.ref('team_requests/' + tid + '/' + uid).remove();
+		return 0;
+	}
 	// Who asked where (server-only), for account deletion.
 	await db.ref('team_request_index/' + uid + '/' + tid).set(now);
 	const [team, name] = await Promise.all([val(db, 'teams/' + tid), val(db, 'users/' + uid + '/displayName')]);
@@ -295,9 +301,14 @@ async function battleTick(db, now, send) {
 		const url = 'teams.html?battle=' + encodeURIComponent(bid);
 		if (now >= b.end + BATTLE_GRACE_MS) {
 			if (!(await claimStep(db, bid, 'closing', now))) continue;
-			const standings = await writeResult(db, bid, b, now);
+			const first = await writeResult(db, bid, b, now);
+			const standings = first || ((await val(db, 'team_battles/' + bid + '/result')) || {}).standings || [];
 			await announceEnd(db, bid, b, standings, now, send, false);
 			await db.ref('team_battles/' + bid + '/finished').set(now);
+			// Once more after the mark: a game scored while closing that did
+			// not see the result yet is in now (see scoreGame).
+			const last = await writeResult(db, bid, b, now);
+			if (last && winnerOf(last) !== winnerOf(standings)) await announceEnd(db, bid, b, last, now, send, true);
 			out.finished++;
 		} else if (now >= b.start && now < b.end && !b.startedAt) {
 			if (!(await claimStep(db, bid, 'starting', now))) continue;
@@ -386,23 +397,34 @@ async function scoreGame(db, uid, gameId, entry, now, send) {
 		});
 		if (!res.committed) continue;
 		scored.push({ battle: bid, team: me.team, win });
-		if (b.finished || b.result) {
-			// Closed already: new final standings, and a new end notice if
-			// the winner changed.
-			const before = winnerOf(((await val(db, 'team_battles/' + bid + '/result')) || {}).standings);
+		// Closed (or closing) by now? Read afresh, after the score is in:
+		// either this sees the close's result and rewrites it, or the close
+		// rewrites it after marking the battle finished (battleTick), and
+		// reads this score then.
+		const state = (await val(db, 'team_battles/' + bid)) || {};
+		if (state.finished || state.result) {
+			const before = winnerOf((state.result || {}).standings);
 			const standings = await writeResult(db, bid, b, now);
-			if (winnerOf(standings) !== before) await announceEnd(db, bid, b, standings, now, send, true);
+			if (standings && winnerOf(standings) !== before) await announceEnd(db, bid, b, standings, now, send, true);
 		}
 	}
 	return scored;
 }
 
-/** team_battles/{id}/result: the standings as they are now. */
+/**
+ * team_battles/{id}/result: the standings as they are now, with the number
+ * of games they count. Two writers racing keep the one that counts more
+ * (scores only grow), so a stale read never overwrites a newer result.
+ * Resolves to the standings written, or null when a newer result stands.
+ */
 async function writeResult(db, bid, battle, now) {
 	const players = (await val(db, 'team_battle_scores/' + bid + '/players')) || {};
-	const standings = teamBattleStandings(battle, players).map((s) => ({ team: s.team, score: s.score, points: s.points, players: s.players.length }));
-	await db.ref('team_battles/' + bid + '/result').set({ standings, at: typeof now === 'number' ? now : Date.now() });
-	return standings;
+	const full = teamBattleStandings(battle, players);
+	const games = Object.keys(players).reduce((n, u) => n + ((players[u] && players[u].games) || 0), 0);
+	const standings = full.map((s) => ({ team: s.team, score: s.score, points: s.points, players: s.players.length }));
+	const res = await db.ref('team_battles/' + bid + '/result').transaction((cur) => (
+		cur && (cur.games || 0) > games ? undefined : { standings, games, at: typeof now === 'number' ? now : Date.now() }));
+	return res.committed ? standings : null;
 }
 
 /** The winning team of final standings, or null (no points, or a tie). */

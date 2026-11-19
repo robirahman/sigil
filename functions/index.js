@@ -562,34 +562,39 @@ exports.notifyChallenge = onValueCreated({
 });
 
 // ---- The community (community.js): inbox entries and pushes, forum and
-// team bookkeeping, team battles. Best-effort and idempotent (fixed keys,
-// recounts), so not retried.
+// team bookkeeping, team battles. Notices are best-effort (not retried: a
+// missed one is not worth a week of retries). The bookkeeping nothing else
+// would repair is retried (`durable`): battle scores and results, request
+// indexes, member counts and rosters, reply counts. Each step is safe to
+// repeat (fixed keys, recounts, games counted once).
 
-const communityTrigger = (ref, handler) => onValueCreated({ ref, instance: DB_INSTANCE, region: REGION, retry: false }, async (event) => {
+const communityTrigger = (ref, handler, durable) => onValueCreated({ ref, instance: DB_INSTANCE, region: REGION, retry: !!durable }, async (event) => {
 	const db = event.data.ref.root.database;
 	try {
 		const res = await handler(db, event.params, event.data.val(), Date.now());
 		if (res) logger.info(ref, Object.assign({}, event.params, { res }));
 	} catch (e) {
 		logger.warn(ref, Object.assign({}, event.params, { error: String(e) }));
+		if (durable) throw e;
 	}
 });
 
 exports.inboxFollow = communityTrigger('/followers/{target}/{uid}', (db, p, v, now) => community.onFollow(db, p.target, p.uid, now, fcmSend));
 exports.inboxChallenge = communityTrigger('/challenges/{target}/{room}', (db, p, v, now) => community.onChallenge(db, p.target, p.room, now));
 exports.pushMessage = communityTrigger('/dm_messages/{cid}/{mid}', (db, p, v) => community.onMessage(db, p.cid, p.mid, v, fcmSend));
-exports.forumPost = communityTrigger('/forum_posts/{cat}/{tid}/{pid}', (db, p, v, now) => community.onForumPost(db, p.cat, p.tid, p.pid, v, now, fcmSend));
+exports.forumPost = communityTrigger('/forum_posts/{cat}/{tid}/{pid}', (db, p, v, now) => community.onForumPost(db, p.cat, p.tid, p.pid, v, now, fcmSend), true);
 exports.blogComment = communityTrigger('/blog_comments/{pid}/{cid}', (db, p, v, now) => community.onBlogComment(db, p.pid, p.cid, v, now, fcmSend));
-exports.teamRequest = communityTrigger('/team_requests/{tid}/{uid}', (db, p, v, now) => community.onTeamRequest(db, p.tid, p.uid, now, fcmSend));
+exports.teamRequest = communityTrigger('/team_requests/{tid}/{uid}', (db, p, v, now) => community.onTeamRequest(db, p.tid, p.uid, now, fcmSend), true);
 exports.teamBattle = communityTrigger('/team_battles/{bid}', (db, p, v, now) => community.onBattleCreated(db, p.bid, v, now, fcmSend));
-exports.communityGame = communityTrigger('/user_games/{uid}/{gameId}', (db, p, v, now) => community.onUserGame(db, p.uid, p.gameId, v, now, fcmSend));
+exports.communityGame = communityTrigger('/user_games/{uid}/{gameId}', (db, p, v, now) => community.onUserGame(db, p.uid, p.gameId, v, now, fcmSend), true);
 
-exports.teamMember = onValueWritten({ ref: '/team_members/{tid}/{uid}', instance: DB_INSTANCE, region: REGION, retry: false }, async (event) => {
+exports.teamMember = onValueWritten({ ref: '/team_members/{tid}/{uid}', instance: DB_INSTANCE, region: REGION, retry: true }, async (event) => {
 	const db = event.data.after.ref.root.database;
 	try {
 		await community.onTeamMember(db, event.params.tid, event.params.uid, event.data.before.val(), event.data.after.val(), Date.now(), fcmSend);
 	} catch (e) {
 		logger.warn('teamMember', Object.assign({}, event.params, { error: String(e) }));
+		throw e;
 	}
 });
 

@@ -140,6 +140,12 @@ test('teams: the member count, requests, acceptance and roles', async () => {
 	});
 	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'bob', 10), 2);
 	assert.strictEqual(await get('team_request_index/bob/reds'), 10);
+	// A request whose writer is already being deleted is removed, not indexed.
+	await db.ref().update({ 'deleted_users/dave': 1, 'team_requests/reds/dave': { at: 6 } });
+	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'dave', 11), 0);
+	assert.strictEqual(await get('team_requests/reds/dave'), null);
+	assert.strictEqual(await get('team_request_index/dave'), null);
+	await db.ref('deleted_users/dave').remove();
 	const r = await get('notifications/carol/teamreq-reds');
 	assert.deepStrictEqual([r.event, r.actor, r.teamName], ['request', 'bob', 'Reds']);
 	// Admitted by the leader.
@@ -236,6 +242,10 @@ test('team battles: scored games, the start, the result', async () => {
 	assert.deepStrictEqual(turned.standings.map((s) => [s.team, s.score]), [['reds', 3], ['blues', 2]]);
 	const fixed = await get('notifications/bob/battle-tb1');
 	assert.deepStrictEqual([fixed.event, fixed.winner, fixed.winnerName], ['battle-end', 'reds', 'Reds']);
+	// A result counting more games is never overwritten by a staler one.
+	await db.ref('team_battles/tb1/result/games').set(999);
+	await community.scoreGame(db, 'dave', 'g13', game('carol', 'win'), now + 3 * HOUR);
+	assert.strictEqual((await get('team_battles/tb1/result')).games, 999);
 });
 
 test('a correspondence result goes to the inbox; a realtime one does not', async () => {
