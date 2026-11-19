@@ -43,7 +43,7 @@
 		.ox__spells b { color: var(--color-text-muted, #aaa); font-weight: normal; }
 		.ox__row--sel td { background: rgba(255, 255, 255, 0.06); }
 		.ox input[type=search], .ox input[type=text], .ox select { font: inherit; color: inherit; background: var(--color-bg-dark, #111); border: 1px solid var(--color-border, #555); border-radius: 4px; padding: 3px 6px; }
-		.ox__btn { background: var(--color-surface, #222); border: 1px solid var(--color-border, #555); border-radius: 5px; color: inherit; cursor: pointer; font: inherit; padding: 3px 9px; }
+		.ox__btn { white-space: nowrap; background: var(--color-surface, #222); border: 1px solid var(--color-border, #555); border-radius: 5px; color: inherit; cursor: pointer; font: inherit; padding: 3px 9px; }
 		.ox__btn:disabled { opacity: 0.4; cursor: default; }
 		.ox__err { color: var(--color-error, #d66); }
 	</style>
@@ -399,7 +399,11 @@
 					const p = key.split(' ');
 					return p[0] + '/' + spells.join(',') + ' r 1 ' + p.slice(1).join(' ') + (this.board === 'pentagon' ? ' pentagon' : '');
 				},
+				// Each draw renders off screen and only the latest one is shown, so a
+				// slow image load never paints over a newer position.
+				_drawSeq: 0,
 				async drawPreview() {
+					const seq = ++this._drawSeq;
 					await this.$nextTick();
 					const canvas = this.$refs.preview;
 					if (!canvas || !this.segment) return;
@@ -411,7 +415,11 @@
 							const before = prev ? BoardImage.stateFromSfn(prev.split(' ')[0] + '/ r 1 ' + prev.split(' ').slice(1).join(' ')) : null;
 							if (before) st.lastPlay = BoardImage.newStones(before, st);
 						}
-						await BoardImage.render(st, { canvas, size: Math.min(1000, Math.round((canvas.clientWidth || 380) * (window.devicePixelRatio || 1))) });
+						const off = await BoardImage.render(st, { size: Math.min(1000, Math.round((canvas.clientWidth || 380) * (window.devicePixelRatio || 1))) });
+						if (seq !== this._drawSeq) return;
+						canvas.width = off.width;
+						canvas.height = off.height;
+						canvas.getContext('2d').drawImage(off, 0, 0);
 					} catch (e) { console.warn('preview failed', e); }
 				},
 
