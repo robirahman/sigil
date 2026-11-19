@@ -29,7 +29,7 @@
 
 const crypto = require('crypto');
 const { checkTurn } = require('./turn-check');
-const { onlineTranscript } = require('./rating');
+const { onlineTranscript, flagged, CLOCK_GRACE_MS } = require('./rating');
 const { ApiError, describeRoom, ROOM_RE, UID_RE, SITE } = require('./public-api');
 const { requireShared } = require('./engine-loader');
 const { roomGiftMs, roomTimeLeft, roomTurns, sideToMove } = requireShared('room-clock.js');
@@ -173,6 +173,13 @@ function botApi(deps) {
 			why = null;
 			if (r.status !== 'playing') { why = 'not-playing'; return; }
 			if (((r.last && r.last.key) || null) !== expectedLast || seatColor(r, uid) !== color) { why = 'conflict'; return; }
+			// Too late: the bot's clock ran out (as expireClocks judges it,
+			// rooms.js expireRooms). The game ends there as a loss on time,
+			// which is what the server would write a moment later anyway.
+			if (flagged(r, color, at - CLOCK_GRACE_MS)) {
+				why = 'time';
+				return finishFields(r, { winner: other(color), endReason: 'time' }, at);
+			}
 			const turn = { color, actions: actions.slice(), timestamp: at };
 			if (expectedLast) turn.after = expectedLast;
 			r.turns = Object.assign({}, r.turns, { [key]: turn });
@@ -191,6 +198,10 @@ function botApi(deps) {
 		if (!res.committed) {
 			if (why === 'not-playing') throw new ApiError(409, 'not-playing', 'The game ended.');
 			throw new ApiError(409, 'conflict', 'The game moved on (another turn or a takeback): read it again.');
+		}
+		if (why === 'time') {
+			await unlist(code, [room.red && room.red.uid, room.blue && room.blue.uid]);
+			throw new ApiError(409, 'time-out', 'Your clock ran out: the game is lost on time.');
 		}
 		if (verdict.gameover) await unlist(code, [room.red && room.red.uid, room.blue && room.blue.uid]);
 		return { ok: true, room: code, turn: verdict.turnNumber, sfn: verdict.sfnAfter, gameOver: verdict.gameover,

@@ -301,7 +301,9 @@ function dailyPuzzle(all, day) {
 async function daily(db, query, now) {
 	const today = new Date(now).toISOString().slice(0, 10);
 	const day = query && query.date ? String(query.date) : today;
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || isNaN(Date.parse(day + 'T00:00:00Z')) || day > today) {
+	// A real calendar day: Date.parse rolls 2026-02-31 over to March.
+	const parsed = /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(day + 'T00:00:00Z') : null;
+	if (!parsed || isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day || day > today) {
 		throw new ApiError(400, 'bad-request', 'date must be a past or present UTC day, YYYY-MM-DD.');
 	}
 	const p = dailyPuzzle(puzzleSet(), day);

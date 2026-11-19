@@ -8,7 +8,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { checkTurn, roomGame } = require('../turn-check');
-const { timerAfterTurn, initialTimer } = require('../bot-api');
+const { timerAfterTurn, initialTimer, botApi } = require('../bot-api');
+const { flagged } = require('../rating');
+const { fakeDb } = require('./fake-db');
 const { freshEngine } = require('../engine-loader');
 const ONLINE = require('./online-game.json');
 
@@ -129,4 +131,30 @@ test('the clock node after a bot\'s turn follows the turns\' timestamps', () => 
 	assert.deepStrictEqual(timerAfterTurn(corr, 'red', T0 + 5), { red: 0, blue: T0 + 5 + 86_400_000, activeColor: 'blue', lastUpdated: T0 + 5 });
 	assert.deepStrictEqual(initialTimer(room(0, null, { timeControl: tc }), 7), { red: 60_000, blue: 60_000, activeColor: 'red', lastUpdated: 7 });
 	assert.strictEqual(initialTimer(room(0, null, { timeControl: { type: 'none' } }), 7), null);
+});
+
+test('a bot\'s turn is written as a client writes one, and one after its flag ends the game on time', async () => {
+	const now = T0 + 100_000;
+	const base = { spellNames: ONLINE.spellNames, status: 'playing', seq: true, variant: 'standard', ranked: false, creatorColor: 'blue',
+		red: { uid: 'bot', displayName: 'B', bot: true, connected: true }, blue: { uid: 'hum', displayName: 'H', connected: true },
+		timeControl: { type: 'realtime', initialTime: 60_000, increment: 0 } };
+	const db = fakeDb({ rooms: {
+		INTIME: Object.assign({ startedAt: now - 30_000 }, base),
+		LATE22: Object.assign({ startedAt: now - 70_000 }, base),
+	} });
+	const api = botApi({ db, engine: freshEngine, isFullAccount: async () => true, now: () => now });
+	const ok = await api.submitTurn('bot', 'INTIME', { actions: ['a2', 'pass'] });
+	assert.deepStrictEqual([ok.ok, ok.turn, ok.gameOver], [true, 1, false]);
+	const r = db.dump().rooms.INTIME;
+	const t = r.turns[r.last.key];
+	assert.deepStrictEqual([t.color, t.actions, t.timestamp, t.after, r.last.color], ['red', ['a2', 'pass'], now, undefined, 'red']);
+	assert.deepStrictEqual([r.timer.activeColor, typeof r.timer.red, r.timer.lastUpdated], ['blue', 'number', now]);
+	assert.strictEqual(r.currentSfn, ok.sfn);
+	await assert.rejects(api.submitTurn('zed', 'INTIME', { actions: ['b11', 'pass'] }), (e) => e.status === 403 && e.code === 'not-your-game');
+	// 70 s into a 60 s clock: too late.
+	await assert.rejects(api.submitTurn('bot', 'LATE22', { actions: ['a2', 'pass'] }), (e) => e.status === 409 && e.code === 'time-out');
+	const late = db.dump().rooms.LATE22;
+	assert.deepStrictEqual([late.status, late.winner, late.endReason, late.closedAt, late.turns], ['finished', 'blue', 'time', now, undefined]);
+	// The rating function upholds that as a flag (rating.js, as of closedAt).
+	assert.strictEqual(flagged(late, 'red', late.closedAt), true);
 });

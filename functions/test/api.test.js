@@ -251,6 +251,8 @@ test('the daily puzzle is the one puzzles.html shows that day', async () => {
 	assert.deepStrictEqual((await pub.daily(db, {}, NOW)).rating, { rating: 1500, plays: 3 });
 	await assert.rejects(pub.daily(db, { date: '2999-01-01' }, NOW), (e) => e.status === 400);
 	await assert.rejects(pub.daily(db, { date: 'today' }, NOW), (e) => e.status === 400);
+	// Not a calendar day (Date.parse would roll it over to March).
+	await assert.rejects(pub.daily(db, { date: '2026-02-31' }, NOW), (e) => e.status === 400);
 });
 
 // ---- the HTTP handler ----

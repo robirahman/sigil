@@ -58,11 +58,14 @@ function fakeDb(initial) {
 			if (Object.keys(chain[i]).length === 0) delete chain[i - 1][ps[i - 1]];
 		}
 	};
+	let pushes = 0;
 	const ref = (path) => {
 		const ps = parts(path);
 		return {
 			key: ps.length ? ps[ps.length - 1] : null,
 			child: (c) => ref(ps.concat(parts(c)).join('/')),
+			// A new child key, in creation order (like a push id).
+			push: () => ref(ps.concat(['-p' + String(++pushes).padStart(8, '0')]).join('/')),
 			async once() {
 				const v = read(get(ps));
 				return { val: () => v, exists: () => v !== null, key: ps[ps.length - 1] };
