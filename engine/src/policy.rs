@@ -295,7 +295,7 @@ pub fn policy_weights_override() -> Option<Vec<f32>> {
 /// whose width budget is at least 96 (+94 Elo at 10 s over the shipped stream on
 /// `tfit`, +118 on `tfit_spell_v2`; engine/reports/2026-10-step4.md). The wasm
 /// `configure` and `serve.py` read this, never a literal.
-pub const SHIPPED_POLICY: (bool, usize) = (true, 32);
+pub const SHIPPED_POLICY: (bool, usize) = (true, 96);
 
 /// The site's exploration tail since engine v28: round 3 preset 3 (casts and
 /// dashes, every keep and 64 resolutions per cast, 128 dash branches with 8 pairs

@@ -409,6 +409,24 @@ export function set_policy_explore(mode, cast_window, dash_limit, dash_per, dash
     wasm.set_policy_explore(mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every);
 }
 
+/**
+ * eval.rs `SHIPPED_EVAL`: the net the site's JS must name (rust-ai.js, game-review.js).
+ * tools/wasm-smoke.js fails when a JS literal names any other net.
+ * @returns {string}
+ */
+export function shipped_eval() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.shipped_eval();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
 export class wbg_rayon_PoolBuilder {
     static __wrap(ptr) {
         const obj = Object.create(wbg_rayon_PoolBuilder.prototype);
@@ -541,7 +559,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:22,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:26,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,

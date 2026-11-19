@@ -1,0 +1,162 @@
+{
+ "source": "engine/data/benchmarks/qjlgqr_room.json replayed through ai/replay_bridge.py (2026-11-03)",
+ "winner": "blue",
+ "turns": [
+  {
+   "color": "red",
+   "turnNumber": 1,
+   "sfnBefore": "......................................./Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 1 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "......r................................/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 1 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 2,
+   "sfnBefore": "......r................................/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 2 0:0 -:- -:- tied competitive",
+   "sfnAfter": "......r..........................b...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 2 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 3,
+   "sfnBefore": "......r..........................b...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 3 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "...r..r..........................b...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 3 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 4,
+   "sfnBefore": "...r..r..........................b...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 4 0:0 -:- -:- tied competitive",
+   "sfnAfter": "...r..r.........................bb...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 4 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 5,
+   "sfnBefore": "...r..r.........................bb...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 5 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "..rr..r.........................bb...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 5 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 6,
+   "sfnBefore": "..rr..r.........................bb...../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 6 0:0 -:- -:- tied competitive",
+   "sfnAfter": "..rr..r.........................bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 6 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 7,
+   "sfnBefore": "..rr..r.........................bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 7 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "..rrr.r.........................bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 7 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 8,
+   "sfnBefore": "..rrr.r.........................bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 8 0:0 -:- -:- tied competitive",
+   "sfnAfter": "..rrr.r......................b..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 8 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 9,
+   "sfnBefore": "..rrr.r......................b..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 9 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "..rrrrr......................b..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 9 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 10,
+   "sfnBefore": "..rrrrr......................b..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 10 0:0 -:- -:- tied competitive",
+   "sfnAfter": "..rrrrr.....................bb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 10 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 11,
+   "sfnBefore": "..rrrrr.....................bb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 11 0:0 -:- -:- b1 competitive",
+   "sfnAfter": ".rrrrr....r.................bb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 11 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 12,
+   "sfnBefore": ".rrrrr....r.................bb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 12 0:0 -:- -:- tied competitive",
+   "sfnAfter": ".rrrrr....r................bbb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 12 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 13,
+   "sfnBefore": ".rrrrr....r................bbb..bb.b.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 13 0:0 -:- -:- b1 competitive",
+   "sfnAfter": ".rrrrr.....r...............bbb..bbbr.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 13 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 14,
+   "sfnBefore": ".rrrrr.....r...............bbb..bbbr.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 14 0:0 -:- -:- tied competitive",
+   "sfnAfter": ".rrrrr....rr...............bbb..bbbb.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 14 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 15,
+   "sfnBefore": ".rrrrr....rr...............bbb..bbbb.../Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 15 0:0 -:- -:- b1 competitive",
+   "sfnAfter": ".rrrrr.....r...............bbb.bbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 15 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 16,
+   "sfnBefore": ".rrrrr.....r...............bbb.bbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 16 0:0 -:- -:- tied competitive",
+   "sfnAfter": ".rrrrr....rr...............b...bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 16 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 17,
+   "sfnBefore": ".rrrrr....rr...............b...bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 17 0:0 -:- -:- b1 competitive",
+   "sfnAfter": ".rrrrr.....r...............bbb.bbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 17 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 18,
+   "sfnBefore": ".rrrrr.....r...............bbb.bbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 18 0:0 -:- -:- tied competitive",
+   "sfnAfter": ".rrrrr....rr...............b...bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 18 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 19,
+   "sfnBefore": ".rrrrr....rr...............b...bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 19 0:0 -:- -:- b1 competitive",
+   "sfnAfter": ".rrrrr....rr...............b.b.bbbbr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 19 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 20,
+   "sfnBefore": ".rrrrr....rr...............b.b.bbbbr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 20 0:0 -:- -:- tied competitive",
+   "sfnAfter": "rrrrrr....rr...............b.b.bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 20 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 21,
+   "sfnBefore": "rrrrrr....rr...............b.b.bbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 21 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "rrrrrr.....r...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 21 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 22,
+   "sfnBefore": "rrrrrr.....r...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 22 0:0 -:- -:- tied competitive",
+   "sfnAfter": "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 22 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 23,
+   "sfnBefore": "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 23 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "rrrrrr.....r...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 23 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 24,
+   "sfnBefore": "rrrrrr.....r...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 24 0:0 -:- -:- tied competitive",
+   "sfnAfter": "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 24 0:0 -:- -:- b1 competitive"
+  },
+  {
+   "color": "red",
+   "turnNumber": 25,
+   "sfnBefore": "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 25 0:0 -:- -:- b1 competitive",
+   "sfnAfter": "rrr.rr....rr...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter r 25 0:0 -:- -:- tied competitive"
+  },
+  {
+   "color": "blue",
+   "turnNumber": 26,
+   "sfnBefore": "rrr.rr....rr...............bbbbbbbrr..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 26 0:0 -:- -:- tied competitive",
+   "sfnAfter": "rrrrrr....rr...............b..bbbbbb..b/Seal_of_Lightning,Syzygy,Harvest,Annuity,Seal_of_Wind,Storm_Front,Dividend,Seal_of_Autumn,Seal_of_Winter b 26 0:0 -:- -:- b1 competitive"
+  }
+ ]
+}

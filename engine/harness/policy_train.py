@@ -103,6 +103,13 @@ def _xbetter_rows(z, i, margin):
     return out
 
 
+def _in_explore_tail(se, sfn, target):
+    """1 when the search reached this broken target through SHIPPED_EXPLORE's tail
+    (`policy::policy_diag`'s `in_explore_tail`): a drop the primary window is not
+    meant to cover, so the drift check leaves it out."""
+    return int(bool(json.loads(se.policy_diag_turn(sfn, target)).get('in_explore_tail')))
+
+
 def _extract_file(args):
     path, max_pos, xmargin = args
     se = _se()
@@ -111,7 +118,7 @@ def _extract_file(args):
     except Exception as e:  # truncated download
         return path, None, str(e)
     zs, lv, tg, lex, no, nf, ff, games, plies = [], [], [], [], [], [], [], [], []
-    cls, nondef, comp, xb = [], [], [], []
+    cls, nondef, comp, xb, tail = [], [], [], [], []
     rows = _chosen_rows(z)
     if max_pos:
         rows = rows[:max_pos]
@@ -131,6 +138,7 @@ def _extract_file(args):
             games.append(int(z['game'][i])); plies.append(int(z['ply'][i]))
             c_, nd = _flags(l, t)
             cls.append(c_); nondef.append(nd); comp.append(is_comp); xb.append(is_x)
+            tail.append(_in_explore_tail(se, sfn, target) if not is_x and min(t) < 0 else 0)
     if not zs:
         return path, None, 'empty'
     return path, dict(
@@ -138,7 +146,7 @@ def _extract_file(args):
         lex=np.asarray(lex, np.int64), nopt=np.asarray(no, np.int32), nfeat=np.asarray(nf, np.uint8),
         feats=np.asarray(ff, np.uint16), game=np.asarray(games, np.int64), ply=np.asarray(plies, np.int16),
         cls=np.asarray(cls, np.uint8), nondef=np.asarray(nondef, np.uint8), comp=np.asarray(comp, np.uint8),
-        xb=np.asarray(xb, np.uint8), src=np.asarray([tag] * len(zs))), None
+        xb=np.asarray(xb, np.uint8), tail=np.asarray(tail, np.uint8), src=np.asarray([tag] * len(zs))), None
 
 
 def cmd_extract(a):
@@ -158,11 +166,17 @@ def cmd_extract(a):
                 print(f'{k + 1}/{len(paths)} files, {sum(len(x["z"]) for x in parts)} examples, '
                       f'{time.time() - t0:.0f}s', flush=True)
     out = _concat(parts)
-    # Fail-fast check on primary-window drop rate
+    # Fail-fast check on primary-window drop rate. Targets the search reached
+    # through the explore tail are outside the primary window by design, so only
+    # the remaining drops (train/serve drift) count against the 1% threshold.
     tg = out['target']
     lv = out['level']
     xb_per_level = out['xb'][out['lex']]
-    prim_mask = (xb_per_level == 0)
+    tail_per_level = out['tail'][out['lex']]
+    n_tail_ex = int(((out['xb'] == 0) & (out['tail'] == 1)).sum())
+    n_tail_drop = int(((xb_per_level == 0) & (tail_per_level == 1) & (tg == -1)).sum())
+    print(f"Explore-tail targets (left out of the check): {n_tail_ex} examples, {n_tail_drop} dropped levels")
+    prim_mask = (xb_per_level == 0) & (tail_per_level == 0)
     if prim_mask.any():
         prim_drops = int((tg[prim_mask] == -1).sum())
         prim_total = int(prim_mask.sum())

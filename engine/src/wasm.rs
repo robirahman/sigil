@@ -452,6 +452,13 @@ pub fn nn_eval_raw_full(name: &str, spells: Vec<u8>, mine: u64, theirs: u64,
     spec.net().eval_raw_full(&sp, mine, theirs, walls, my_bank, their_bank, c)
 }
 
+/// eval.rs `SHIPPED_EVAL`: the net the site's JS must name (rust-ai.js, game-review.js).
+/// tools/wasm-smoke.js fails when a JS literal names any other net.
+#[wasm_bindgen]
+pub fn shipped_eval() -> String {
+    crate::eval::SHIPPED_EVAL.to_string()
+}
+
 #[wasm_bindgen]
 pub fn engine_info() -> String {
     format!("{{\"spells\":{},\"nodes\":{},\"candidates\":{:?}}}",

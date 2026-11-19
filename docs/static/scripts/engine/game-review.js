@@ -39,7 +39,7 @@ const RUST_REVIEW_PRESETS = {
 	quick: { tier: 'Easy', timeMs: 100, ttBits: 16 },
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
-const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_mt256', adaptive: [0.10, 2, 6] };
+const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_r6', adaptive: [0.10, 2, 6] };
 // The server's analysis of every rated game (functions/analysis.js) and the
 // position_evals cache: 1 s/position, as the Medium tier. The browser's Quick
 // preset (0.1 s) reaches depth 1-2 in the middlegame, where the review then

@@ -4224,10 +4224,11 @@ fn ordering_gives_no_fill_credit_in_a_dead_sigil() {
 
 #[test]
 fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
-    // The net has no wall input, so a wall alone would leave its evaluation equal to
+    // nnue_mt256 has no wall input, so a wall alone would leave its evaluation equal to
     // the unwalled board's. With the dead mask it equals the board whose slot is
-    // access-blocked for both colours instead.
-    let full = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    // access-blocked for both colours instead. (An SNN2 net reads the walls itself:
+    // see the shipped-eval check at the end.)
+    let full = crate::eval::weights_by_name("nnue_mt256").unwrap();
     let b = dead_sigil_board();
     let mut open = b;
     open.walls = 0;
@@ -4241,6 +4242,9 @@ fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
     assert_ne!(b.evaluate(Color::Red, &full), open.evaluate(Color::Red, &full));
     // No wall, no change: the ordinary fold still applies.
     assert_eq!(open.dead_slots(), 0);
+    // Whatever net ships, a wall must move its evaluation.
+    let shipped = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    assert_ne!(b.evaluate(Color::Red, &shipped), open.evaluate(Color::Red, &shipped));
 }
 
 #[test]
@@ -4803,7 +4807,6 @@ fn mt_network_matches_python_and_sits_on_material_tempo() {
         n += 1;
     }
     assert!(n >= 200, "only {n} golden vectors");
-    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_mt256");
     let w = crate::eval::weights_by_name("nnue_mt256").unwrap();
     let base = crate::eval::MATERIAL_TEMPO;
     assert_eq!(crate::search::even_offset(Color::Red, &w), 50);
@@ -4939,3 +4942,63 @@ fn test_qjlgqr_threefold_repetition_mate() {
     assert!(score25 > -2000, "Red must not evaluate the position as getting mated; score was {}", score25);
 }
 
+/// `nnue_snn2_base` (added by engine/harness/add_net_preset.py): the Rust forward pass equals
+/// the Python integer forward pass on every golden vector, SNN2 walls / bank included.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn nnue_snn2_base_matches_python_golden() {
+    let net = crate::nn::by_name("nnue_snn2_base").unwrap().net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_snn2_base_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let (got, want) = if f.len() == 8 {
+            let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), f[3].parse().unwrap(),
+                               f[4].parse().unwrap(), f[5].parse().unwrap(), c), f[7].parse::<i32>().unwrap())
+        } else {
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c), f[4].parse::<i32>().unwrap())
+        };
+        assert_eq!(got, want, "nnue_snn2_base {line}");
+        n += 1;
+    }
+    assert!(n >= 50, "only {n} golden vectors");
+    assert!(crate::eval::weights_by_name("nnue_snn2_base").is_ok());
+    // Same material + tempo base as nnue_mt256.
+    let w = crate::eval::weights_by_name("nnue_snn2_base").unwrap();
+    assert_eq!(crate::search::even_offset(Color::Red, &w),
+               crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
+}
+
+/// `nnue_r6` (added by engine/harness/add_net_preset.py): the Rust forward pass equals
+/// the Python integer forward pass on every golden vector, SNN2 walls / bank included.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn nnue_r6_matches_python_golden() {
+    let net = crate::nn::by_name("nnue_r6").unwrap().net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_r6_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let (got, want) = if f.len() == 8 {
+            let c = if f[6] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw_full(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), f[3].parse().unwrap(),
+                               f[4].parse().unwrap(), f[5].parse().unwrap(), c), f[7].parse::<i32>().unwrap())
+        } else {
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            (net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c), f[4].parse::<i32>().unwrap())
+        };
+        assert_eq!(got, want, "nnue_r6 {line}");
+        n += 1;
+    }
+    assert!(n >= 50, "only {n} golden vectors");
+    assert!(crate::eval::weights_by_name("nnue_r6").is_ok());
+    // The v36 candidate ships this net (Step 5); same material + tempo base as nnue_mt256.
+    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_r6");
+    let w = crate::eval::weights_by_name("nnue_r6").unwrap();
+    assert_eq!(crate::search::even_offset(Color::Red, &w),
+               crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_mt256").unwrap()));
+}

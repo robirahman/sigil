@@ -119,11 +119,26 @@ def final_value_red(g):
     return None
 
 
+def telemetry_for(telem_obj, turn):
+    """The browser's search metrics for the AI turn numbered `turn`, or None.
+    `byPly` is written keyed by turn number; Firebase hands integer-keyed maps
+    back as JSON arrays (null where no AI turn), so accept a list or a dict."""
+    by_ply = (telem_obj or {}).get('byPly')
+    if turn is None or not by_ply:
+        return None
+    if isinstance(by_ply, list):
+        return by_ply[turn] if 0 <= turn < len(by_ply) else None
+    return by_ply.get(str(turn))
+
+
 # -------------------------------------------------------------------- flag ---
 
 def cmd_flag(a):
     lines = json.load(open(a.lines, encoding='utf-8'))
     rows, _err = load_rows(a.evals)
+    # The scan audits whichever search it ran: without SIGIL_AUDIT_ENGINE=shipped
+    # that is eval_games' legacy tfit / policy-off search, not the shipped engine.
+    print('scan rows by (eval, engine):', dict(Counter((r.get('eval'), r.get('engine')) for r in rows.values())))
     cases, stats = [], Counter()
     for gid, g in lines.items():
         ai = rust_color(g)
@@ -150,12 +165,16 @@ def cmd_flag(a):
             if drop > a.threshold:
                 stats[side + ' falls'] += 1
                 r = rows[(gid, i)]
+                # A capped scan (--time-ms) can stop short of its requested depth.
+                r_j = rows.get((gid, i + 1)) if i + 1 < n else None
+                shallow = any(x is not None and x.get('d') and (x.get('depth') or 0) < x['d'] for x in (r, r_j))
+                if shallow:
+                    stats[side + ' falls on a capped (shallow) scan row'] += 1
                 telem_obj = g.get('aiTelemetry') or {}
-                telem = telem_obj.get('byPly', {})
-                t_i = telem.get(str(i)) or telem.get(str(g['turnNumbers'][i] if g.get('turnNumbers') else i))
+                t_i = telemetry_for(telem_obj, g['turnNumbers'][i] if g.get('turnNumbers') else i)
                 cases.append({'g': gid, 'i': i, 'ai': ai, 'side': side,
                               'v_i': sign * v_i, 'v_j': sign * v_j, 'drop': round(drop, 3),
-                              'terminal': i + 1 == n, 'scan_probe': r.get('probe'),
+                              'terminal': i + 1 == n, 'scan_probe': r.get('probe'), 'shallow': shallow,
                               'scan_best_is_played': (r.get('exp') is not None and
                                                       position_key(r['exp']) == position_key(pos[i + 1])),
                               'turn': g['turnNumbers'][i] if g.get('turnNumbers') else None,

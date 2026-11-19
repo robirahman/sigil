@@ -1,17 +1,51 @@
 # Engine status
 
-**Current as of 2026-09-21.** Everything below the "Phase 0 status" heading is
+**Current as of 2026-11-18.** Everything below the "Phase 0 status" heading is
 the original bitboard-port log and is kept for provenance; where it disagrees
 with this section, this section is right.
 
-## Shipped on `main` (merge 90d96c35; search defaults flipped 8f2cbf88, 2026-09-16)
+## Engine v36 (branch `v36-release-r6`; live once its PR merges and the Functions are deployed)
 
 | | |
 |---|---|
-| strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
-| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` FULL (2.0, 1.0, 2, 50, no predict) + `adopt_partial` (since v14, 2026-09-22; was DEFAULT 2.0/0.4/2/50/predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
-| tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
-| browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
+| engine version | **v36** (`RUST_ENGINE_VERSION = 36`, cache `v104`, `game-review.js?v=43`, `game-board-local.js?v=45`) |
+| shipped config | eval **`nnue_r6`** (r6 self-play value net, SNN2 wall + bank inputs), generator policy `SHIPPED_POLICY` (on, **min_width 96**, back from v35's 32), `TurnIter` stage order back to v34's (`Dash` before `DashCast`), policy weights unchanged (the r6 retrain `r6_warm` was +8.6 [-6.1, +23.3]: not shipped); everything else as v35 |
+| strength | **+66.8 Elo [+51.8, +81.7] vs live v35** on core draws (10 s, 2,160 games), Fissure draws +92.9 [+71.4, +114.3], Dividend draws +75.1 [+53.9, +96.3] (1,080 each; 2026-11-08). Head to head `nnue_r6` vs `nnue_snn2_base`: +21.9 [+7.2, +36.6] |
+| tactical gate | **7/12** (v35 9/12): `nnue_r6` replays the recorded GWSMF5 turn-26 blunder (G2) at depth 5 and at 10 s; its other failures are G1, which no build passes. Human regression set (Step 1, 795 confirmed falls): the played human move is avoided in ~770 at depth 6 |
+| win probability | `docs/static/data/position-winprob.json` refitted for `nnue_r6` (2026-11-08, `engine/harness/position_rescore.py` on the 5,028 PR #28 starts): held-out log loss 0.521 / 0.516 / 0.514 at depth 4 / 5 / 6 (constant 0.678) |
+| tests | **200/200** `cargo test --release --lib`, Cloud Functions tests pass, wasm smoke (3 games, 198 plies replay-verified), nn-wasm parity 192/192 for `nnue_r6` |
+| browser builds | `sigil_engine_bg.wasm` (1,466,331 bytes), `sigil_engine_mt_bg.wasm` (1,660,320 bytes) |
+| deploy | the game review and the rated-from-position pricing load `functions/wasm`: deploy the Functions after the merge (`node functions/copy-engine.js` runs as part of it) |
+| plan | [`docs/designs/ai-training-todos.md`](../docs/designs/ai-training-todos.md) (Steps 0-7) |
+
+## Engine v35 (main until v36 merges; merge c41464f0, PR #57, 2026-10-31)
+
+| | |
+|---|---|
+| engine version | **v35** (`RUST_ENGINE_VERSION = 35`, cache `v89`) |
+| shipped config | eval `nnue_mt256`, generator policy `SHIPPED_POLICY` (on, **min_width 32**: lowered from 96 in PR #57 with no arena; the 2026-10 sweep had 96 best), `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `elastic` FULL + `adopt_partial`, `lmr` band x2 R=1, pondering on for >= 10 s tiers, `TurnIter` stage order `Moves -> MoveCast -> DashCast -> Dash`, bank cap <= 60, repetition-mate prepass ON, 8-slot `FoldRing` leaf cache |
+| tests | **198/198** `cargo test --release --lib`, 49/49 Cloud Functions, wasm smoke 158 plies, nn-wasm parity 264/264 |
+| browser builds | `sigil_engine_bg.wasm` (1,193,083 bytes), `sigil_engine_mt_bg.wasm` (1,388,788 bytes; ~500 KB freed by gating legacy nets) |
+| telemetry | `aiTelemetry` (depth, nodes, eval, threads, ponder, TT fill) written to Firebase `completed_games`. **Arriving** (checked 2026-11-03: every Rust-AI game since 11-01 03:35 UTC). The live rules lack the repo's validation block but accept the field. Median completed depth: Hard 9/5/4/5 and Medium 7/4/3/3 by game phase |
+| strength | **v35 is −24.3 Elo [−39.0, −9.7] vs v34** (core draws, 10 s, 2,160 games; 2026-11-03). Cause: `min_width` 32 and `DashCast` before `Dash` (depth bisection). Reverting both (branch `v35-fix`, now on `ai-training-plan`): +7.9 [−6.8, +22.6] vs v34, **+28.0 [+13.4, +42.7] vs v35**. The live site still runs v35 |
+| tactical gate | `engine/harness/tactical_gate.py` (2026-11-03): v35 9/12, v34 7/12, v35-fix 7/12, `ai-training-plan` (v35-fix + `nnue_snn2_base`) 9/12: with the new net Blue avoids the GWSMF5 blunder again (G2). QJLGQR repetition checks pass on v35 and v35-fix. GWSMF5 G1 fails on every build: Red's search never values the `dash + Flourish` refutation (the Flourish resolution is found only with a 4,096-outcome cast window) |
+
+**2026-11-18: engine v36 (cache v104) -- `nnue_r6`, v35-fix search, refitted win probability.**
+Takes the r6 value net (`nnue_r6`, trained on 668,964 r6 self-play games plus the human-game chunks of Step 1) and
+reverts the two v35 search changes that cost Elo (`min_width` 96, v34 stage order). Gate vs live v35 at 10 s: core
++66.8 [+51.8, +81.7], Fissure +92.9, Dividend +75.1. Tactical gate 7/12 (G2 regresses). Position win probability
+refitted for the new net. See the v36 table above and `docs/designs/ai-training-todos.md`.
+
+**2026-10-31: engine v35 (cache v89) -- Superhuman Desktop Engine Stage 1 & Stage 2 (PR #57).**
+Fixed interior-node `move + dash + cast` starvation by reordering `Stage::DashCast` ahead of non-key bare dashes;
+deduplicated and capped Providence bank first steps to <= 60 variants; added spell-preserving dash sacrifice pairs;
+added offensive/defensive threefold-repetition mate prepass and TT invalidation; added 8-slot inline zero-allocation
+`FoldRing` in `nn.rs`; enabled `SNN2` binary format with 39 wall and 2x4 bank input rows; added live browser search
+telemetry to Firebase `completed_games`. Lowered `SHIPPED_POLICY` min_width 96 -> 32. All 198 Cargo tests pass. What the
+benchmark tests check (corrected 2026-11-03): `test_gwsmf5_spell_preserving_dash` checks only that Red's turn-27 dash +
+Flourish is generated (Blue's turn-26 decision is never searched); `test_qjlgqr_threefold_repetition_mate` checks Blue's
+mate in 1 on turn 26, and Red's turn 25 at depth 2 only. The depth 2..6 claim needs `tactical_gate.py` (plan code to-do C1).
+No arena was run for v35.
 
 **2026-09-18: `judge_move` (wasm) for the Puzzles page.** A move off the stored solution is judged
 live: with only the finishing mate left, `mate::judge_forced_after` decides exhaustively (every

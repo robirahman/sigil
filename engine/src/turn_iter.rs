@@ -487,7 +487,7 @@ impl<'a> TurnIter<'a> {
             }
             Stage::MoveCast => {
                 if self.mi >= self.moves.len() {
-                    self.mi = 0; self.stage = Stage::DashCast; return true;
+                    self.mi = 0; self.stage = Stage::Dash; return true;
                 }
                 let b = self.post_move_board(self.mi);
                 if self.casts.is_empty() && self.ci == 0 {
@@ -587,7 +587,7 @@ impl<'a> TurnIter<'a> {
             }
             Stage::Dash => {
                 if self.mi >= self.moves.len() {
-                    self.mi = 0; self.stage = Stage::Done; return true;
+                    self.mi = 0; self.stage = Stage::DashCast; return true;
                 }
                 let b = self.post_move_board(self.mi);
                 let a = self.first_prefix(self.mi);
@@ -601,7 +601,7 @@ impl<'a> TurnIter<'a> {
                 true
             }
             Stage::DashCast => {
-                if self.mi >= self.moves.len() { self.mi = 0; self.stage = Stage::Dash; return true; }
+                if self.mi >= self.moves.len() { self.stage = Stage::Done; return true; }
                 let b = self.post_move_board(self.mi);
                 let a = self.first_prefix(self.mi);
                 for (t, bd) in b.ordered_dash_branches(self.c, self.window) {

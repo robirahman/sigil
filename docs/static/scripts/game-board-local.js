@@ -1683,7 +1683,7 @@ document.addEventListener('alpine:init', () => {
 						aiTelemetry: (aiMode && Object.keys(_aiTelemetryByPly).length > 0) ? {
 							v: 1,
 							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
-							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_mt256'),
+							eval: String((_lastAiMeta && _lastAiMeta.eval) || 'nnue_r6'),
 							threads: (_lastAiMeta && typeof _lastAiMeta.threads === 'number') ? _lastAiMeta.threads : 1,
 							threadsWanted: (_lastAiMeta && typeof _lastAiMeta.threadsWanted === 'number') ? _lastAiMeta.threadsWanted : 1,
 							mtError: (_lastAiMeta && typeof _lastAiMeta.mtError === 'string') ? _lastAiMeta.mtError : false,
@@ -3183,7 +3183,7 @@ document.addEventListener('alpine:init', () => {
 							gameRecord.aiTelemetry = {
 								v: 1,
 								engineVersion: engVer,
-								eval: String(meta.eval || 'nnue_mt256'),
+								eval: String(meta.eval || 'nnue_r6'),
 								threads: (typeof meta.threads === 'number' && Number.isFinite(meta.threads)) ? meta.threads : 1,
 								threadsWanted: (typeof meta.threadsWanted === 'number' && Number.isFinite(meta.threadsWanted)) ? meta.threadsWanted : 1,
 								mtError: (typeof meta.mtError === 'string') ? meta.mtError : false,

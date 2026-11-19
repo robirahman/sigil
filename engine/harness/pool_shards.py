@@ -30,7 +30,8 @@ import sys
 
 GAME = re.compile(r'^GAME seed=(\d+) arm=(\w+) winner=(\S+) plies=(\d+)')
 TIMES = re.compile(r'arm_s=([0-9.]+) base_s=([0-9.]+)')
-CONFIG = re.compile(r'ENGINE CONFIG\s+(.*)$')
+# ab_search.py prints `ENGINE CONFIG`, ab_version.py (release A/B) `VERSION A/B`.
+CONFIG = re.compile(r'(?:ENGINE CONFIG|VERSION A/B)\s+(.*)$')
 
 
 def wilson(k, n, z=1.96):

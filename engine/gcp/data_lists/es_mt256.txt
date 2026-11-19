@@ -1,0 +1,25 @@
+# nnue_mt256's training corpus (engine v32): the DATA prefixes of prep run
+# 20261019T193114Z-sigil-es-prep, recovered from its runner.log on 2026-11-03.
+# That prep wrote 27,010,137 positions from 132,565 chunks (1,268,971 games) with
+# EVALS=mtempo,tfit_spell_v2,nnue_spell4; a re-prep of this list should match those counts.
+# Use: DATA="$(grep -v '^#' engine/gcp/data_lists/es_mt256.txt | tr '\n' ' ')"
+gs://focus-surfer-494820-g0-sigil/runs/20261013T191825Z-sigil-ix-v31sp0/data
+gs://focus-surfer-494820-g0-sigil/runs/20261013T191852Z-sigil-ix-v31sp1/data
+gs://focus-surfer-494820-g0-sigil/data/r5/human_e9/d4
+gs://focus-surfer-494820-g0-sigil/data/s3/v27_2026-10-07/d4
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040206Z-sigil-r4d-308/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040035Z-sigil-r4d-302/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040329Z-sigil-r4d-313/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040226Z-sigil-r4d-309/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040312Z-sigil-r4d-312/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040108Z-sigil-r4d-304/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040010Z-sigil-r4d-300/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040345Z-sigil-r4d-314/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040151Z-sigil-r4d-307/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040049Z-sigil-r4d-303/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040238Z-sigil-r4d-310/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040137Z-sigil-r4d-306/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040022Z-sigil-r4d-301/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040123Z-sigil-r4d-305/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040255Z-sigil-r4d-311/data
+gs://focus-surfer-494820-g0-sigil/runs/20261011T040403Z-sigil-r4d-315/data

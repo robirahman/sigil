@@ -66,6 +66,37 @@ async function driver() {
 	}
 	const info = JSON.parse(wasm_bindgen.engine_info());
 	if (info.nodes !== 39) throw new Error('engine_info nodes != 39');
+	// One shipped eval. The site names its net in JS (rust-ai.js's default, the
+	// review search that Functions also price positions with, and telemetry
+	// fallbacks); eval.rs SHIPPED_EVAL changing without them would leave the site
+	// playing the old net under the new engine version. Every quoted net name in
+	// the site's scripts and the Functions must be the one the wasm ships.
+	{
+		const shipped = wasm_bindgen.shipped_eval();
+		const root = path.join(__dirname, '..');
+		const files = [];
+		const walk = (d) => {
+			for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+				const p = path.join(d, e.name);
+				if (e.isDirectory()) { if (e.name !== 'node_modules' && e.name !== 'wasm') walk(p); }
+				else if (e.name.endsWith('.js')) files.push(p);
+			}
+		};
+		walk(path.join(root, 'docs', 'static', 'scripts'));
+		for (const f of fs.readdirSync(path.join(root, 'functions'))) {
+			if (f.endsWith('.js')) files.push(path.join(root, 'functions', f));
+		}
+		const bad = [];
+		for (const f of files) {
+			const t = fs.readFileSync(f, 'utf8');
+			for (const m of t.matchAll(/['"`](nnue_[a-z0-9_]+|tfit[a-z0-9_]*)['"`]/g)) {
+				if (m[1] !== shipped) bad.push(path.relative(root, f) + ': ' + m[1]);
+			}
+		}
+		if (bad.length) throw new Error('eval.rs SHIPPED_EVAL is ' + shipped + ' but the JS names:\n  ' + bad.join('\n  '));
+		if (RUST_REVIEW_SEARCH.evalName !== shipped) throw new Error('RUST_REVIEW_SEARCH.evalName != ' + shipped);
+		console.log('shipped eval ' + shipped + ': ' + files.length + ' scripts agree');
+	}
 	// Game clock: the JS allocation must equal the engine's for every input.
 	if (typeof wasm_bindgen.move_budget_ms === 'function') {
 		let checked = 0;
