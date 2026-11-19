@@ -151,6 +151,31 @@ async function onMessage(db, cid, mid, msg, send) {
 	}, send);
 }
 
+/**
+ * Set `field` of the node at `path` to count(), then check it again until
+ * it holds: a handler that read an older list and wrote after a newer one
+ * is corrected by whichever writes last, as each one checks after its own
+ * write. A node that is gone (a deleted thread, a disbanded team) is never
+ * recreated. Resolves to the count, or null when the node is gone.
+ */
+async function settleCount(db, path, field, count) {
+	for (let i = 0; i < 5; i++) {
+		const n = await count();
+		let gone = false;
+		// Never aborted: the first call sees the (empty) local cache, and
+		// only a write the server checks brings the real value. Writing
+		// null where there is nothing changes nothing.
+		await db.ref(path).transaction((cur) => {
+			gone = !cur;
+			if (!cur) return null;
+			return cur[field] === n ? cur : Object.assign({}, cur, { [field]: n });
+		});
+		if (gone) return null;
+		if ((await count()) === n) return n;
+	}
+	return null;
+}
+
 // ---- Forums and blogs ----
 
 /**
@@ -165,9 +190,17 @@ async function onForumPost(db, cat, tid, pid, post, now, send) {
 	if (!thread || !post) return null;
 	const posts = [];
 	postsSnap.forEach((c) => { posts.push(Object.assign({ id: c.key }, c.val())); });
-	await db.ref('forum_threads/' + cat + '/' + tid + '/replies').set(Math.max(0, posts.length - 1));
+	const postsRef = db.ref('forum_posts/' + cat + '/' + tid);
+	await settleCount(db, 'forum_threads/' + cat + '/' + tid, 'replies', async () => {
+		const snap = await postsRef.once('value');
+		return Math.max(0, snap.numChildren() - 1);
+	});
 	const first = posts.reduce((a, p) => (!a || (p.at || 0) < (a.at || 0) ? p : a), null);
 	if (!first || first.id === pid) return { replies: posts.length - 1, told: 0 };
+	// Removed before this ran: nothing to tell, and its text is not pushed.
+	const mine = posts.find((p) => p.id === pid);
+	if (!mine || mine.removed || typeof mine.text !== 'string') return { replies: posts.length - 1, told: 0 };
+	post = mine;
 	const recent = posts.filter((p) => p.id !== pid).sort((a, b) => (b.at || 0) - (a.at || 0)).map((p) => p.by);
 	const tell = [...new Set([thread.by].concat(recent))].filter((u) => human(u) && u !== post.by).slice(0, THREAD_NOTIFY_MAX + 1);
 	const name = (await val(db, 'users/' + post.by + '/displayName')) || 'A player';
@@ -183,8 +216,10 @@ async function onForumPost(db, cat, tid, pid, post, now, send) {
 }
 
 async function onBlogComment(db, pid, cid, comment, now, send) {
-	const post = await val(db, 'blog_posts/' + pid);
-	if (!post || !comment || post.by === comment.by) return null;
+	const [post, still] = await Promise.all([val(db, 'blog_posts/' + pid), val(db, 'blog_comments/' + pid + '/' + cid)]);
+	// Gone before this ran (removed by its writer): its text is not pushed.
+	if (!post || !still || !comment || post.by === comment.by) return null;
+	comment = still;
 	const name = (await val(db, 'users/' + comment.by + '/displayName')) || 'A player';
 	return notify(db, post.by, 'blog-' + pid, { type: 'blog', actor: comment.by, post: pid, title: cut(post.title, 120), at: now }, {
 		send, collapse: true, event: cid, push: { title: 'Comment on “' + cut(post.title, 60) + '”', body: name + ': ' + cut(comment.text, 100), url: 'blog.html?p=' + encodeURIComponent(pid) + '#comments', tag: 'sigil-blog-' + pid },
@@ -203,10 +238,10 @@ async function teamStaff(db, tid) {
  * admitted (by someone else) or of a new role.
  */
 async function onTeamMember(db, tid, uid, before, after, now, send) {
-	const [team, members] = await Promise.all([val(db, 'teams/' + tid), val(db, 'team_members/' + tid)]);
+	const team = await val(db, 'teams/' + tid);
 	if (!team) return null;
-	const count = Object.keys(members || {}).length;
-	if (team.memberCount !== count) await db.ref('teams/' + tid + '/memberCount').set(count);
+	const membersRef = db.ref('team_members/' + tid);
+	const count = await settleCount(db, 'teams/' + tid, 'memberCount', async () => (await membersRef.once('value')).numChildren());
 	if (!before && after) await joinRunningBattles(db, tid, uid, after.joined, now);
 	const url = 'teams.html?id=' + encodeURIComponent(tid);
 	const base = { type: 'team', team: tid, teamName: cut(team.name, 40), at: now };
@@ -250,6 +285,9 @@ async function onTeamRequest(db, tid, uid, now, send) {
 		await db.ref('team_requests/' + tid + '/' + uid).remove();
 		return 0;
 	}
+	// Withdrawn, admitted or declined before this ran: nothing to do.
+	const req = await val(db, 'team_requests/' + tid + '/' + uid);
+	if (!req) return 0;
 	// Who asked where (server-only), for account deletion.
 	await db.ref('team_request_index/' + uid + '/' + tid).set(now);
 	const [team, name] = await Promise.all([val(db, 'teams/' + tid), val(db, 'users/' + uid + '/displayName')]);
@@ -257,7 +295,8 @@ async function onTeamRequest(db, tid, uid, now, send) {
 	let told = 0;
 	for (const staff of await teamStaff(db, tid)) {
 		const w = await notify(db, staff, 'teamreq-' + tid, { type: 'team', event: 'request', team: tid, teamName: cut(team.name, 40), actor: uid, at: now }, {
-			send, collapse: true, event: uid, push: { title: cut(team.name, 40), body: (name || 'A player') + ' asks to join.', url: 'teams.html?id=' + encodeURIComponent(tid) + '#requests', tag: 'sigil-teamreq-' + tid },
+			// One request (its writer and time): asking again counts again.
+			send, collapse: true, event: uid + '-' + (req.at || 0), push: { title: cut(team.name, 40), body: (name || 'A player') + ' asks to join.', url: 'teams.html?id=' + encodeURIComponent(tid) + '#requests', tag: 'sigil-teamreq-' + tid },
 		});
 		if (w) told++;
 	}

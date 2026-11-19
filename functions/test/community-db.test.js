@@ -135,9 +135,22 @@ test('forums: the reply count, and who is told of a reply', async () => {
 	assert.strictEqual(await get('notifications/carol/forum-t1'), null);
 	// A blog comment tells the post's author, not the commenter.
 	await db.ref('blog_posts/b1').set({ by: 'bob', title: 'My games', body: 'x', at: 1 });
+	await db.ref('blog_comments/b1').set({ c1: { by: 'alice', text: 'Nice', at: 2 }, c2: { by: 'bob', text: 'Thanks', at: 3 } });
 	await community.onBlogComment(db, 'b1', 'c1', { by: 'alice', text: 'Nice', at: 2 }, 30);
 	assert.strictEqual((await get('notifications/bob/blog-b1')).actor, 'alice');
 	assert.strictEqual(await community.onBlogComment(db, 'b1', 'c2', { by: 'bob', text: 'Thanks', at: 3 }, 31), null);
+	// Removed before the event ran: nobody is told.
+	await db.ref('notifications/bob').remove();
+	assert.strictEqual(await community.onBlogComment(db, 'b1', 'c9', { by: 'carol', text: 'deleted words', at: 4 }, 32), null);
+	assert.strictEqual(await get('notifications/bob'), null);
+	// A count some stale write left wrong is put right, and a deleted
+	// thread is not brought back by its count.
+	await db.ref('forum_threads/general/t1/replies').set(7);
+	await community.onForumPost(db, 'general', 't1', 'p1', { by: 'alice', at: 1, text: 'x' }, 40);
+	assert.strictEqual(await get('forum_threads/general/t1/replies'), 2);
+	await db.ref('forum_posts/general/t2/q1').set({ by: 'bob', at: 1, text: 'x' });
+	assert.strictEqual(await community.onForumPost(db, 'general', 't2', 'q1', { by: 'bob', at: 1, text: 'x' }, 41), null);
+	assert.strictEqual(await get('forum_threads/general/t2'), null);
 });
 
 test('teams: the member count, requests, acceptance and roles', async () => {
@@ -151,6 +164,11 @@ test('teams: the member count, requests, acceptance and roles', async () => {
 	});
 	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'bob', 10), 2);
 	assert.strictEqual(await get('team_request_index/bob/reds'), 10);
+	// A request withdrawn before its event ran: no index, nobody told.
+	await db.ref('notifications/alice').remove();
+	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'erin', 12), 0);
+	assert.strictEqual(await get('team_request_index/erin'), null);
+	assert.strictEqual(await get('notifications/alice'), null);
 	// A request whose writer is already being deleted is removed, not indexed.
 	await db.ref().update({ 'deleted_users/dave': 1, 'team_requests/reds/dave': { at: 6 } });
 	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'dave', 11), 0);
