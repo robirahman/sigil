@@ -18,6 +18,8 @@ const NS = 'sigil-js-default-rtdb';
 const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const FN_PORT = Number(process.env.FUNCTIONS_EMULATOR_PORT || 5001);
+// The emulators' project (emulators:exec sets it): callables are served under it.
+const PROJECT = process.env.GCLOUD_PROJECT || 'demo-sigil';
 let seq = 0;
 
 // The emulator applies firebase.json's rules to the project's default
@@ -30,7 +32,7 @@ test.before(async () => {
 });
 
 async function player(name) {
-	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
+	const app = initializeApp({ projectId: PROJECT, apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
 	const auth = getAuth(app);
 	connectAuthEmulator(auth, 'http://' + AUTH_HOST, { disableWarnings: true });
 	const db = getDatabase(app);
@@ -161,7 +163,7 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	// The upheld claim adds to bob's record of abandonments; the refused one to nobody's.
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'abandons' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'abandons' + seq));
 	const flags = async (u) => (await admin.ref('user_flags/' + u.uid + '/abandons').once('value')).val();
 	assert.deepStrictEqual([await flags(bob), await flags(alice), await flags(carol), await flags(dave)], [1, null, null, null]);
 	// Counted once per room: the same record rated again (a retried
@@ -177,11 +179,74 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	assert.strictEqual(await flags(bob), 1);
 });
 
+test('a second offense in a month suspends the player from rated play automatically', async () => {
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'stall' + seq));
+	const alice = await player('alice');
+	const bob = await player('bob');
+	// Bob abandoned a game a week ago (as rateGame records it).
+	const weekAgo = Date.now() - 7 * 86400000;
+	await admin.ref('user_flags/' + bob.uid).set({ abandons: 1, abandonedGames: { OLD1: true }, offenses: { OLD1: { kind: 'abandon', at: weekAgo } } });
+	// A live 10-minute game, ten seconds a turn, that Bob then sat out: the
+	// server's timestamps, so written here as the server would have them.
+	const code = 'STALL' + seq;
+	const t0 = Date.now() - 20 * 60000;
+	const turns = {};
+	let ts = t0;
+	let lastKey = null;
+	ONLINE.turns.slice(0, 9).forEach((t, i) => {
+		ts += 10000;
+		const k = '-s' + String(i).padStart(4, '0');
+		turns[k] = Object.assign({ color: t.color, actions: t.actions, timestamp: ts }, lastKey ? { after: lastKey } : {});
+		lastKey = k;
+	});
+	assert.strictEqual(ONLINE.turns[8].color, 'red');
+	await admin.ref('rooms/' + code).set({
+		spellNames: ONLINE.spellNames, status: 'playing', created: t0, startedAt: t0, ranked: true, seq: true,
+		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { uid: bob.uid, displayName: 'bob', connected: true },
+		timeControl: { type: 'realtime', initialTime: 600000, increment: 0 }, allowSpectators: true, variant: 'standard',
+		turns, last: { key: lastKey, color: 'red' },
+	});
+	// Blue's clock: 600 s less 4 turns of 10 s, run out without a move.
+	await admin.ref('rooms/' + code).update({ finishedBy: 'red', winner: 'red', endReason: 'time', closedAt: ts + 561000 });
+	await admin.ref('rooms/' + code + '/status').set('finished');
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+	let flags = null;
+	for (let i = 0; i < 40; i++) {
+		flags = (await admin.ref('user_flags/' + bob.uid).once('value')).val();
+		if (flags && flags.banUntil) break;
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	assert.deepStrictEqual([flags.stalls, flags.abandons, flags.offenses[code].kind, flags.offenses[code].leftMs, flags.auto, flags.by],
+		[1, 1, 'stall', 560000, true, 'auto']);
+	assert.ok(flags.banUntil > Date.now() + 23 * 3600000 && flags.banUntil < Date.now() + 25 * 3600000, String(flags.banUntil));
+	assert.deepStrictEqual([flags.restrictions[code].level, flags.restrictions[code].rooms], [1, { OLD1: 'abandon', [code]: 'stall' }]);
+	assert.match(flags.reason, /^Automatic: 2 online games/);
+	// The player sees it; the rules keep him out of rated rooms, not casual ones.
+	assert.strictEqual((await get(ref(bob.db, 'user_flags/' + bob.uid + '/auto'))).val(), true);
+	const next = 'NEXT' + seq;
+	await set(ref(alice.db, 'rooms/' + next), {
+		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
+		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
+		timeControl: { type: 'none' }, allowSpectators: true, variant: 'standard', seq: true,
+	});
+	const join = { blue: { uid: bob.uid, displayName: 'bob', connected: true, seq: true }, status: 'playing' };
+	await assert.rejects(update(ref(bob.db, 'rooms/' + next), Object.assign({ ranked: true }, join)));
+	await update(ref(bob.db, 'rooms/' + next), Object.assign({ ranked: false, unratedReason: 'suspended' }, join));
+	// He appeals; the rules take it once, for this suspension.
+	const appeal = { banAt: flags.at, text: 'I was not stalling.', at: serverTimestamp(), status: 'open' };
+	await set(ref(bob.db, 'appeals/' + bob.uid), appeal);
+	await assert.rejects(set(ref(bob.db, 'appeals/' + bob.uid), appeal));
+});
+
 test('the server ends a game whose clock ran out with nobody watching', async () => {
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const { expireRooms } = require('../rooms');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin' + seq));
 	const alice = await player('alice');
 	const bob = await player('bob');
 	const code = await playRoom(alice, bob, 3, { type: 'realtime', initialTime: 3000, increment: 0 });
@@ -234,9 +299,10 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	{
 		const { initializeApp: adminApp } = require('firebase-admin/app');
 		const { getDatabaseWithUrl } = require('firebase-admin/database');
-		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-flags' + seq));
+		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-flags' + seq));
 		await a.ref('user_flags/' + dave.uid).set({ banUntil: Date.now() + 86400000, reason: 'x', abandons: 1, abandonedGames: { ABC234: true } });
 		await a.ref('report_limits/' + dave.uid).set(Date.now());
+		await a.ref('appeals/' + dave.uid).set({ banAt: 1, text: 'x', at: 1, status: 'open' });
 		// Dave's puzzle rating, synced progress, Storm record and both public
 		// puzzle boards.
 		await a.ref('users/' + dave.uid).update({ puzzle: { rating: 1500, plays: 3 }, puzzleProgress: { solved: { p1: 1 } }, puzzleStorm: { best: 12, runs: 2 } });
@@ -252,14 +318,14 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	// Push tokens go too (only the server can read them now).
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-del' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-del' + seq));
 	assert.strictEqual((await admin.ref('push_tokens/' + dave.uid).once('value')).exists(), false, 'push_tokens/');
 	// No follow or block on either side still names the deleted account.
 	for (const p of [`follows/${dave.uid}`, `followers/${dave.uid}`, `follows/${erin.uid}/${dave.uid}`, `followers/${erin.uid}/${dave.uid}`,
 		`blocks/${dave.uid}`, `blockedBy/${gus.uid}/${dave.uid}`, `blocks/${frank.uid}/${dave.uid}`, `blockedBy/${dave.uid}`]) {
 		assert.strictEqual((await admin.ref(p).once('value')).exists(), false, p);
 	}
-	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/', 'users/', 'puzzle_leaderboard/', 'storm_leaderboard/']) {
+	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/', 'appeals/', 'users/', 'puzzle_leaderboard/', 'storm_leaderboard/']) {
 		assert.strictEqual((await admin.ref(p + dave.uid).once('value')).exists(), false, p);
 	}
 });
@@ -268,7 +334,7 @@ test('a correspondence move is pushed to the player to move, from their own toke
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const { notifyTurn } = require('../notify');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-push' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-push' + seq));
 	const alice = await player('alice');
 	const bob = await player('bob');
 	const carol = await player('carol');

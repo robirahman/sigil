@@ -723,6 +723,11 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 	await assertFails(carol({ unratedReason: 'casual' }));
 	await assertFails(carol({ ranked: true, unratedReason: 'suspended' }));
 	await assertSucceeds(carol({ unratedReason: 'suspended' }));
+	// ... also when the other seat has no flags at all (a missing banUntil
+	// once broke the rule, refusing every suspended joiner's unrated join).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/B5'), Object.assign({}, waiting, { red: { uid: 'zoe', connected: true } })));
+	await assertFails(update(ref(db('bob'), 'rooms/B5'), Object.assign(join(true), { unratedReason: 'suspended' })));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/B5'), Object.assign(join(false), { unratedReason: 'suspended' })));
 	// A ban that has run out no longer counts.
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() - 1000, abandons: 3 }));
 	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true, seq: true }, unratedReason: 'suspended' })));
