@@ -213,8 +213,9 @@
 								<p class="puzzle-panel__sub puzzle-panel__source" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within ' + ({ 3: 'three', 4: 'four' }[puzzle.mate] || puzzle.mate) + ' of your turns, whatever the replies.'))"></p>
-								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
+									x-text="puzzle.task ? puzzle.task : puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within ' + ({ 3: 'three', 4: 'four' }[puzzle.mate] || puzzle.mate) + ' of your turns, whatever the replies.'))"></p>
+								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
+									x-text="puzzle.key_lookup ? 'Graded by the answer key: your turn is correct if the position it reaches is one of the executions of the winning plan that keep the win. The AI always replies, and play continues even after a miss.' : 'Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.'">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
 									x-bind:class="{ 'puzzle-panel__status--solved': puzzleStatus === 'solved', 'puzzle-panel__status--failed': puzzleStatus === 'failed' }"
@@ -626,17 +627,21 @@
 			 * The board is the published puzzle the dev puzzle was taken from
 			 * (same position, same proven lines), without its tags or source
 			 * game, and no rating or progress is written. As in the benchmark,
-			 * only the FIRST turn is graded: a stored (proven) solution or a win
-			 * on the spot is correct; any other turn is judged by the engine.
+			 * only the FIRST turn is graded. A mate: a stored (proven) solution
+			 * or a win on the spot is correct; any other turn is judged by the
+			 * engine. A winning turn (dev set v3): the answer key alone decides
+			 * (answer_keys correct, failed_keys the right idea carried out
+			 * wrongly, anything else the wrong idea), as the harness grades it.
 			 * Results stay on this device (localStorage).
 			 */
 			const BENCH_DATA_KEY = 'sigilbench_dev_payload';
 			const BENCH_RESULTS_KEY = 'sigilbench_try_human';
+			const BENCH_SETS = ['dev_v3', 'dev_v2'];   // sigilbench.html SET_IDS
 			function bootBench(params, all) {
 				const loading = document.getElementById('puzzle-loading');
 				let dev = null;
 				try { dev = JSON.parse(sessionStorage.getItem(BENCH_DATA_KEY) || 'null'); } catch (e) { dev = null; }
-				if (!dev || !Array.isArray(dev.puzzles) || dev.set !== 'dev_v2') {   // sigilbench.html SET_ID
+				if (!dev || !Array.isArray(dev.puzzles) || BENCH_SETS.indexOf(dev.set) < 0) {
 					loading.innerHTML = 'The SigilBench dev set is password-protected. <a href="sigilbench.html#try">Unlock it on the SigilBench page</a>, then open a puzzle from there.';
 					return;
 				}
@@ -666,12 +671,26 @@
 					key: node.key || (node.after ? puzzleSfnKey(node.after) : undefined),
 					continuations: (node.continuations || []).map(withKeys),
 				});
-				const puzzle = src ? Object.assign({}, src, { bench: bp.id, tags: [] }) : {
+				// The task as the model reads it: the first paragraph of its prompt
+				// (bench/sigilbench/prompt.py user_prompt).
+				const task = String(bp.user_prompt || '').split('\n\n')[0];
+				const win = bp.kind === 'win';
+				const reference = bp.reference_solution
+					? [{ actions: bp.reference_solution, key: bp.reference_key || undefined }] : [];
+				const puzzle = src ? Object.assign({}, src, { bench: bp.id, tags: [], task }) : win ? {
+					// The board's winning-turn mode, graded by the key lookup alone
+					// (key_lookup); "Show solution" rings one winning execution, and
+					// the engine plays on from whatever is played.
+					id: bp.id, bench: bp.id, kind: 'winning', key_lookup: true, mate: null, mover: bp.mover,
+					sfn: browserSfn(bp.sfn), variant: bp.variant || 'competitive',
+					turn: parseInt(String(bp.sfn).split(/\s+/)[2], 10) || null, tags: [], game: {}, task,
+					solution_keys: bp.answer_keys || [], failed_keys: bp.failed_keys || [],
+					key_idea_text: bp.key_idea_text || '', solutions: reference,
+				} : {
 					id: bp.id, bench: bp.id, kind: 'mate', mate: bp.n, mover: bp.mover, sfn: browserSfn(bp.sfn),
 					variant: bp.variant || 'competitive', turn: parseInt(String(bp.sfn).split(/\s+/)[2], 10) || null,
-					tags: [], game: {}, solution_keys: bp.solution_keys || [],
-					solutions: bp.solution_line ? [withKeys(bp.solution_line)]
-						: bp.reference_solution ? [{ actions: bp.reference_solution }] : [],
+					tags: [], game: {}, solution_keys: bp.solution_keys || [], task,
+					solutions: bp.solution_line ? [withKeys(bp.solution_line)] : reference,
 				};
 				const readResults = () => { try { return JSON.parse(localStorage.getItem(BENCH_RESULTS_KEY) || '{}') || {}; } catch (e) { return {}; } };
 				const results = readResults();
@@ -686,13 +705,20 @@
 					r[bp.id] = { status, how, n: bp.n, at: Date.now() };
 					if (pending) r[bp.id].pending = true;
 					try { localStorage.setItem(BENCH_RESULTS_KEY, JSON.stringify(r)); } catch (e) { /* storage blocked */ }
-					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first (not solved)' }[status];
+					const label = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first (not solved)',
+						wrong_execution: 'Right idea, wrong execution (not solved)', wrong_idea: 'Wrong idea (not solved)' }[status];
 					const el = document.getElementById('bench-result');
 					if (el) el.textContent = pending ? 'The engine is judging your first turn…'
 						: 'Recorded: ' + label + (how ? ' — ' + how.replace(/\.$/, '') : '') + '. Only your first turn counts; play on or retry for practice.';
 				};
 				const keys = bp.solution_keys || [];
 				window.SIGIL_BENCH_FIRST_TURN = ({ key, won }) => {
+					if (win) {
+						if ((bp.answer_keys || []).indexOf(key) >= 0) record('correct', 'an execution of the winning plan that keeps the win');
+						else if ((bp.failed_keys || []).indexOf(key) >= 0) record('wrong_execution', 'the winning plan, carried out in a way that does not keep the win');
+						else record('wrong_idea', 'not the winning plan');
+						return;
+					}
 					if (keys.indexOf(key) >= 0) record('correct', 'a proven solution');
 					else if (won) record('correct', 'wins on the spot');
 					else if (bp.n === 1) record('wrong', 'the turn does not win the game');
@@ -725,9 +751,9 @@
 					backLabel: 'Back to SigilBench',
 				};
 				const side = bp.mover === 'red' ? 'Red' : 'Blue';
-				window.SIGIL_PUZZLE_TITLE = 'SigilBench ' + bp.id + ' — Mate in ' + bp.n + ', ' + side + ' to move';
+				window.SIGIL_PUZZLE_TITLE = 'SigilBench ' + bp.id + ' — ' + (win ? 'Winning turn' : 'Mate in ' + bp.n) + ', ' + side + ' to move';
 				window.SIGIL_PUZZLE_SOURCE = 'Benchmark conditions: your first turn is graded, as a model\'s one submitted turn is. '
-					+ (prior ? 'Already attempted (' + prior.status + '); this attempt is practice.' : 'Think it through before you play.');
+					+ (prior ? 'Already attempted (' + String(prior.status).replace(/_/g, ' ') + '); this attempt is practice.' : 'Think it through before you play.');
 				window.SIGIL_PUZZLE_TAGS = '';
 				const done = list.map(p => results[p.id]).filter(r => r && r.status);   // this set only (v1 results share the store)
 				window.SIGIL_PUZZLE_PROGRESS = (k + 1) + ' of ' + list.length + ' dev puzzles · ' + done.length + ' attempted, '

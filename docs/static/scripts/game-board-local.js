@@ -2208,8 +2208,18 @@ document.addEventListener('alpine:init', () => {
 						// when it picks its reply (PuzzleOpponent._winningReply).
 						if (step > 0) return;
 						const sol = (puzzle.solutions || []).find(x => x.key === key);
-						if (sol || puzzleKeys(puzzle).indexOf(key) >= 0 || (over && _engineRef.board.winner === puzzle.mover)) {
+						const wonNow = over && _engineRef.board.winner === puzzle.mover;
+						if (sol || puzzleKeys(puzzle).indexOf(key) >= 0 || (wonNow && !puzzle.key_lookup)) {
 							_puzzleSolve(sol && sol.p ? 'Solved! That turn keeps a ' + puzzlePct(sol.p) + ' chance to win.' : 'Solved!');
+							return;
+						}
+						// SigilBench winning turns (puzzles.html?bench=): the answer key
+						// is complete, so the lookup alone decides; the engine only
+						// replies (a failed puzzle is not judged).
+						if (puzzle.key_lookup) {
+							_puzzleFail((puzzle.failed_keys || []).indexOf(key) >= 0
+								? 'Right idea, wrong execution: that carries out the winning plan, but not in a way that keeps the win. Play on, or Retry.'
+								: 'Wrong idea: that is not the winning plan. Play on, or Retry.');
 							return;
 						}
 						_this._puzzleJudgePending = true;
@@ -2375,12 +2385,20 @@ document.addEventListener('alpine:init', () => {
 						}
 						return text;
 					};
+					// SigilBench winning turns name the plan; the line is one execution of it.
+					if (puzzle.kind === 'winning' && puzzle.key_idea_text) lines.push('The winning plan: ' + puzzle.key_idea_text + '.');
 					shown.forEach((sol, i) => {
 						const prefix = shown.length > 1 ? ('Line ' + (i + 1) + ': ') : '';
 						lines.push(prefix + render(sol));
 					});
 					const extra = puzzleKeys(puzzle).length - shown.length;
-					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
+					if (extra > 0 && puzzle.key_idea_text) {
+						lines.push(extra + ' other execution' + (extra === 1 ? ' of the plan also keeps' : 's of the plan also keep') + ' the win.');
+					} else if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
+					const failed = (puzzle.failed_keys || []).length;
+					if (puzzle.key_lookup && failed) {
+						lines.push(failed + ' execution' + (failed === 1 ? ' of the plan does' : 's of the plan do') + ' not keep the win.');
+					}
 					if (puzzle.kind === 'winning' && typeof puzzle.p_second === 'number') {
 						lines.push('Every other turn the engine tried keeps at most ' + puzzlePct(puzzle.p_second) + '.');
 					}

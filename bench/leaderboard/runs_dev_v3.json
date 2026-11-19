@@ -1,0 +1,8 @@
+{
+ "_comment": "Dev set v3 (bench/dev/dev_set_v3.json): mate in 1-5 by proven shortest mate, and winning-turn puzzles. Runs live in gs://focus-surfer-494820-g0-sigilbench-private/<gcs>. Add each run here as {gcs, label, config[, kind]}; a baseline without per-puzzle results may give by_category {\"m1\": [correct, total], ...}. Rebuild: python3 bench/tools/build_leaderboard.py --set v3 --runs-root <local copy of the bucket>",
+ "split": "dev",
+ "set_id": "dev_v3",
+ "set_label": "Dev set v3",
+ "runs": [],
+ "baselines": []
+}
