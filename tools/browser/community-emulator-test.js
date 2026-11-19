@@ -219,7 +219,7 @@ const XSS_POST = 'Hello **world**\n\n<script>window.__xss=1</script>\n\n[click m
 		// ---- 2. A follow reaches the inbox (server) ----
 		await pageB.evaluate((a) => SigilFriends.follow(a), alice);
 		await go(pageA, 'inbox.html');
-		const followNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('started following you')), 45000);
+		const followNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('started following you') && t.includes('Bob')), 45000);
 		check('Alice\'s inbox lists the new follower', !!followNote && followNote.includes('Bob'), followNote);
 
 		// ---- 3. Forums ----
@@ -251,7 +251,7 @@ const XSS_POST = 'Hello **world**\n\n<script>window.__xss=1</script>\n\n[click m
 		check('the reply shows', !!(await until(async () => (await text(pageB, '[data-testid="post-body"]')).some((t) => t.includes('I like Sprout')))));
 		check('the server counts the reply', (await until(async () => rest('GET', 'forum_threads/general/' + tid + '/replies'), 45000)) === 1);
 		await go(pageA, 'inbox.html');
-		const replyNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('replied in')), 45000);
+		const replyNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('replied in') && t.includes('Bob')), 45000);
 		check('Alice is told of the reply', !!replyNote && replyNote.includes('Bob') && replyNote.includes('Best opening?'), replyNote);
 		// Bob edits, then removes, his post.
 		await pageB.evaluate(() => {
@@ -285,7 +285,7 @@ const XSS_POST = 'Hello **world**\n\n<script>window.__xss=1</script>\n\n[click m
 		await click(pageB, '[data-testid="add-comment"]');
 		check('the comment shows', !!(await until(async () => (await text(pageB, '[data-testid="comment-text"]')).includes('Congratulations!'))));
 		await go(pageA, 'inbox.html');
-		const blogNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('commented on')), 45000);
+		const blogNote = await until(async () => (await text(pageA, '[data-testid="note"]')).find((t) => t.includes('commented on') && t.includes('Bob')), 45000);
 		check('Alice is told of the comment', !!blogNote && blogNote.includes('My first Sigil tournament'), blogNote);
 		await go(pageG, 'blog.html');
 		await pageG.waitForFunction(() => typeof firebase !== 'undefined' && firebase.apps.length > 0, { timeout: 30000, polling: 250 });

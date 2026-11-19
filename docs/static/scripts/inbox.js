@@ -51,7 +51,16 @@
 
 	function start(user) {
 		uid = user.uid;
-		const db = firebase.database();
+		// The badge is never worth breaking a page for (a stubbed SDK in a
+		// test, a database without the inbox's rules yet).
+		try {
+			watch(firebase.database());
+		} catch (e) {
+			console.warn('[Inbox] badge off:', e);
+		}
+	}
+
+	function watch(db) {
 		const nref = db.ref('notifications/' + uid).orderByChild('at').limitToLast(WATCH);
 		nref.on('value', (s) => {
 			let n = 0;
@@ -59,6 +68,7 @@
 			notes = n;
 			emit();
 		}, () => {});
+		refs.push(nref);
 		const dref = db.ref('dm_index/' + uid).orderByChild('last').limitToLast(WATCH);
 		dref.on('value', (s) => {
 			let n = 0;
@@ -66,7 +76,7 @@
 			convos = n;
 			emit();
 		}, () => {});
-		refs = [nref, dref];
+		refs.push(dref);
 	}
 
 	function stop() {

@@ -64,6 +64,10 @@ async function pushNotice(db, uid, type, p, send) {
  * when opts.collapse) and push opts.push. Nothing for an AI, a deleted
  * account, or when uid has blocked entry.actor. Resolves to the entry
  * written or null.
+ *
+ * A collapsed entry pushes only its first unread repeat (one push for a busy
+ * thread until it is read); opts.quietMs pushes again only that long after
+ * the entry's last write (a follow toggled on and off).
  */
 async function notify(db, uid, key, entry, opts) {
 	const o = opts || {};
@@ -75,16 +79,22 @@ async function notify(db, uid, key, entry, opts) {
 	if (deleted || blocked) return null;
 	const ref = db.ref('notifications/' + uid + '/' + key);
 	let written = Object.assign({}, entry);
+	let fresh = true;
 	if (o.collapse) {
 		const res = await ref.transaction((cur) => {
 			const n = cur && !cur.read ? (cur.n || 1) + 1 : 1;
 			return Object.assign({}, entry, { n });
 		});
 		written = res.snapshot.val();
+		fresh = (written && written.n) === 1;
 	} else {
+		if (o.quietMs) {
+			const prev = await val(db, 'notifications/' + uid + '/' + key);
+			fresh = !(prev && typeof prev.at === 'number' && prev.at > entry.at - o.quietMs);
+		}
 		await ref.set(entry);
 	}
-	if (o.push) await pushNotice(db, uid, entry.type, o.push, o.send).catch(() => null);
+	if (o.push && fresh) await pushNotice(db, uid, entry.type, o.push, o.send).catch(() => null);
 	return written;
 }
 
@@ -94,7 +104,7 @@ async function onFollow(db, target, follower, now, send) {
 	if (!(await val(db, 'follows/' + follower + '/' + target))) return null;
 	const name = (await val(db, 'users/' + follower + '/displayName')) || 'A player';
 	return notify(db, target, 'follow-' + follower, { type: 'follow', actor: follower, at: now }, {
-		send, push: { title: 'New follower', body: name + ' follows you on Sigil.', url: 'profile.html?uid=' + encodeURIComponent(follower), tag: 'sigil-follow-' + follower },
+		send, quietMs: 86400000, push: { title: 'New follower', body: name + ' follows you on Sigil.', url: 'profile.html?uid=' + encodeURIComponent(follower), tag: 'sigil-follow-' + follower },
 	});
 }
 

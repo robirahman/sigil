@@ -15,8 +15,10 @@ let env;
 
 test.before(async () => {
 	const [host, port] = (process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000').split(':');
+	// Its own project, so its database is not rules.test.js's: node --test
+	// runs the files at once and each clears its database between tests.
 	env = await initializeTestEnvironment({
-		projectId: 'demo-sigil',
+		projectId: 'demo-sigil-community',
 		database: { rules: RULES, host, port: Number(port) },
 	});
 });

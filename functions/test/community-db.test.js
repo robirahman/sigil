@@ -42,14 +42,19 @@ test('inbox: written once per subject, pushed only when switched on', async () =
 	// The site switch is off: no push.
 	assert.strictEqual(sent.length, 0);
 	await db.ref('community_config/push').set(true);
-	await community.onFollow(db, 'alice', 'bob', 2000, send);
+	const DAY = 86_400_000;
+	await community.onFollow(db, 'alice', 'bob', 1000 + DAY + 1, send);
 	assert.strictEqual(sent.length, 1);
 	assert.deepStrictEqual(sent[0].tokens, ['tok-alice']);
 	assert.strictEqual(sent[0].message.data.title, 'New follower');
 	assert.match(sent[0].message.data.body, /Bob follows you/);
+	// Unfollow and follow again: the entry moves, no second push that day.
+	await community.onFollow(db, 'alice', 'bob', 5000 + DAY, send);
+	assert.strictEqual(sent.length, 1);
+	assert.strictEqual((await get('notifications/alice/follow-bob')).at, 5000 + DAY);
 	// Turned off by the player, for that type only.
 	await db.ref('notify_prefs/alice/follow').set(false);
-	await community.onFollow(db, 'alice', 'bob', 3000, send);
+	await community.onFollow(db, 'alice', 'bob', 10 * DAY, send);
 	assert.strictEqual(sent.length, 1);
 	// An unfollow before the event: nothing new.
 	await db.ref('follows/carol/alice').set(null);
@@ -60,14 +65,19 @@ test('inbox: written once per subject, pushed only when switched on', async () =
 	assert.strictEqual(await community.notify(db, '__ai_rust_hard__', 'x', { type: 'follow', actor: 'bob', at: 1 }), null);
 	await db.ref('deleted_users/carol').set(1);
 	assert.strictEqual(await community.notify(db, 'carol', 'x', { type: 'follow', actor: 'bob', at: 1 }), null);
-	// Collapsed entries count unread repeats, and start over once read.
-	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'alice', at: 1 }, { collapse: true });
-	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'carol', at: 2 }, { collapse: true });
+	// Collapsed entries count unread repeats, and start over once read; only
+	// the first unread one is pushed.
+	const p = { title: 'Reply', body: 'x' };
+	const before = sent.length;
+	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'alice', at: 1 }, { collapse: true, send, push: p });
+	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'carol', at: 2 }, { collapse: true, send, push: p });
 	assert.strictEqual((await get('notifications/bob/forum-t1')).n, 2);
+	assert.strictEqual(sent.length, before + 1);
 	await db.ref('notifications/bob/forum-t1/read').set(true);
-	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'dave', at: 3 }, { collapse: true });
+	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'dave', at: 3 }, { collapse: true, send, push: p });
 	const e = await get('notifications/bob/forum-t1');
 	assert.deepStrictEqual([e.n, e.actor, e.read], [1, 'dave', undefined]);
+	assert.strictEqual(sent.length, before + 2);
 });
 
 test('challenges and messages', async () => {
