@@ -526,6 +526,17 @@ class MultiplayerController {
 		this.emit({ type: 'history', sfns: h.sfns });
 	}
 
+	/**
+	 * Waiting for input, the game still open here, with every turn the room
+	 * holds played on this board (or skipped by the reconnect).
+	 */
+	_caughtUpAndWaiting() {
+		const board = this.board;
+		if (!this._waiting || !board || board.gameover || this._endedByRoom()) return false;
+		const roomTurns = ((this.sync && this.sync._turnKeys) || []).length;
+		return (this._unseenTurns || 0) + this._gameLog.length >= roomTurns;
+	}
+
 	/** The game was ended by the room (a forfeit, a flag, an abandonment, an abort), not on this board. */
 	_endedByRoom() {
 		return !!(this._forfeitHandled || this._timedOut || this._aborted);
@@ -549,31 +560,39 @@ class MultiplayerController {
 	 */
 	async _endAsRoom() {
 		const winner = this._roomWinner;
-		const board = this.board;
-		const open = () => !!this._waiting && !!board && !board.gameover
-			&& !this._timedOut && !this._forfeitHandled && !this._aborted;
-		if (!winner || this._roomResultChecked || !open()) return;
+		if (!winner || this._roomResultChecking || !this._caughtUpAndWaiting()) return;
 		// A page on older scripts cannot check: it keeps waiting, as before.
 		if (typeof replayRoomResult !== 'function' || typeof this.sync.readRoomResult !== 'function') return;
-		const roomTurns = ((this.sync && this.sync._turnKeys) || []).length;
-		if ((this._unseenTurns || 0) + this._gameLog.length < roomTurns) return;
-		this._roomResultChecked = true;
-		let room = null;
-		try { room = await this.sync.readRoomResult(); } catch (e) { room = null; }
-		// Not read: try again at the next wait.
-		if (!room) { this._roomResultChecked = false; return; }
-		const replayed = room.status === 'finished' && room.winner === winner
-			? await replayRoomResult(this.spellNames, this._variant, (this.sync && this.sync.startSfn) || null, room.turns)
-			: null;
-		if (!replayed || !replayed.gameover || replayed.winner !== winner) {
-			console.warn('[Controller] the room was closed with a result its moves do not show; the server judges it.', { winner });
-			this.emit({ type: 'message', awaiting: null,
-				message: 'Your opponent closed the game with a result the moves do not show. The server will judge it.' });
-			this._stopTimer();
-			this._reportRating();
-			return;
+		if (this._roomResultOk === undefined) {
+			this._roomResultChecking = true;
+			let room = null;
+			let replayed = null;
+			try {
+				room = await this.sync.readRoomResult();
+				if (room && room.status === 'finished' && room.winner === winner) {
+					replayed = await replayRoomResult(this.spellNames, this._variant, (this.sync && this.sync.startSfn) || null, room.turns);
+				}
+			} catch (e) {
+				room = null;
+			} finally {
+				this._roomResultChecking = false;
+			}
+			// Not read: again at the next wait.
+			if (!room) return;
+			this._roomResultOk = !!replayed && replayed.gameover && replayed.winner === winner;
+			if (!this._roomResultOk) {
+				console.warn('[Controller] the room was closed with a result its moves do not show; the server judges it.', { winner });
+				this.emit({ type: 'message', awaiting: null,
+					message: 'Your opponent closed the game with a result the moves do not show. The server will judge it.' });
+				this._stopTimer();
+				this._reportRating();
+				return;
+			}
 		}
-		if (!open()) return;
+		// The loop may have moved on while the room was read: the next wait
+		// takes the result.
+		if (!this._roomResultOk || !this._caughtUpAndWaiting()) return;
+		const board = this.board;
 		console.warn('[Controller] the room finished without this board ending the game; taking its result.', { winner });
 		this._timedOut = true;
 		this._stopTimer();

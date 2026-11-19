@@ -196,8 +196,15 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	await until(() => lost._inputResolve, 'turn 9');
 	check(!over(lost) && lost.board.turnCounter === 9, 'unreplayable: the board missed the threefold');
 	lost.sync.room = { status: 'finished', winner: 'blue', turns: TURNS };
+	// The loop leaves its wait while the room is read (it was consuming
+	// input): the result is not taken then, but at the next wait.
+	const read = lost.sync.readRoomResult;
+	lost.sync.readRoomResult = async function () { lost._waiting = false; return read.call(this); };
 	lost.sync.finish('blue', 'finished');
-	await until(() => over(lost), 'the room\'s result');
+	await new Promise((r) => setTimeout(r, 300));
+	check(!over(lost), 'a result verified after the loop left its wait is not taken then');
+	lost._waiting = true;
+	await lost._endAsRoom();
 	check(over(lost).winner === 'blue' && lost.board.gameover && lost.board.winner === 'blue', 'the room\'s result ends the game here');
 	check(E.boardToSfn(lost.board) === ref.sync.final.finalSfn, 'on the position the game ended on', E.boardToSfn(lost.board));
 	check(lost.sync.final === null, 'and nothing is written');
