@@ -50,6 +50,9 @@ function _compiled() {
 	positionExpectedScore, gameStartRedWinProb,
 	// The review panel's reader of game_evals documents (analysis.js tests).
 	rustEvalsToReview, _reviewPositions,
+	// A tournament room's spells (tournaments.js), drawn as the lobby does.
+	generateSpellList, setBoardLayout, variantBoardLayout, variantHasDuplicates,
+	normalizeExpansionSelection, isUnratedSpell,
 };`);
 	_script = new vm.Script(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });
 	return _script;

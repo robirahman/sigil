@@ -72,6 +72,9 @@ class FirebaseSync {
 		this.startSfn = null;
 		this.startPos = null;
 		this.creatorColor = 'red';
+		// A tournament game (functions/tournaments.js creates its room):
+		// { id, kind, name, pairing, berserk }, else null.
+		this.tournament = null;
 
 		// Server time offset for clock synchronization
 		this._serverTimeOffset = 0;
@@ -331,6 +334,8 @@ class FirebaseSync {
 
 		this.timeControl = data.timeControl || { type: 'none' };
 		this.allowSpectators = data.allowSpectators !== false;
+		this.tournament = data.tournament && typeof data.tournament === 'object' && typeof data.tournament.id === 'string'
+			? data.tournament : null;
 		// Variant is room-scoped: the joiner inherits whatever the
 		// creator picked. Default 'standard' for older rooms whose
 		// data was written before the field existed.
@@ -717,12 +722,19 @@ class FirebaseSync {
 	async initTimer(config, firstColor) {
 		if (!this.roomRef || !config || config.type === 'none') return;
 		const first = firstColor === 'blue' ? 'blue' : 'red';
+		// A tournament room starts with its timer (functions/tournaments.js),
+		// running since the game began: a reload must not reset it. Its
+		// seats' initial times may differ (room-clock.js roomInitialTime).
+		let room = null;
+		try { room = await this.readRoom(); } catch (e) { /* the defaults below */ }
+		if (room && room.timer && room.timer.activeColor) return;
+		const initial = (c) => (room && typeof roomInitialTime === 'function' ? roomInitialTime(room, c) : null) || config.initialTime;
 
 		let timerData;
 		if (config.type === 'realtime') {
 			timerData = {
-				red: config.initialTime,
-				blue: config.initialTime,
+				red: initial('red'),
+				blue: initial('blue'),
 				activeColor: first,
 				lastUpdated: firebase.database.ServerValue.TIMESTAMP,
 			};
@@ -1288,13 +1300,13 @@ class FirebaseSync {
 	/**
 	 * Follow the room's records that move a clock (room-clock.js): pauses
 	 * (a player's vacation, written by the server) and gifts of time.
-	 * @param {function} callback - receives { pauses, gifts, startedAt, ready }
-	 *   (ready once all three have loaded)
+	 * @param {function} callback - receives { pauses, gifts, startedAt,
+	 *   berserk, extraTime, ready } (ready once all have loaded)
 	 */
 	listenToClockRecords(callback) {
 		if (!this.roomRef) return;
-		const rec = { pauses: null, gifts: null, startedAt: null, ready: false };
-		const keys = ['pauses', 'gifts', 'startedAt'];
+		const rec = { pauses: null, gifts: null, startedAt: null, berserk: null, extraTime: null, ready: false };
+		const keys = ['pauses', 'gifts', 'startedAt', 'berserk', 'extraTime'];
 		const seen = new Set();
 		for (const k of keys) {
 			this.roomRef.child(k).on('value', (snap) => {
@@ -1303,6 +1315,33 @@ class FirebaseSync {
 				rec.ready = seen.size === keys.length;
 				callback(Object.assign({}, rec));
 			});
+		}
+	}
+
+	/**
+	 * Berserk (arena tournaments): halve our own clock and drop the
+	 * increment, for a bonus point if we win (functions/tournaments.js).
+	 * The rules accept it only before our first move, in a room whose
+	 * tournament allows it. The display's timer node loses the same half in
+	 * the same write. Returns true when the server took it.
+	 */
+	async berserk() {
+		if (!this.roomRef || (this.myColor !== 'red' && this.myColor !== 'blue')) return false;
+		const me = this.myColor;
+		try {
+			const room = await this.readRoom();
+			if (!room || room.status !== 'playing' || (room.berserk && room.berserk[me])) return false;
+			const updates = { ['berserk/' + me]: true };
+			const tc = room.timeControl || {};
+			if (room.timer && typeof room.timer[me] === 'number' && typeof tc.initialTime === 'number') {
+				const full = typeof roomInitialTime === 'function' ? roomInitialTime(room, me) : tc.initialTime;
+				updates['timer/' + me] = room.timer[me] - (full - Math.floor(full / 2));
+			}
+			await this.roomRef.update(updates);
+			return true;
+		} catch (e) {
+			console.error('[Sync] berserk FAILED:', e.code, e.message);
+			return false;
 		}
 	}
 
