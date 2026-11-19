@@ -10,6 +10,16 @@
 | `analyzeGame` | task queue, enqueued by `rateGame` for each rated game | The Rust engine's review of the game (`analysis.js`) at the Quick-review preset, 10 positions per task, re-enqueued until done; writes `game_evals/{roomCode}`, which the review panel reads. Progress in `game_evals_progress/{gameId}` (server-only). Fills and reads the eval cache `position_evals/{key}`. |
 | `evalPositions` | callable (signed in) | Up to 10 positions a browser Quick review searched itself: each is checked (it must read back to itself) and searched again here before it is cached in `position_evals`, so clients cannot poison the cache. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
+| `inboxFollow`, `inboxChallenge` | new `followers/{target}/{uid}`, `challenges/{target}/{room}` | An inbox entry (`notifications/{uid}`, `community.js`); a follow is also pushed. |
+| `pushMessage` | new `dm_messages/{conv}/{id}` | Web push of a private message to its recipient. |
+| `forumPost` | new `forum_posts/{cat}/{thread}/{id}` | The thread's reply count; a reply is told to the thread's author and latest posters. |
+| `blogComment` | new `blog_comments/{post}/{id}` | Tells the post's author. |
+| `teamMember`, `teamRequest`, `teamBattle` | team writes | Member counts; requests to the staff; admissions and roles to the player; battle invitations to the invited leaders. |
+| `communityGame` | new `user_games/{uid}/{id}` | Scores rated games for running team battles (`engine/team-battle.js`); correspondence results to the inbox. |
+| `battleTick` | every 5 minutes | Announces team battles that started; closes ended ones with their standings (`team_battles/{id}/result`). |
+| `disbandTeam` | callable (the leader or an admin) | Removes a team, its members, requests, bans, forum and battles not yet started. |
+
+Inbox pushes (everything `community.js` sends) go out only while `community_config/push` is `true` (the switch on `admin-community.html`) and the player has not turned that kind off (`notify_prefs/{uid}/{kind}`). They use the same FCM key, tokens and service worker as "Your move".
 
 ## How a result is checked
 
@@ -36,7 +46,7 @@
 ```sh
 cd functions && npm ci
 npm test             # rating.js on recorded games, analysis.js with the wasm engine (no emulator)
-npm run test:rules   # database.rules.json on the database emulator
+npm run test:rules   # database.rules.json on the database emulator (and community.js with admin rights)
 npm run test:e2e     # rules + functions + auth emulators, through the client SDK
 ```
 

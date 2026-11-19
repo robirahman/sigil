@@ -359,7 +359,9 @@
 			const params = new URLSearchParams(location.search);
 			const db = () => firebase.database();
 			const ID_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
-			Alpine.data('teamsPage', () => ({
+			// Firebase listeners stay out of Alpine's reactive state (a
+			// proxied Reference breaks the SDK).
+			Alpine.data('teamsPage', () => { const live = { refs: [], reqRef: null }; return {
 				view: params.get('battle') ? 'battle' : params.get('id') ? 'team' : 'list',
 				teamId: params.get('id') || '',
 				battleId: params.get('battle') || '',
@@ -394,7 +396,6 @@
 				battle: null,
 				scores: {},
 				leaderOf: {},
-				_refs: [],
 				_tick: 0,
 
 				get myRole() { return this.account && this.members[this.account.uid] ? this.members[this.account.uid].role : null; },
@@ -548,7 +549,7 @@
 						C.fillNames(Object.keys(this.members), this.names);
 						this.loadRequests();
 					}, () => {});
-					this._refs.push(tRef, mRef);
+					live.refs.push(tRef, mRef);
 					this.loadTeamBattles();
 				},
 
@@ -560,15 +561,14 @@
 					this.myRequest = r && r.val();
 				},
 
-				_reqRef: null,
 				loadRequests() {
-					if (!this.isStaff || this._reqRef) return;
-					this._reqRef = db().ref('team_requests/' + this.teamId);
-					this._reqRef.on('value', (s) => {
+					if (!this.isStaff || live.reqRef) return;
+					live.reqRef = db().ref('team_requests/' + this.teamId);
+					live.reqRef.on('value', (s) => {
 						this.requests = s.val() || {};
 						C.fillNames(Object.keys(this.requests), this.names);
 						if (location.hash === '#requests') this.$nextTick(() => { const el = document.getElementById('requests'); if (el) el.scrollIntoView(); });
-					}, () => { this._reqRef = null; });
+					}, () => { live.reqRef = null; });
 				},
 
 				async loadTeamBattles() {
@@ -734,7 +734,7 @@
 						this.scores = s.val() || {};
 						C.fillNames(Object.keys(this.scores), this.names);
 					}, () => {});
-					this._refs.push(bRef, sRef);
+					live.refs.push(bRef, sRef);
 				},
 
 				async loadLeaderships() {
@@ -754,7 +754,7 @@
 					const ok = await this._run(() => db().ref('team_battles/' + this.battleId).remove());
 					if (ok) location.href = 'teams.html?id=' + encodeURIComponent(host);
 				},
-			}));
+			}; });
 		});
 	</script>
 

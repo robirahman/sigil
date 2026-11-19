@@ -182,7 +182,9 @@
 			const C = window.SigilCommunity;
 			const params = new URLSearchParams(location.search);
 			const TEAM_ROLE = { leader: 'the leader', mod: 'a moderator', member: 'a member' };
-			Alpine.data('inboxPage', () => ({
+			// Firebase listeners stay out of Alpine's reactive state: a
+			// proxied Reference breaks the SDK's internals.
+			Alpine.data('inboxPage', () => { const live = { refs: [], msgRef: null, unwatchBlock: null }; return {
 				state: 'loading',
 				tab: ['messages', 'settings'].includes(params.get('tab')) ? params.get('tab') : 'notes',
 				uid: null,
@@ -212,9 +214,6 @@
 				siteInboxPush: false,
 				savedMsg: '',
 				settingsError: '',
-				_refs: [],
-				_msgRef: null,
-				_unwatchBlock: null,
 
 				get unreadNotes() { return this.notes.filter((n) => !n.read).length; },
 				get unreadConvos() { return this.convos.filter((c) => this.isUnread(c)).length; },
@@ -224,8 +223,8 @@
 				},
 
 				_stop() {
-					this._refs.forEach((r) => r.off());
-					this._refs = [];
+					live.refs.forEach((r) => r.off());
+					live.refs = [];
 					this.closeConvo();
 				},
 
@@ -255,7 +254,7 @@
 							if (mine && this.isUnread(mine) && this.tab === 'messages') this._markConvoRead();
 						}
 					}, (e) => console.warn('[Inbox] conversations:', e));
-					this._refs = [notesRef, convoRef];
+					live.refs = [notesRef, convoRef];
 					db.ref('community_prefs/' + u.uid + '/dm').once('value').then((s) => { this.dmPref = s.val() || 'all'; }, () => {});
 					db.ref('notify_prefs/' + u.uid).once('value').then((s) => { this.notifyPrefs = s.val() || {}; }, () => {});
 					db.ref('community_config/push').once('value').then((s) => { this.siteInboxPush = s.val() === true; }, () => {});
@@ -363,7 +362,7 @@
 					// Readable only once it exists and we are in it: a refusal
 					// here just means "not started yet".
 					const ref = db.ref('dm_messages/' + cid).limitToLast(200);
-					this._msgRef = ref;
+					live.msgRef = ref;
 					ref.on('value', (s) => {
 						const list = [];
 						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
@@ -373,7 +372,7 @@
 						this.$nextTick(() => { const el = this.$refs.msgs; if (el) el.scrollTop = el.scrollHeight; });
 					}, () => { this.messages = []; });
 					if (window.SigilFriends || await this._friends()) {
-						this._unwatchBlock = SigilFriends.watchBlockedEither(other, (b) => { this.activeBlocked = b; });
+						live.unwatchBlock = SigilFriends.watchBlockedEither(other, (b) => { this.activeBlocked = b; });
 					}
 				},
 
@@ -383,10 +382,10 @@
 				},
 
 				closeConvo() {
-					if (this._msgRef) this._msgRef.off();
-					this._msgRef = null;
-					if (this._unwatchBlock) this._unwatchBlock();
-					this._unwatchBlock = null;
+					if (live.msgRef) live.msgRef.off();
+					live.msgRef = null;
+					if (live.unwatchBlock) live.unwatchBlock();
+					live.unwatchBlock = null;
 					this.active = null;
 					this.activeBlocked = false;
 					this.messages = [];
@@ -528,7 +527,7 @@
 					}
 					this.pushBusy = false;
 				},
-			}));
+			}; });
 		});
 	</script>
 

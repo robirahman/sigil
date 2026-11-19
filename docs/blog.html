@@ -203,7 +203,9 @@
 			const params = new URLSearchParams(location.search);
 			const db = () => firebase.database();
 			const DRAFT_KEY = 'sigil-blog-draft';
-			Alpine.data('blogPage', () => ({
+			// Firebase listeners stay out of Alpine's reactive state (a
+			// proxied Reference breaks the SDK).
+			Alpine.data('blogPage', () => { const live = { refs: [] }; return {
 				view: params.get('p') ? 'post' : params.get('u') ? 'user' : (params.get('new') || params.get('edit')) ? 'edit' : 'home',
 				pid: params.get('p') || params.get('edit') || '',
 				authorUid: params.get('u') || '',
@@ -220,7 +222,6 @@
 				loading: true,
 				busy: false,
 				error: '',
-				_refs: [],
 
 				get muted() { return this.roles.mutedUntil > C.serverNow(); },
 				get mutedText() { return this.account && this.muted ? 'Your account is muted until ' + new Date(this.roles.mutedUntil).toLocaleString() + '.' : ''; },
@@ -292,7 +293,7 @@
 						this.comments = list;
 						C.fillNames(list.map((c) => c.by), this.names);
 					}, () => {});
-					this._refs = [pRef, cRef];
+					live.refs = [pRef, cRef];
 				},
 
 				async loadDraft() {
@@ -377,7 +378,7 @@
 				reportComment(c) {
 					C.report({ kind: 'comment', target: c.by, post: this.pid, comment: c.id, what: 'this comment' });
 				},
-			}));
+			}; });
 		});
 	</script>
 

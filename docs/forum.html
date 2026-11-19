@@ -251,7 +251,9 @@
 			const C = window.SigilCommunity;
 			const params = new URLSearchParams(location.search);
 			const db = () => firebase.database();
-			Alpine.data('forumPage', () => ({
+			// Firebase listeners stay out of Alpine's reactive state (a
+			// proxied Reference breaks the SDK).
+			Alpine.data('forumPage', () => { const live = { refs: [] }; return {
 				categories: FORUM_CATEGORIES,
 				cat: params.get('c') || '',
 				tid: params.get('t') || '',
@@ -279,7 +281,6 @@
 				editDraft: '',
 				editingTitle: false,
 				titleDraft: '',
-				_refs: [],
 
 				get isMod() { return this.roles.forumMod || (this.isTeamCat && (this.teamRole === 'leader' || this.teamRole === 'mod')); },
 				get muted() { return this.roles.mutedUntil > C.serverNow(); },
@@ -334,8 +335,8 @@
 				fullTime: (ts) => C.fullTime(ts),
 
 				_off() {
-					this._refs.forEach((r) => r.off());
-					this._refs = [];
+					live.refs.forEach((r) => r.off());
+					live.refs = [];
 				},
 
 				loadIndex() {
@@ -363,7 +364,7 @@
 					};
 					recent.on('value', (s) => { got.recent = s.val() || {}; render(); }, (e) => { this.error = C.errorText(e); this.loading = false; });
 					pinned.on('value', (s) => { got.pinned = s.val() || {}; render(); }, () => {});
-					this._refs = [recent, pinned];
+					live.refs = [recent, pinned];
 				},
 
 				loadThread() {
@@ -388,7 +389,7 @@
 							this.$nextTick(() => { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); });
 						}
 					}, () => {});
-					this._refs = [tRef, pRef];
+					live.refs = [tRef, pRef];
 				},
 
 				async _run(fn) {
@@ -488,7 +489,7 @@
 					if (ok) location.href = 'forum.html?c=' + encodeURIComponent(this.cat);
 					else this.loadThread();
 				},
-			}));
+			}; });
 		});
 	</script>
 

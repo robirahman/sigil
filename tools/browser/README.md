@@ -129,3 +129,20 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Community: messages, inbox, forums, blogs, teams
+
+```sh
+(cd docs && python3 -m http.server 8808) &
+cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
+  'FN_PORT=5001 node ../tools/browser/community-emulator-test.js http://localhost:8808'
+```
+
+Three accounts (one an admin) and a guest, on the emulators with the functions running: a message from
+a profile, the "Inbox (N)" badge, read marks, a reported message read by the admin (only that
+conversation) and the writer muted; a follow, a forum reply and a blog comment reaching the inbox
+through the functions; a forum thread and a blog post with `<script>`, `<img onerror>` and
+`javascript:` links in them rendering as text (nothing runs); edits, removals, an admin lock; a closed
+team with a request, admission and the server's member count; team battle standings; disbanding
+through the callable; what guests see.
+
