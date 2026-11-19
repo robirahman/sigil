@@ -3,14 +3,15 @@
 # within k?" (engine/examples/cert_tool within; the answer is a proof either
 # way, or budget/incomplete). Input $IN/<first arg>: {"items": [{"id", "sfn", "k"}, ...]}
 # (sfn = the puzzle position, mover to move; k = N - 1 to show a mate in N is
-# exact). Results go to $OUT/within.jsonl as they finish.
+# exact). Results go to $OUT/within_<shard>.jsonl as they finish (resumed from $IN).
 #   args: <input file> [time_ms=3600000] [threads_per_job=4]
 set -uo pipefail
 cd "$(dirname "$0")/../../.."
 INP=$IN/$1; T=${2:-3600000}; TH=${3:-4}
 W=${WORKERS:-$(nproc)}; J=$(( W / TH )); [ "$J" -ge 1 ] || J=1
-[ -f "$IN/within.jsonl" ] && cp "$IN/within.jsonl" "$OUT/within.jsonl"
-python3 - "$BIN" "$INP" "$OUT/within.jsonl" "$T" "$TH" "$J" <<'PY' > $OUT/within.log 2>&1
+SAFE=${SHARD//\//of}; RES=within_$SAFE.jsonl      # per shard, so the Spot keeper can resume it
+for f in within.jsonl $RES; do [ -f "$IN/$f" ] && cp "$IN/$f" "$OUT/$RES"; done
+python3 - "$BIN" "$INP" "$OUT/$RES" "$T" "$TH" "$J" <<'PY' > $OUT/within.log 2>&1
 import json, os, subprocess, sys, concurrent.futures as cf
 bin_, inp, out, t, th, j = sys.argv[1:7]
 items = json.load(open(inp))['items']
