@@ -220,7 +220,7 @@
 								<template x-if="tutorialStatus === 'done' && tutorialIndex === tutorial.lessons.length - 1">
 									<a class="action-button" href="#practice-ai">Practise against the AI</a>
 								</template>
-								<template x-if="tutorialStatus === 'playing' && tutorialLesson.steps[tutorialStep] && !tutorialLesson.steps[tutorialStep].ask">
+								<template x-if="tutorialStatus === 'playing' && tutorialLesson.steps[tutorialStep] && !tutorialLesson.steps[tutorialStep].ask && !(tutorialLesson.steps[tutorialStep].do || {}).any">
 									<button class="action-button drill-reveal" x-on:click="tutorialReveal = true" x-bind:disabled="tutorialReveal">Show me</button>
 								</template>
 								<button class="action-button tutorial-restart" x-on:click="tutorialRestart()">Restart drill</button>
