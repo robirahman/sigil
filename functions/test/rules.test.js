@@ -931,3 +931,91 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+// ---- Glicko-2 pool ratings and matchmaking ----
+
+test('pool ratings are the server\'s; a player may only carry a rename onto their rows', async () => {
+	const rec = { r: 1500, rd: 80, vol: 0.06, n: 12, w: 6, l: 6, at: 1 };
+	await seed({ users: { alice: named('Alice') }, ratings: { alice: { blitz: rec } },
+		pool_leaderboard: { blitz: { alice: { displayName: 'Alice', r: 1500, rd: 80, n: 12 } } },
+		site_config: { ratingDisplay: 'elo' } });
+	await assertSucceeds(get(ref(db(null), 'ratings/alice')));
+	await assertSucceeds(get(ref(db(null), 'pool_leaderboard/blitz')));
+	await assertSucceeds(get(ref(db(null), 'site_config')));
+	await assertFails(set(ref(db('alice'), 'ratings/alice/blitz/r'), 2000));
+	await assertFails(set(ref(db('alice'), 'ratings/alice/rapid'), rec));
+	await assertFails(set(ref(db('alice'), 'pool_leaderboard/blitz/alice/r'), 2000));
+	await assertFails(set(ref(db('alice'), 'pool_leaderboard/rapid/alice'), { displayName: 'Alice', r: 2000, rd: 50, n: 1 }));
+	await assertFails(set(ref(db('alice'), 'site_config/ratingDisplay'), 'glicko'));
+	// A rename (auth-manager.js setDisplayName) carries onto the existing rows.
+	await assertFails(set(ref(db('alice'), 'pool_leaderboard/blitz/alice/displayName'), 'Mallory'));
+	await assertSucceeds(update(ref(db('alice')), { 'users/alice/displayName': 'Alicia', 'pool_leaderboard/blitz/alice/displayName': 'Alicia' }));
+	await assertFails(update(ref(db('bob')), { 'pool_leaderboard/blitz/alice/displayName': 'Alicia' }));
+	await assertFails(update(ref(db('alice')), { 'users/alice/displayName': 'Al', 'pool_leaderboard/rapid/alice/displayName': 'Al' }));
+	// A game record cannot arrive with the server's rating fields.
+	const g = { winner: 'red', timestamp: 1, redUid: 'alice', blueUid: '__ai_rust_hard__', ranked: true };
+	for (const extra of [{ pool: 'blitz' }, { glicko: { red: { r: 1 } } }, { ratedWinner: 'red' }]) {
+		await assertFails(set(ref(db('alice'), 'completed_games/gX'), Object.assign({}, g, extra)));
+	}
+});
+
+test('a matchmaking ticket: one per player, stamped by the server, rated only for accounts in good standing', async () => {
+	const t = (bucket) => ({ bucket, at: serverTimestamp(), ping: serverTimestamp() });
+	await assertSucceeds(set(ref(db('alice'), 'mm_tickets/alice'), t('rt-300-0~standard~r')));
+	await assertFails(get(ref(db('bob'), 'mm_tickets/alice')));
+	await assertSucceeds(get(ref(db('alice'), 'mm_tickets/alice')));
+	await assertFails(set(ref(db('bob'), 'mm_tickets/alice'), t('rt-300-0~standard~r')));
+	// Stamped by the server's clock only.
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), { bucket: 'none~standard~c', at: 5, ping: serverTimestamp() }));
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), { bucket: 'none~standard~c', at: serverTimestamp(), ping: 5 }));
+	// Only known buckets, and nothing else on a ticket.
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), t('rt-300-0~deathmatch~r')));
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), t('blitz')));
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), Object.assign(t('none~standard~c'), { r: 2500 })));
+	// The client may not pair itself or clear the server's verdicts.
+	await assertFails(set(ref(db('bob'), 'mm_tickets/bob'), Object.assign(t('none~standard~c'), { match: 'm1' })));
+	await assertFails(set(ref(db('alice'), 'mm_tickets/alice/match'), 'm1'));
+	// A ping keeps the ticket; the bucket and its start stay as they were.
+	await assertSucceeds(update(ref(db('alice'), 'mm_tickets/alice'), { ping: serverTimestamp() }));
+	await assertFails(update(ref(db('alice'), 'mm_tickets/alice'), { bucket: 'rt-60-0~standard~r' }));
+	// Re-stamping `at` would jump the queue's order: refused.
+	await assertFails(update(ref(db('alice'), 'mm_tickets/alice'), { at: serverTimestamp(), ping: serverTimestamp() }));
+	// Guests: casual buckets only.
+	await assertSucceeds(set(ref(guestDb('gina'), 'mm_tickets/gina'), t('none~standard~c')));
+	await assertFails(set(ref(guestDb('gus'), 'mm_tickets/gus'), t('none~standard~r')));
+	// A player suspended from rated play: casual only.
+	await seed({ user_flags: { sam: { banUntil: Date.now() + 86400000 } }, deleted_users: { dan: 1 } });
+	await assertFails(set(ref(db('sam'), 'mm_tickets/sam'), t('rt-300-0~standard~r')));
+	await assertSucceeds(set(ref(db('sam'), 'mm_tickets/sam'), t('rt-300-0~standard~c')));
+	await assertFails(set(ref(db('dan'), 'mm_tickets/dan'), t('none~standard~c')));
+	// Withdrawn at any time, paired or not.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'mm_tickets/sam/match'), 'm9'));
+	await assertSucceeds(update(ref(db('sam'), 'mm_tickets/sam'), { ping: serverTimestamp() }));
+	await assertSucceeds(remove(ref(db('sam'), 'mm_tickets/sam')));
+	await assertSucceeds(get(ref(db(null), 'mm_counts')));
+	await assertFails(set(ref(db('alice'), 'mm_counts/x'), 1));
+});
+
+test('a match is read by its two players, and only its host names the room, once', async () => {
+	await seed({
+		mm_matches: { m1: { host: 'alice', guest: 'bob', bucket: 'none~standard~c', at: 1 } },
+		rooms: {
+			MMRM01: Object.assign({}, waiting, { invite: 'bob' }),
+			MMRM02: Object.assign({}, waiting, { invite: 'carol' }),
+			MMRM03: Object.assign({}, waiting, { invite: 'bob', red: { uid: 'carol', connected: true } }),
+			MMRM04: Object.assign({}, waiting, { invite: 'bob', creatorColor: 'blue', blue: { uid: 'alice', connected: true }, red: { connected: false } }),
+		},
+	});
+	await assertSucceeds(get(ref(db('alice'), 'mm_matches/m1')));
+	await assertSucceeds(get(ref(db('bob'), 'mm_matches/m1')));
+	await assertFails(get(ref(db('carol'), 'mm_matches/m1')));
+	await assertFails(set(ref(db('alice'), 'mm_matches/m1/guest'), 'carol'));
+	// The room must wait for the guest alone, with the host in the creator's seat.
+	await assertFails(set(ref(db('bob'), 'mm_matches/m1/room'), 'MMRM01'));
+	await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM02'));
+	await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM03'));
+	await assertSucceeds(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM04'));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'mm_matches/m1/room')));
+	await assertSucceeds(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM01'));
+	await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM01'));
+});

@@ -393,7 +393,7 @@
         ".write": "auth !== null && auth.uid === $uid && !root.child('deleted_users/' + $uid).exists()",
         ".validate": "newData.hasChildren(['bucket', 'at', 'ping']) && newData.child('match').val() === data.child('match').val() && newData.child('error').val() === data.child('error').val() && (!data.exists() || (newData.child('bucket').val() === data.child('bucket').val() && newData.child('at').val() === data.child('at').val()))",
         "bucket": {
-          ".validate": "newData.isString() && newData.val().matches(/^(none|rt-[0-9]{1,5}-[0-9]{1,3}|cr-[0-9]{1,3})~(standard|competitive)~[rc]$/) && (newData.val().endsWith('~c') || (auth.provider !== 'anonymous' && !(root.child('user_flags/' + $uid + '/banUntil').val() > now)))"
+          ".validate": "newData.isString() && newData.val().matches(/^(none|rt-[0-9]{1,5}-[0-9]{1,3}|cr-[0-9]{1,3})~(standard|competitive)~[rc]$/) && (newData.val().endsWith('~c') || (auth.provider !== 'anonymous' && (!root.child('user_flags/' + $uid + '/banUntil').exists() || root.child('user_flags/' + $uid + '/banUntil').val() < now)))"
         },
         "at": {
           ".validate": "newData.val() === now || newData.val() === data.val()"
@@ -417,7 +417,7 @@
         ".read": "auth !== null && (data.child('host').val() === auth.uid || data.child('guest').val() === auth.uid)",
         "room": {
           ".write": "auth !== null && !data.exists() && newData.exists() && root.child('mm_matches/' + $id + '/host').val() === auth.uid",
-          ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{4,10}$/) && root.child('rooms/' + newData.val() + '/status').val() === 'waiting' && root.child('rooms/' + newData.val() + '/invite').val() === root.child('mm_matches/' + $id + '/guest').val() && root.child('rooms/' + newData.val() + '/' + root.child('rooms/' + newData.val() + '/creatorColor').val() + '/uid').val() === auth.uid"
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{4,10}$/) && root.child('rooms/' + newData.val() + '/status').val() === 'waiting' && root.child('rooms/' + newData.val() + '/invite').val() === root.child('mm_matches/' + $id + '/guest').val() && (root.child('rooms/' + newData.val() + '/creatorColor').val() === 'blue' ? root.child('rooms/' + newData.val() + '/blue/uid').val() : root.child('rooms/' + newData.val() + '/red/uid').val()) === auth.uid"
         }
       }
     },

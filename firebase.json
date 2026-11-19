@@ -6,7 +6,7 @@
     "source": "functions",
     "runtime": "nodejs22",
     "predeploy": ["node functions/copy-engine.js"],
-    "ignore": ["node_modules", "test", ".gitignore"]
+    "ignore": ["node_modules", "test", "scripts", ".gitignore"]
   },
   "emulators": {
     "database": { "port": 9000 },
