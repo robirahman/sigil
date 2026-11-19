@@ -123,6 +123,9 @@ class Report(unittest.TestCase):
         self.assertIsNone(m({'score': 50, 'played': 50, 'match': True, 'n': 1}, OPTS))       # forced
         self.assertIsNone(m({'score': 50, 'played': 50, 'match': True, 'mate': 3}, OPTS))    # forced result
         self.assertIsNone(m({'score': 50, 'played': None, 'match': False}, OPTS))
+        # A fail-low bound is not a score: left out (eval re-searches those).
+        self.assertIsNone(m({'score': 50, 'played': 40, 'match': False, 'n': 9, 'exact': False}, OPTS))
+        self.assertEqual(m({'score': 50, 'played': 40, 'match': False, 'n': 9, 'exact': True}, OPTS), (0, 10, 1))
         self.assertIsNone(m({'error': 'x'}, OPTS))
         self.assertIsNone(m({'over': True}, OPTS))
         self.assertIsNone(m(None, OPTS))

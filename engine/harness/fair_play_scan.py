@@ -35,8 +35,10 @@ scan reads a dump file and never touches the live database itself):
     python engine/harness/fair_play_scan.py upload --report work/fp_report.json \\
         --service-account "<sa.json>" [--apply]
 
-Cost: one search per turn analysed. Measured 2026-11-19 on a loaded 4-vCPU box,
-shipped eval: depth 3 ~1 s, depth 4 ~4 s a position. 50 players x 20 games x ~20
+Cost: one search per turn analysed, plus one a ply shallower for the turns the
+engine did not pick and could not score exactly (about half of all turns in the
+fixture games). Measured 2026-11-19 on a loaded 4-vCPU box, shipped eval: depth 3
+~1 s, depth 4 ~4 s a position. 50 players x 20 games x ~20
 turns at depth 4 is ~20,000 positions, ~22 CPU-hours: run it on a VM with --workers
 set to its cores, or try depth 3 first (--depth 3, ~5x cheaper).
 
@@ -44,10 +46,12 @@ What is measured, per turn the player made (position i = that turn's sfnBefore):
   * the SHIPPED search (SHIPPED_EVAL, SHIPPED_POLICY / SHIPPED_EXPLORE, the engine's
     width and adaptive constants: what the site's AI plays) to exactly --depth,
     untimed, a fresh table per position, the game so far as repetition history;
-  * the played turn is searched FIRST at the root (`probe_first`), so its score is
-    exact; when the root list does not hold it (the engine never generated it), the
-    position after it is searched at depth-1 instead and its score negated (not on
-    a game's last turn, whose recorded after-position keeps the mover's token);
+  * the played turn is searched FIRST at the root (`probe_first`) and its score
+    read from there; when that score is only a fail-low bound, or the root list
+    does not hold the turn at all (the engine never generated it), the position
+    after it is searched at depth-1 instead and its score negated (not on a game's
+    last turn, whose recorded after-position keeps the mover's token: that turn
+    then counts only when it matches);
   * match: the turn reaches the same position as the engine's choice (side-to-move
     and turn-counter tokens aside, as the engine's own probe matches it);
   * loss: best score - played score, both clamped to +-cap centistones (STONE = 100),
@@ -244,16 +248,23 @@ def analyse_turn(se, positions, i, depth, time_ms, tt_bits=TT_BITS):
            'match': bool(r.get('expected_sfn')) and position_key(r['expected_sfn']) == position_key(positions[i + 1]),
            'eval': ev}
     probe = r.get('probe')
+    ix = n = v = alpha = None
     if probe is not None:
         _pd, ix, n, v, alpha = probe
-        row.update(played=v, exact=v > alpha, ix=ix, n=n, fallback=False)
+    if row['match']:
+        # The engine's own choice: no loss, whatever bound the probe had.
+        row.update(played=r['score'], exact=True, ix=ix, n=n, fallback=False)
+    elif probe is not None and v > alpha:
+        row.update(played=v, exact=True, ix=ix, n=n, fallback=False)
     elif i + 1 >= len(positions) - 1:
         # The game's last turn: its after-position is the recorded final one,
         # which keeps the mover's token, so it is not searched (no loss).
-        row.update(played=None, exact=False, ix=None, n=None, fallback=False)
+        row.update(played=None, exact=False, ix=ix, n=n, fallback=False)
     else:
-        # The root list never held the played turn: its value from the position
-        # it reached, one ply shallower, from the mover's side.
+        # The root list never held the played turn, or its score there failed
+        # low (an upper bound only, which would understate the loss): its
+        # value from the position it reached, one ply shallower, from the
+        # mover's side.
         kw['max_depth'] = max(1, depth - 1)
         _shipped(se)
         ra = se.SearchSession(tt_bits).analyze(positions[i + 1], ev, history_sfns=positions[:i + 1], **kw)
@@ -262,7 +273,7 @@ def analyse_turn(se, positions, i, depth, time_ms, tt_bits=TT_BITS):
             played = 10 ** 7 if won else -10 ** 7
         else:
             played = -ra['score'] if ra['score'] is not None else None
-        row.update(played=played, exact=True, ix=None, n=None, fallback=True)
+        row.update(played=played, exact=True, ix=ix, n=n, fallback=True)
     row['sec'] = round(time.time() - t0, 3)
     return row
 
@@ -348,7 +359,7 @@ def turn_measure(row, opts):
     """(match, loss, close) for an analysed turn, or None when it is left out."""
     if not row or row.get('error') or row.get('over'):
         return None
-    if row.get('score') is None or row.get('played') is None:
+    if row.get('score') is None or row.get('played') is None or row.get('exact') is False:
         return None
     if row.get('mate') is not None or abs(row['score']) >= opts['decided']:
         return None
