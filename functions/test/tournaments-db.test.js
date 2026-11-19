@@ -320,9 +320,12 @@ test('a deleted account leaves the standings, the pairings and its events namele
 		startsAt: Date.now() } }, { admin: false, now: Date.now() });
 	for (const u of ['a', 'b']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
 	const [g] = await openPairings(id);
+	await db.ref('tournament_presence/' + id + '/a/tab1').set(Date.now());
+	await db.ref('deleted_users/a').set(Date.now());
 	const updates = {};
 	await T.scrubUser(db, 'a', updates);
 	await db.ref().update(updates);
+	assert.strictEqual(await val('tournament_presence/' + id + '/a'), null);
 	const pl = await val('tournament_players/' + id);
 	assert.deepStrictEqual([pl.a.name, pl.a.withdrawn, pl.a.active, pl.b.name], ['Deleted player', true, false, 'B']);
 	const pg = await val('tournament_pairings/' + id + '/' + g.pid);
@@ -330,6 +333,17 @@ test('a deleted account leaves the standings, the pairings and its events namele
 	assert.strictEqual((await val('tournaments/' + id)).createdByName, 'Deleted player');
 	assert.strictEqual((await val('tournament_index/' + id)).by, 'Deleted player');
 	assert.deepStrictEqual([await val('user_tournaments/a'), await val('tournament_limits/a')], [null, null]);
+	// Their game ends (deleteUserData resigns it): the row stays scrubbed and
+	// the deleted account is not paired again, even rejoined by a stale write.
+	await resign(g.room, g.red === 'a' ? 'red' : 'blue');
+	await T.onRoomEnded(db, g.room, Date.now());
+	await db.ref('tournament_players/' + id + '/a').update({ active: true, withdrawn: null });
+	await addUsers({ c: 1000 });
+	await T.act(db, 'c', { action: 'join', id }, { admin: false, now: Date.now() });
+	await new Promise((r) => setTimeout(r, T.REMATCH_WAIT_MS + 100));
+	await T.advance(db, id, Date.now());
+	for (const x of await openPairings(id)) assert.ok(x.red !== 'a' && x.blue !== 'a', 'a deleted account is paired');
+	assert.strictEqual((await val('tournament_players/' + id + '/a')).name, 'Deleted player');
 	// Nothing written for an event they only created (no player row appears).
 	const { id: id2 } = await T.act(db, 'b', { action: 'create', config: { kind: 'simul', name: 'Bsimul', untimed: true } }, { admin: false, now: Date.now() });
 	const u2 = {};

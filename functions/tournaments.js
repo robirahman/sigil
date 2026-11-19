@@ -826,10 +826,20 @@ async function cancelEvent(S, now, reason) {
 	if (t.createdBy) S.extra['tournament_limits/' + t.createdBy + '/' + S.tid] = null;
 }
 
+/** An account being deleted (deleteUserData marks it first): never paired again. */
+async function isDeleted(db, uid) {
+	return (await db.ref('deleted_users/' + uid).once('value')).exists();
+}
+
 /** Arena: pair every free player who can be paired now. */
 async function pairArenaNow(S, now) {
-	const free = Object.values(S.players).filter((p) => p && p.active && !p.withdrawn && !p.playing
-		&& (S.present.has(p.uid) || now - (p.freedAt || p.joinedAt || 0) < PRESENCE_GRACE_MS));
+	const free = [];
+	for (const p of Object.values(S.players)) {
+		if (!p || !p.active || p.withdrawn || p.playing) continue;
+		if (!S.present.has(p.uid) && now - (p.freedAt || p.joinedAt || 0) >= PRESENCE_GRACE_MS) continue;
+		if (await isDeleted(S.db, p.uid)) continue;
+		free.push(p);
+	}
 	for (const p of free) if (!p.waitingSince) { p.waitingSince = now; touchP(S, p.uid); }
 	for (const [red, blue] of pairArena(free, now)) await openGame(S, red, blue, now, {});
 }
@@ -851,8 +861,11 @@ async function startSwissRound(S, now) {
 	const { t } = S;
 	const round = (t.round || 0) + 1;
 	const h = swissHistory(S);
-	const players = Object.values(S.players).filter((p) => p && !p.withdrawn && !p.removed)
-		.map((p) => Object.assign({}, p, h[p.uid]));
+	const players = [];
+	for (const p of Object.values(S.players)) {
+		if (!p || p.withdrawn || p.removed || (await isDeleted(S.db, p.uid))) continue;
+		players.push(Object.assign({}, p, h[p.uid]));
+	}
 	const { pairs, bye } = swissPair(players);
 	t.round = round;
 	t.roundStartedAt = now;
@@ -874,8 +887,9 @@ async function startSwissRound(S, now) {
 
 async function startSimul(S, now) {
 	const { t } = S;
-	const opps = Object.values(S.players).filter((p) => p && !p.removed)
-		.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+	const opps = [];
+	for (const p of Object.values(S.players)) if (p && !p.removed && !(await isDeleted(S.db, p.uid))) opps.push(p);
+	opps.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 	if (!opps.length) fail('failed-precondition', 'no-players');
 	t.status = 'started';
 	t.startedAt = now;
@@ -1170,11 +1184,13 @@ async function act(db, uid, data, ctx) {
 }
 
 /**
- * A deleted account's tournament traces (index.js deleteUserData adds
- * these to its update): its name leaves the standings, the pairings and
- * the events it created, its own index goes, and it is out of any event
- * still running. Only records that exist are touched (a child written
- * under a missing record would create a stub row).
+ * A deleted account's tournament traces (index.js deleteUserData, after it
+ * marks deleted_users/{uid}): in each of its events, under that event's
+ * lock (so no writer restores the row from an older read), its name leaves
+ * the standings, the pairings and the event, it is out of the event and its
+ * presence goes. Its own index and limits go in the caller's `updates`.
+ * Only records that exist are touched (a child written under a missing
+ * record would create a stub row).
  */
 async function scrubUser(db, uid, updates) {
 	const DELETED = 'Deleted player';
@@ -1183,28 +1199,32 @@ async function scrubUser(db, uid, updates) {
 	updates['tournament_limits/' + uid] = null;
 	for (const tid of Object.keys(mine)) {
 		if (!/^[A-Za-z0-9_-]{1,40}$/.test(tid)) continue;
-		const [t, p, pairings] = await Promise.all([
-			db.ref('tournaments/' + tid).once('value').then((x) => x.val()),
-			db.ref('tournament_players/' + tid + '/' + uid).once('value').then((x) => x.val()),
-			db.ref('tournament_pairings/' + tid).once('value').then((x) => x.val() || {}),
-		]);
-		if (!t) continue;
-		if (p) {
-			const base = 'tournament_players/' + tid + '/' + uid + '/';
-			updates[base + 'name'] = DELETED;
-			updates[base + 'withdrawn'] = true;
-			if (t.kind === 'arena') { updates[base + 'active'] = false; updates[base + 'waitingSince'] = null; }
-		}
-		for (const [pid, g] of Object.entries(pairings)) {
-			if (g && g.red === uid) updates['tournament_pairings/' + tid + '/' + pid + '/redName'] = DELETED;
-			if (g && g.blue === uid) updates['tournament_pairings/' + tid + '/' + pid + '/blueName'] = DELETED;
-		}
-		if (t.createdBy === uid) {
-			updates['tournaments/' + tid + '/createdByName'] = DELETED;
-			if (!t.private) updates['tournament_index/' + tid + '/by'] = DELETED;
-		}
-		if (t.host === uid) updates['tournaments/' + tid + '/hostName'] = DELETED;
-		for (const [i, x] of (t.podium || []).entries()) if (x && x.uid === uid) updates['tournaments/' + tid + '/podium/' + i + '/name'] = DELETED;
+		// Best effort per event: a busy event must not fail the deletion (the
+		// pairing skips deleted accounts either way).
+		await withLock(db, tid, async (guard) => {
+			const S = await load(db, tid);
+			if (!S) return;
+			S.guard = guard;
+			const { t } = S;
+			// An arena loads only its open pairings: the names are in all of them.
+			const all = (await db.ref('tournament_pairings/' + tid).once('value')).val() || {};
+			Object.assign(S.pairings, Object.fromEntries(Object.entries(all).filter(([pid]) => !S.pairings[pid])));
+			const p = S.players[uid];
+			if (p) {
+				Object.assign(p, { name: DELETED, withdrawn: true, waitingSince: null });
+				if (t.kind === 'arena') p.active = false;
+				touchP(S, uid);
+			}
+			for (const [pid, g] of Object.entries(S.pairings)) {
+				if (g && g.red === uid) { g.redName = DELETED; touchG(S, pid); }
+				if (g && g.blue === uid) { g.blueName = DELETED; touchG(S, pid); }
+			}
+			if (t.createdBy === uid) { t.createdByName = DELETED; touchT(S); }
+			if (t.host === uid) { t.hostName = DELETED; touchT(S); }
+			for (const x of t.podium || []) if (x && x.uid === uid) { x.name = DELETED; touchT(S); }
+			S.extra['tournament_presence/' + tid + '/' + uid] = null;
+			await save(S);
+		}, 30000).catch((e) => { console.warn('scrubUser', tid, String((e && e.message) || e)); });
 	}
 }
 
