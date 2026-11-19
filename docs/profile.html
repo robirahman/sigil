@@ -411,7 +411,7 @@
 													<template x-if="g.rated">
 														<span>
 															<span x-text="g.ratingAfter" x-bind:title="g.ratingTitle"></span>
-															<span x-bind:class="g.ratingChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.ratingChange >= 0 ? ' (+' : ' (') + g.ratingChange + ')'"></span>
+															<span x-show="typeof g.ratingChange === 'number'" x-bind:class="g.ratingChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="typeof g.ratingChange === 'number' ? (g.ratingChange >= 0 ? ' (+' : ' (') + g.ratingChange + ')' : ''"></span>
 														</span>
 													</template>
 													<template x-if="!g.rated">
@@ -849,8 +849,13 @@
 									eloChange: Math.round(gl.after) - Math.round(gl.before),
 									opponentEloBefore: typeof gl.opponentBefore === 'number' ? Math.round(gl.opponentBefore) : null,
 								});
+							} else if (glicko && g.rated) {
+								// A rated game from before the pools (no backfill): its Elo
+								// would mix scales with the pool ratings, so the rating
+								// stats leave it out (its result still counts).
+								Object.assign(g, { eloChange: null, opponentEloBefore: null });
 							}
-							g.ratingAfter = gl ? fmt(gl.after, gl.rdAfter) : g.eloAfter;
+							g.ratingAfter = gl ? fmt(gl.after, gl.rdAfter) : (glicko ? '\u2014' : g.eloAfter);
 							g.ratingChange = g.eloChange;
 							g.ratingTitle = gl ? SigilRatings.label(gl.pool) + ' rating (Glicko-2)' : '';
 						});

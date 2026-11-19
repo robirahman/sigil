@@ -240,8 +240,29 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		}, null, 30000);
 		check('with ?ratings=elo the leaderboard is the Elo one', eloRows && eloRows.some((r) => r[0] === 'Alice' && r[1] === 1500), eloRows);
 
+		// Two rated games: one rated in its pool, one from before the pools (no
+		// backfill): the table shows a dash for it and the stats leave its Elo out.
+		await dbPut('user_games/' + alice._uid, {
+			gOld: { timestamp: now - 2000, gameId: 'gOld', opponent: 'Bob', opponentUid: bob._uid, color: 'red', result: 'win', rated: true,
+				eloBefore: 1490, eloAfter: 1500, eloChange: 10, opponentEloBefore: 1460 },
+			gNew: { timestamp: now - 1000, gameId: 'gNew', opponent: 'Bob', opponentUid: bob._uid, color: 'blue', result: 'win', rated: true,
+				eloBefore: 1500, eloAfter: 1512, eloChange: 12, opponentEloBefore: 1450,
+				glicko: { pool: 'blitz', before: 1597, rdBefore: 61, after: 1612.4, rdAfter: 60, change: 15.4, opponentBefore: 1450, opponentRd: 200 } },
+		});
 		const prof = await newPage();
 		await prof.goto(`${BASE}/profile.html?uid=${alice._uid}`, { waitUntil: 'load', timeout: 90000 });
+		const cells = await until(prof, () => {
+			const rows = [...document.querySelectorAll('.games-table tbody tr')];
+			return rows.length === 2 ? rows.map((r) => r.lastElementChild.textContent.replace(/\s+/g, ' ').trim()) : null;
+		}, null, 30000);
+		check('the games table shows pool ratings, a dash before the pools', cells && cells.join('|') === '1612 (+15)|\u2014', cells);
+		const stats = await until(prof, () => {
+			const d = Alpine.$data(document.querySelector('[x-data^="profilePage"]'));
+			if (!d.stats) return null;
+			const row = d.stats.byKind.find((r) => r.label === 'vs players');
+			return { games: row.games, rated: row.rated, net: row.net, best: d.stats.bests.bestWin && d.stats.bests.bestWin.oppElo };
+		}, null, 20000);
+		check('stats: both games counted, only the pool game\'s rating', stats && stats.games === 2 && stats.rated === 1 && stats.net === 15 && stats.best === 1450, stats);
 		const pools = await until(prof, () => {
 			const el = document.querySelector('[data-testid="pool-ratings"]');
 			return el && el.querySelectorAll('.profile__pool').length ? [...el.querySelectorAll('.profile__pool')].map((x) => x.textContent.replace(/\s+/g, ' ').trim()) : null;
