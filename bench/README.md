@@ -14,7 +14,7 @@ An LLM benchmark of forced-mate puzzles from Sigil. The model sees a position an
 | `grader/apply.js` | Replays an action list with the browser's own rules (`applyAITurn`). The schema, validation and replay live in `docs/static/scripts/sigilbench-replay.js`, shared with the site. |
 | `../engine/examples/bench_grade.rs` | Legality check, plus the mate proof (`mate::judge_turn`). |
 | `tools/grader_selftest.py` | Grader self-test on the dev set. |
-| `tools/build_try_devset.py` | Builds the password-protected copy of the dev set and its prompts for the site's "Try the dev set" panel (`docs/static/data/sigilbench/devset.enc.json`; password from `$SIGILBENCH_TRY_PASSWORD`). Re-run after changing the dev set or `prompt/`. |
+| `tools/build_try_devset.py` | Builds the password-protected copy of the dev set and its prompts for the site's "Try the dev set" panel (`docs/static/data/sigilbench/devset.enc.json`; password from `$SIGILBENCH_TRY_PASSWORD`; `--set v2` or `--set v3`, the default). Re-run after changing the dev set or `prompt/`. Winning-turn puzzles need complete keys (`answer_keys`, `failed_keys`); puzzles without a reference action list need `--children-bin` (`engine/examples/rules_children`). |
 | `tools/rescore_no_reminder.py` | Re-scores runs made with the old reminder protocol, from their transcripts. |
 | `sigilbench/resolve.py` | Exhaustive resolver for `unproven` answers. |
 | `providers_approved.json` | Accounts confirmed opted out of training and under zero data retention. |
@@ -79,12 +79,16 @@ Useful flags:
 
 ## Leaderboard page
 
-`docs/sigilbench.html` reads `docs/static/data/sigilbench/leaderboard.json`, which holds aggregates only (no answers or transcripts). To rebuild it after a run:
+`docs/sigilbench.html` reads one document per dev set from `docs/static/data/sigilbench/` (`leaderboard.json` for v1, `leaderboard_dev_v2.json`, `leaderboard_dev_v3.json`), each holding aggregates only (no answers or transcripts). To rebuild one after a run:
 
 ```bash
 gcloud storage cp -r gs://focus-surfer-494820-g0-sigilbench-private/dev-runs <root>/
-# add the run to bench/leaderboard/runs.json, then
-python3 bench/tools/build_leaderboard.py --runs-root <root>/dev-runs
+# add the run to the set's manifest (bench/leaderboard/runs.json, runs_dev_v2.json or runs_dev_v3.json), then
+python3 bench/tools/build_leaderboard.py --runs-root <root>/dev-runs              # v1
+python3 bench/tools/build_leaderboard.py --set v2 --runs-root <root>/dev-runs     # v2, columns by v2.1 shortest mate
+python3 bench/tools/build_leaderboard.py --set v3 --runs-root <root>/dev-runs     # v3, columns by category
 ```
+
+Dev set v3's columns come from each puzzle's own `category` (mate in 1-5 by proven shortest mate, and winning turns). `sigilbench.html?set=dev_v3` opens that set. When `bench/TEST_SET_SHA256` exists, its hash goes into the documents and the page shows it.
 
 The page is not linked from the site menu yet; it is reachable at `/sigilbench.html` once merged.

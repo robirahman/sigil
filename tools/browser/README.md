@@ -129,3 +129,17 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## SigilBench page, Try panel and bench board
+
+```sh
+node tools/browser/sigilbench-test.js docs [port] [fixture dir]
+```
+
+Builds a dev-set-v3-shaped fixture from public data first (`sigilbench_fixture.py`: dev set v2 mates
+and Puzzles-page winning turns, relabelled as v3 categories; never the private bucket), then checks
+`sigilbench.html` (v1/v2/v3 leaderboard columns and filters, the Try panel's unlock, prompts and
+key-lookup grading of winning turns, a dev set v2 file still opening) and `puzzles.html?bench=`
+(winning turns recorded as correct / right idea, wrong execution / wrong idea, Show solution then
+the engine's reply). Needs python3 with `cryptography`.
+
