@@ -226,6 +226,8 @@ test('team battles: scored games, the start, the result', async () => {
 	await db.ref('team_battles/big').set({ name: 'Everyone', host: 'reds', by: 'alice', created: 1, start: now + HOUR, end: now + 2 * HOUR, topN: 1, teams: crowd });
 	assert.strictEqual(await community.onBattleCreated(db, 'big', await get('team_battles/big'), now), 0);
 	assert.strictEqual(await get('team_battles/big'), null);
+	// A retried invitation is not pushed twice (its token).
+	assert.strictEqual((await get('notifications/bob/battleinv-tb1')).tok, 'invite');
 	assert.strictEqual((await get('notifications/bob/battleinv-tb1')).event, 'invite');
 	const game = (opp, result, extra) => Object.assign({ timestamp: now, opponentUid: opp, opponent: opp, rated: true, result, color: 'red', opponentIsAI: false }, extra || {});
 	// Alice beats Bob: a point for the reds.
@@ -299,6 +301,13 @@ test('team battles: scored games, the start, the result', async () => {
 	await db.ref('team_battles/tb1/result/games').set(999);
 	await community.scoreGame(db, 'dave', 'g13', game('carol', 'win'), now + 3 * HOUR);
 	assert.strictEqual((await get('team_battles/tb1/result')).games, 999);
+	// A battle with too many teams whose removal at creation failed is
+	// swept by battleTick.
+	const crowd2 = { reds: 'accepted' };
+	for (let i = 0; i < 12; i++) crowd2['team-' + i] = 'invited';
+	await db.ref('team_battles/big2').set({ name: 'Everyone', host: 'reds', by: 'alice', created: 1, start: now + 4 * HOUR, end: now + 5 * HOUR, topN: 1, teams: crowd2 });
+	await community.battleTick(db, now + 3 * HOUR, null);
+	assert.strictEqual(await get('team_battles/big2'), null);
 });
 
 test('a correspondence result goes to the inbox; a realtime one does not', async () => {

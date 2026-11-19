@@ -330,7 +330,7 @@ async function onBattleCreated(db, bid, battle, now, send) {
 		if (battle.teams[t] !== 'invited') continue;
 		const leader = await val(db, 'teams/' + t + '/leader');
 		const w = await notify(db, leader, 'battleinv-' + bid, { type: 'team', event: 'invite', battle: bid, name: cut(battle.name, 80), team: t, host: battle.host, hostName: cut(host, 40), at: now }, {
-			send, push: { title: 'Team battle invitation', body: cut(host, 40) + ' invites your team to “' + cut(battle.name, 60) + '”.', url: 'teams.html?battle=' + encodeURIComponent(bid), tag: 'sigil-battle-' + bid },
+			send, token: 'invite', push: { title: 'Team battle invitation', body: cut(host, 40) + ' invites your team to “' + cut(battle.name, 60) + '”.', url: 'teams.html?battle=' + encodeURIComponent(bid), tag: 'sigil-battle-' + bid },
 		});
 		if (w) told++;
 	}
@@ -369,6 +369,11 @@ async function battleTick(db, now, send) {
 	const out = { started: 0, finished: 0 };
 	for (const [bid, b] of battles) {
 		if (!b || b.finished) continue;
+		// Too many teams (onBattleCreated's removal failed): removed now.
+		if (b.teams && Object.keys(b.teams).length > BATTLE_TEAMS_MAX) {
+			await db.ref('team_battles/' + bid).remove();
+			continue;
+		}
 		const url = 'teams.html?battle=' + encodeURIComponent(bid);
 		if (now >= b.end + BATTLE_GRACE_MS) {
 			if (!(await claimStep(db, bid, 'closing', now))) continue;

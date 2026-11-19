@@ -565,8 +565,9 @@ exports.notifyChallenge = onValueCreated({
 // team bookkeeping, team battles. Notices are best-effort (not retried: a
 // missed one is not worth a week of retries). The bookkeeping nothing else
 // would repair is retried (`durable`): battle scores and results, request
-// indexes, member counts and rosters, reply counts. Each step is safe to
-// repeat (fixed keys, recounts, games counted once).
+// indexes, member counts and rosters, reply counts, the battle size cap.
+// Each step is safe to repeat (fixed keys, recounts, games counted once,
+// tokened notices pushed once).
 
 const communityTrigger = (ref, handler, durable) => onValueCreated({ ref, instance: DB_INSTANCE, region: REGION, retry: !!durable }, async (event) => {
 	const db = event.data.ref.root.database;
@@ -585,7 +586,7 @@ exports.pushMessage = communityTrigger('/dm_messages/{cid}/{mid}', (db, p, v) =>
 exports.forumPost = communityTrigger('/forum_posts/{cat}/{tid}/{pid}', (db, p, v, now) => community.onForumPost(db, p.cat, p.tid, p.pid, v, now, fcmSend), true);
 exports.blogComment = communityTrigger('/blog_comments/{pid}/{cid}', (db, p, v, now) => community.onBlogComment(db, p.pid, p.cid, v, now, fcmSend));
 exports.teamRequest = communityTrigger('/team_requests/{tid}/{uid}', (db, p, v, now) => community.onTeamRequest(db, p.tid, p.uid, now, fcmSend), true);
-exports.teamBattle = communityTrigger('/team_battles/{bid}', (db, p, v, now) => community.onBattleCreated(db, p.bid, v, now, fcmSend));
+exports.teamBattle = communityTrigger('/team_battles/{bid}', (db, p, v, now) => community.onBattleCreated(db, p.bid, v, now, fcmSend), true);
 exports.communityGame = communityTrigger('/user_games/{uid}/{gameId}', (db, p, v, now) => community.onUserGame(db, p.uid, p.gameId, v, now, fcmSend), true);
 
 exports.teamMember = onValueWritten({ ref: '/team_members/{tid}/{uid}', instance: DB_INSTANCE, region: REGION, retry: true }, async (event) => {
