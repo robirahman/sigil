@@ -408,10 +408,21 @@ test('teams: found, join, leave, staff and leadership', async () => {
 	// The leader cannot just leave; they hand over first.
 	await assertFails(update(ref(db('alice')), { 'team_members/reds/alice': null, 'user_teams/alice/reds': null }));
 	await assertFails(update(ref(db('bob')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader', 'team_members/reds/alice/role': 'member' }));
-	// Handing over without stepping down is refused (two leaders).
+	// Handing over without stepping down is refused (two leaders), and so is
+	// handing over to an account being deleted.
 	await assertFails(update(ref(db('alice')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader' }));
+	await seed({ 'deleted_users/bob': 1 });
+	await assertFails(update(ref(db('alice')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader', 'team_members/reds/alice/role': 'member' }));
+	await seed({ 'deleted_users/bob': null });
 	await assertSucceeds(update(ref(db('alice')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader', 'team_members/reds/alice/role': 'member' }));
 	await assertSucceeds(update(ref(db('alice')), { 'team_members/reds/alice': null, 'user_teams/alice/reds': null }));
+	// While the server removes a team (closing), nobody joins; no client
+	// writes the mark.
+	await assertFails(set(ref(db('bob'), 'teams/reds/closing'), true));
+	await seed({ 'teams/reds/closing': true });
+	await clearLimits('dave');
+	await assertFails(update(ref(db('dave')), joining('dave', 'reds')));
+	await seed({ 'teams/reds/closing': null });
 	// Edits: staff only, the fields the rules know.
 	await assertSucceeds(update(ref(db('bob'), 'teams/reds'), { description: 'New text', open: false }));
 	await assertFails(update(ref(db('carol'), 'teams/reds'), { description: 'Hijacked' }));

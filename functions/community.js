@@ -561,6 +561,9 @@ async function disbandTeam(db, tid, uid, now) {
 	const [team, admin] = await Promise.all([val(db, 'teams/' + tid), val(db, 'admins/' + uid)]);
 	if (!team) throw Object.assign(new Error('No such team.'), { code: 'not-found' });
 	if (team.leader !== uid && admin !== true) throw Object.assign(new Error('Only the leader disbands a team.'), { code: 'permission-denied' });
+	// Closed to joins first (the rules refuse them while teams/{id}/closing),
+	// so the members read next are all there will be.
+	await db.ref('teams/' + tid + '/closing').set(true);
 	const members = Object.keys((await val(db, 'team_members/' + tid)) || {});
 	const updates = {};
 	members.forEach((m) => { updates['user_teams/' + m + '/' + tid] = null; });
@@ -636,14 +639,23 @@ async function deletionUpdates(db, uid, updates) {
 		updates['blog_comments/' + c.key] = null;
 	});
 	for (const tid of Object.keys(teams || {})) {
-		const [team, members] = await Promise.all([val(db, 'teams/' + tid), val(db, 'team_members/' + tid)]);
-		const rest = Object.keys(members || {}).filter((m) => m !== uid)
-			.sort((a, b) => ((members[b].role === 'mod') - (members[a].role === 'mod')) || ((members[a].joined || 0) - (members[b].joined || 0)));
-		if (team && !rest.length) {
-			// The last member: the team goes, as if disbanded.
-			await teamRemoval(db, tid, Date.now(), updates);
-			continue;
+		const team = await val(db, 'teams/' + tid);
+		let members = await val(db, 'team_members/' + tid);
+		const others = (ms) => Object.keys(ms || {}).filter((m) => m !== uid);
+		if (team && !others(members).length) {
+			// The last member: the team goes, as if disbanded. Closed to
+			// joins first, then read again: if someone joined meanwhile, it
+			// stays with them.
+			await db.ref('teams/' + tid + '/closing').set(true);
+			members = await val(db, 'team_members/' + tid);
+			if (!others(members).length) {
+				await teamRemoval(db, tid, Date.now(), updates);
+				continue;
+			}
+			await db.ref('teams/' + tid + '/closing').remove();
 		}
+		const rest = others(members)
+			.sort((a, b) => ((members[b].role === 'mod') - (members[a].role === 'mod')) || ((members[a].joined || 0) - (members[b].joined || 0)));
 		updates['team_members/' + tid + '/' + uid] = null;
 		if (team && team.leader === uid) {
 			updates['teams/' + tid + '/leader'] = rest[0];

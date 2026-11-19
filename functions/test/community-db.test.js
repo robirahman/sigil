@@ -341,6 +341,7 @@ test('disbanding a team, and deleting an account', async () => {
 	await assert.rejects(community.disbandTeam(db, 'reds', 'bob', now), /Only the leader/);
 	await assert.rejects(community.disbandTeam(db, 'nope', 'alice', now), /No such team/);
 	assert.strictEqual(await community.disbandTeam(db, 'reds', 'alice', now), 2);
+	assert.strictEqual(await get('teams/reds/closing'), null);
 	for (const p of ['teams/reds', 'team_members/reds', 'user_teams/bob', 'forum_threads/team:reds', 'team_battles/soon']) assert.strictEqual(await get(p), null, p);
 	assert.deepStrictEqual(await get('team_battles/other/teams'), { greens: 'accepted' });
 
@@ -388,6 +389,7 @@ test('disbanding a team, and deleting an account', async () => {
 	assert.strictEqual(await get('team_members/blues/carol/role'), 'leader');
 	assert.ok(await get('dm_convos/bob_dave'));
 	assert.ok(await get('teams/closed'));
+	assert.strictEqual(await get('teams/blues/closing'), null);
 	assert.ok(await get('blog_comments/b2/c1'));
 	assert.ok(await get('blog_posts/b2'));
 });
