@@ -293,10 +293,7 @@ async function battleTick(db, now, send) {
 			const claim = await db.ref('team_battles/' + bid + '/finished').transaction((cur) => (cur ? undefined : now));
 			if (!claim.committed) continue;
 			const standings = await writeResult(db, bid, b, now);
-			const win = standings[0] && standings[0].score > 0 && (!standings[1] || standings[0].score > standings[1].score) ? standings[0].team : null;
-			const winName = win ? (await val(db, 'teams/' + win + '/name')) || win : null;
-			await tellBattleTeams(db, bid, b, { type: 'team', event: 'battle-end', battle: bid, name: cut(b.name, 80), winner: win, winnerName: winName ? cut(winName, 40) : null, at: now },
-				{ title: 'Team battle over', body: '“' + cut(b.name, 60) + '”: ' + (winName ? cut(winName, 40) + ' won.' : 'a tie.'), url, tag: 'sigil-battle-' + bid }, send);
+			await announceEnd(db, bid, b, standings, now, send, false);
 			out.finished++;
 		} else if (now >= b.start && now < b.end && !b.startedAt) {
 			const claim = await db.ref('team_battles/' + bid + '/startedAt').transaction((cur) => (cur ? undefined : now));
@@ -349,7 +346,7 @@ async function ensureRoster(db, bid, battle, now) {
  * of another team. Safe to repeat (each game is counted once). A battle
  * already closed gets its final standings rewritten.
  */
-async function scoreGame(db, uid, gameId, entry, now) {
+async function scoreGame(db, uid, gameId, entry, now, send) {
 	if (!entry || entry.rated !== true || entry.opponentIsAI || !human(uid) || !human(entry.opponentUid)) return [];
 	const ts = entry.timestamp;
 	if (typeof ts !== 'number') return [];
@@ -374,7 +371,13 @@ async function scoreGame(db, uid, gameId, entry, now) {
 		});
 		if (!res.committed) continue;
 		scored.push({ battle: bid, team: me.team, win });
-		if (b.finished) await writeResult(db, bid, b, now);
+		if (b.finished) {
+			// Closed already: new final standings, and a new end notice if
+			// the winner changed.
+			const before = winnerOf(((await val(db, 'team_battles/' + bid + '/result')) || {}).standings);
+			const standings = await writeResult(db, bid, b, now);
+			if (winnerOf(standings) !== before) await announceEnd(db, bid, b, standings, now, send, true);
+		}
 	}
 	return scored;
 }
@@ -385,6 +388,22 @@ async function writeResult(db, bid, battle, now) {
 	const standings = teamBattleStandings(battle, players).map((s) => ({ team: s.team, score: s.score, points: s.points, players: s.players.length }));
 	await db.ref('team_battles/' + bid + '/result').set({ standings, at: typeof now === 'number' ? now : Date.now() });
 	return standings;
+}
+
+/** The winning team of final standings, or null (no points, or a tie). */
+function winnerOf(standings) {
+	const s = standings || [];
+	return s[0] && s[0].score > 0 && (!s[1] || s[0].score > s[1].score) ? s[0].team : null;
+}
+
+/** The battle-end notice to its roster (again, `corrected`, when a late game changed the winner). */
+async function announceEnd(db, bid, battle, standings, now, send, corrected) {
+	const win = winnerOf(standings);
+	const winName = win ? (await val(db, 'teams/' + win + '/name')) || win : null;
+	const url = 'teams.html?battle=' + encodeURIComponent(bid);
+	return tellBattleTeams(db, bid, battle, {
+		type: 'team', event: 'battle-end', battle: bid, name: cut(battle.name, 80), winner: win, winnerName: winName ? cut(winName, 40) : null, at: now,
+	}, { title: corrected ? 'Team battle result corrected' : 'Team battle over', body: '“' + cut(battle.name, 60) + '”: ' + (winName ? cut(winName, 40) + ' won.' : 'a tie.'), url, tag: 'sigil-battle-' + bid }, send);
 }
 
 /** A correspondence game's result in the inbox (realtime ones are seen live). */
@@ -404,7 +423,7 @@ async function gameResultNotice(db, uid, gameId, entry, now, send) {
 
 /** A new user_games entry: team battles, then the inbox. */
 async function onUserGame(db, uid, gameId, entry, now, send) {
-	const scored = await scoreGame(db, uid, gameId, entry, now);
+	const scored = await scoreGame(db, uid, gameId, entry, now, send);
 	const notice = await gameResultNotice(db, uid, gameId, entry, now, send);
 	return { scored, notified: !!notice };
 }

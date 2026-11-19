@@ -221,6 +221,12 @@ test('team battles: scored games, the start, the result', async () => {
 	assert.deepStrictEqual(await community.scoreGame(db, 'bob', 'g8', game('alice', 'win'), now + 3 * HOUR), [{ battle: 'tb1', team: 'blues', win: true }]);
 	const late = await get('team_battles/tb1/result');
 	assert.deepStrictEqual(late.standings.map((s) => [s.team, s.score, s.points]), [['blues', 2, 3], ['reds', 1, 1]]);
+	// Late games that change the winner correct the end notice.
+	for (const g of ['g11', 'g12']) await community.scoreGame(db, 'alice', g, game('bob', 'win'), now + 3 * HOUR);
+	const turned = await get('team_battles/tb1/result');
+	assert.deepStrictEqual(turned.standings.map((s) => [s.team, s.score]), [['reds', 3], ['blues', 2]]);
+	const fixed = await get('notifications/bob/battle-tb1');
+	assert.deepStrictEqual([fixed.event, fixed.winner, fixed.winnerName], ['battle-end', 'reds', 'Reds']);
 });
 
 test('a correspondence result goes to the inbox; a realtime one does not', async () => {

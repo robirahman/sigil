@@ -113,6 +113,8 @@ test('messages: blocks, the recipient\'s setting and mutes', async () => {
 	await seed({ 'blocks/bob/alice': null, 'community_prefs/bob/dm': 'follows' });
 	await clearLimits('alice');
 	await assertFails(update(ref(db('alice')), message('alice', 'bob', 'm1', 'hi', true)));
+	// Nor by opening an empty conversation first and writing into it.
+	await assertFails(update(ref(db('alice')), Object.assign({ 'dm_convos/alice_bob': { a: 'alice', b: 'bob', at: TS } }, lim('alice', 'dmnew'))));
 	await seed({ 'follows/bob/alice': true });
 	await assertSucceeds(update(ref(db('alice')), message('alice', 'bob', 'm1', 'hi', true)));
 	// Bob started nothing, but a started conversation goes on.
