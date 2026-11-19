@@ -198,7 +198,14 @@ function studyState() {
 		const k2 = st.tree[2].key;
 
 		await call(pO, 'anaGoto', 1);
+		await waitState(pO, (s) => s.cur === 1, 5000, 'Olga on the first turn');
 		await pO.click('.ana-glyph[data-glyph="!?"]');
+		let g1 = null;
+		for (let i = 0; i < 20 && g1 !== '!?'; i++) {
+			await sleep(250);
+			g1 = await rest('GET', 'studies/' + sid + '/chapters/' + st.chapter + '/nodes/' + k1 + '/g');
+		}
+		check('the symbol is saved on the turn', g1 === '!?', g1);
 		st = await waitState(pE, (s) => s.tree[1].glyph === '!?', 10000, 'the symbol on Ed\'s screen');
 		check('an annotation symbol reaches the editor', true);
 		const rowText = await pE.evaluate(() => Array.from(document.querySelectorAll('.ana-tree__row')).map((r) => r.textContent.replace(/\s+/g, ' ').trim()));

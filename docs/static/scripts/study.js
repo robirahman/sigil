@@ -486,7 +486,13 @@ function studyMixin() {
 					node.glyph = rec.g || '';
 					if (rec.w && !node.winner) node.winner = rec.w;
 				}
-				if (this.boardMarks) this.boardMarks.set('node:' + node.id, studyMarksToList(rec.m));
+				// Only marks that changed in the database: a viewer's own
+				// (unsaved) arrows stay until the shared ones change.
+				const m = JSON.stringify(rec.m || null);
+				if (this.boardMarks && node._marks !== m) {
+					node._marks = m;
+					this.boardMarks.set('node:' + node.id, studyMarksToList(rec.m));
+				}
 			}
 			if (removedCur) {
 				let n = this._anaNode();
