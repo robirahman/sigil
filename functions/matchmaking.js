@@ -6,10 +6,12 @@
  *   mm_tickets/{uid}   { bucket, at, ping }: written by the player (one ticket
  *                      each, by construction); `match` and `error` are the
  *                      server's (database.rules.json).
- *   mm_matches/{id}    { bucket, host, guest, hostName, guestName, hostRating,
- *                      hostRd, guestRating, guestRd, at }: the server's; the
- *                      host adds `room`, the invite-only room it created for
- *                      the guest, once. Readable by the two players.
+ *   mm_matches/{id}    { bucket, tc, variant, rated, host, guest, hostName,
+ *                      guestName, hostRating, hostRd, guestRating, guestRd,
+ *                      at }: the server's; the host adds `room`, the
+ *                      invite-only room it created for the guest, once (the
+ *                      rules check the room is the bucket's game: tc,
+ *                      variant, rated). Readable by the two players.
  *   mm_counts/{bucket} how many tickets wait in the bucket (public).
  *
  * A pairing pass (matchBucket) runs for a ticket's bucket whenever a ticket
@@ -70,8 +72,10 @@ async function ratingFor(db, uid, pool, now, guest) {
 async function claimPair(db, bucket, host, guest, now) {
 	const id = 'm' + now.toString(36) + crypto.randomBytes(5).toString('hex');
 	const r = (x) => Math.round(x);
+	// The game, spelled out for the rules' check of the host's room.
+	const spec = Match.parseBucket(bucket);
 	await db.ref('mm_matches/' + id).set({
-		bucket, at: now,
+		bucket, at: now, tc: spec.timeControl, variant: spec.variant, rated: spec.rated,
 		host: host.uid, hostName: host.name, hostRating: r(host.r), hostRd: r(host.rd),
 		guest: guest.uid, guestName: guest.name, guestRating: r(guest.r), guestRd: r(guest.rd),
 	});

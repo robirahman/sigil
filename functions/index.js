@@ -495,7 +495,8 @@ exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION,
 });
 
 // Account checks for matchmaking, cached for a few minutes: every ticket
-// stamp runs a pairing pass over its pool.
+// stamp runs a pairing pass over its pool. Only full accounts are cached: a
+// guest may upgrade the same uid at any moment.
 const ACCOUNT_CACHE_MS = 5 * 60 * 1000;
 const _fullAccountCache = new Map();
 const matchDeps = (db) => ({
@@ -503,6 +504,7 @@ const matchDeps = (db) => ({
 		const hit = _fullAccountCache.get(uid);
 		if (hit && Date.now() - hit.at < ACCOUNT_CACHE_MS) return hit.full;
 		const full = await isFullAccount(uid);
+		if (!full) return false;
 		if (_fullAccountCache.size > 5000) _fullAccountCache.clear();
 		_fullAccountCache.set(uid, { full, at: Date.now() });
 		return full;

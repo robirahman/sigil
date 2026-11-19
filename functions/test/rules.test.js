@@ -998,12 +998,17 @@ test('a matchmaking ticket: one per player, stamped by the server, rated only fo
 
 test('a match is read by its two players, and only its host names the room, once', async () => {
 	await seed({
-		mm_matches: { m1: { host: 'alice', guest: 'bob', bucket: 'none~standard~c', at: 1 } },
+		mm_matches: { m1: { host: 'alice', guest: 'bob', bucket: 'none~standard~r', tc: { type: 'none' }, variant: 'standard', rated: true, at: 1 } },
 		rooms: {
 			MMRM01: Object.assign({}, waiting, { invite: 'bob' }),
 			MMRM02: Object.assign({}, waiting, { invite: 'carol' }),
 			MMRM03: Object.assign({}, waiting, { invite: 'bob', red: { uid: 'carol', connected: true } }),
 			MMRM04: Object.assign({}, waiting, { invite: 'bob', creatorColor: 'blue', blue: { uid: 'alice', connected: true }, red: { connected: false } }),
+			// Not the queued game: another clock, casual, another variant, a position.
+			MMRM05: Object.assign({}, waiting, { invite: 'bob', timeControl: { type: 'realtime', initialTime: 60000, increment: 0 } }),
+			MMRM06: Object.assign({}, waiting, { invite: 'bob', casual: true }),
+			MMRM07: Object.assign({}, waiting, { invite: 'bob', variant: 'competitive' }),
+			MMRM08: Object.assign({}, waiting, { invite: 'bob', startSfn: 'x y 1' }),
 		},
 	});
 	await assertSucceeds(get(ref(db('alice'), 'mm_matches/m1')));
@@ -1014,6 +1019,7 @@ test('a match is read by its two players, and only its host names the room, once
 	await assertFails(set(ref(db('bob'), 'mm_matches/m1/room'), 'MMRM01'));
 	await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM02'));
 	await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM03'));
+	for (const code of ['MMRM05', 'MMRM06', 'MMRM07', 'MMRM08']) await assertFails(set(ref(db('alice'), 'mm_matches/m1/room'), code));
 	await assertSucceeds(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM04'));
 	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'mm_matches/m1/room')));
 	await assertSucceeds(set(ref(db('alice'), 'mm_matches/m1/room'), 'MMRM01'));

@@ -2510,8 +2510,10 @@
 						name: host ? m.guestName : m.hostName,
 						rating: String(host ? m.guestRating : m.hostRating) + (oppRd > SigilGlicko.C.PROVISIONAL_RD ? '?' : ''),
 					};
+					// The game is the bucket's (the rules check the host's room against it).
+					const spec = SigilMatch.parseBucket(m.bucket) || mm.settings;
 					if (host) {
-						await this.createRoom({ match: { settings: mm.settings, invite: mm.opp.uid, name: mm.opp.name }, creatorSide: 'random' });
+						await this.createRoom({ match: { settings: spec, invite: mm.opp.uid, name: mm.opp.name }, creatorSide: 'random' });
 						if (this.mm === null || this.mm.matchId !== id) return;
 						if (this.phase !== 'waiting' || !this.roomCode) { this._requeue(this.mm, 'Could not set up the game; looking again.'); return; }
 						const code = this.roomCode;
@@ -2541,6 +2543,13 @@
 							if (!code || !this.mm || this.mm.matchId !== id) return;
 							roomRef.off();
 							_mmRefs.room = null;
+							// Only the game we queued for (the rules check it too).
+							let room = null;
+							try { room = (await db.ref('rooms/' + code).once('value')).val(); } catch (e) { room = null; }
+							if (!this._isMatchRoom(room, spec, me)) {
+								if (this.mm && this.mm.matchId === id) this._requeue(this.mm, 'The game offered was not the one you queued for; looking again.');
+								return;
+							}
 							this.joinCode = code;
 							try {
 								await this.joinRoom(false, true, true);
@@ -2549,6 +2558,18 @@
 							}
 						}, () => {});
 					}
+				},
+
+				/** Is `room` the bucket's game (`spec`), waiting for us alone? */
+				_isMatchRoom(room, spec, me) {
+					if (!room || room.status !== 'waiting' || room.invite !== me || room.startSfn) return false;
+					const a = room.timeControl || { type: 'none' };
+					const b = spec.timeControl || { type: 'none' };
+					if ((a.type || 'none') !== (b.type || 'none') || (a.initialTime || 0) !== (b.initialTime || 0)
+						|| (a.increment || 0) !== (b.increment || 0) || (a.moveTimeout || 0) !== (b.moveTimeout || 0)) return false;
+					if (normalizeVariant(room.variant) !== spec.variant) return false;
+					if (spec.rated) return room.casual !== true && !unratedReason(room.spellNames, room.variant, null, null);
+					return room.casual === true;
 				},
 
 				/** Back from a withdrawn waiting room to the lobby. */

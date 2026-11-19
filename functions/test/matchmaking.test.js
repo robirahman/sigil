@@ -80,6 +80,7 @@ test('a pairing pass claims both tickets and writes the match', async () => {
 	const m = d.mm_matches[id];
 	assert.deepStrictEqual([m.host, m.guest, m.hostName, m.guestName, m.hostRating, m.guestRating, m.hostRd, m.bucket, m.at],
 		['alice', 'bob', 'Alice', 'Bob', 1500, 1450, 250, BLITZ, NOW]);
+	assert.deepStrictEqual([m.tc, m.variant, m.rated], [{ type: 'realtime', initialTime: 300000, increment: 0 }, 'standard', true]);
 	assert.strictEqual(d.mm_counts[BLITZ], 1);
 	// Carol is alone in range: a later pass leaves her waiting.
 	const again = await matchBucket(db, BLITZ, NOW + 1000, full());
