@@ -231,12 +231,12 @@
 									<div class="drill-group">
 										<h3 class="drill-group__title" x-text="tutorial.groups[g]"></h3>
 										<ol class="tutorial-lessons" x-bind:aria-label="tutorial.groups[g] + ' drills'">
-											<template x-for="(l, i) in tutorial.lessons" x-bind:key="l.id">
-												<li x-show="l.group === g">
+											<template x-for="l in tutorial.lessons.filter(x => x.group === g)" x-bind:key="l.id">
+												<li>
 													<button type="button"
-														x-bind:class="{ 'is-current': i === tutorialIndex, 'is-done': !!tutorialDone[l.id] }"
-														x-on:click="tutorialGo(i)"
-														x-text="(i + 1) + '. ' + l.title"></button>
+														x-bind:class="{ 'is-current': tutorial.lessons.indexOf(l) === tutorialIndex, 'is-done': !!tutorialDone[l.id] }"
+														x-on:click="tutorialGo(tutorial.lessons.indexOf(l))"
+														x-text="(tutorial.lessons.indexOf(l) + 1) + '. ' + l.title"></button>
 												</li>
 											</template>
 										</ol>

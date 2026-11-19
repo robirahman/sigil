@@ -212,7 +212,7 @@
 					why: { b11: 'b11 is the stone that touches a10: without it your dash move cannot reach the sigil.' },
 				},
 				{ do: 'a10', say: 'Your dash move: push the red stone off a10.' },
-				{ do: { any: true }, say: 'Choose where the red stone goes.' },
+				{ do: { oneOf: ['a7', 'a13'] }, say: 'Two empty nodes are equally near: choose where the red stone goes.' },
 				{ do: 'pass', say: 'Press <strong>End Turn</strong>.' },
 			],
 			hint: 'Move to b11, dash (keep b11), and use the dash move on a10.',

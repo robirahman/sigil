@@ -164,6 +164,9 @@
 								<template x-if="tutorialStatus === 'done' && tutorialIndex === tutorial.lessons.length - 1">
 									<a class="action-button" href="./">Play a game</a>
 								</template>
+								<template x-if="tutorialStatus === 'done' && tutorialIndex === tutorial.lessons.length - 1">
+									<a class="action-button" href="drills.html">Practice drills</a>
+								</template>
 								<button class="action-button tutorial-restart" x-on:click="tutorialRestart()">Restart lesson</button>
 								<template x-if="tutorialIndex > 0">
 									<button class="action-button" x-on:click="tutorialGo(tutorialIndex - 1)">&larr; Previous</button>
@@ -313,6 +316,8 @@
 			</div>
 
 			<div class="container" style="text-align:center; padding: 12px 0 24px;">
+				<a class="back-link" href="drills.html">Practice drills</a> &middot;
+				<a class="back-link" href="nodes.html">Node trainer</a> &middot;
 				<a class="back-link" href="./">&larr; Back to menu</a>
 			</div>
 		</div>
