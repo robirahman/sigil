@@ -37,6 +37,9 @@
  */
 
 const STUDY_MAX_NODES = 3000;       // per chapter, by the client
+// Database references live outside the Alpine component: its reactive
+// proxies break the SDK's internals (one study per page).
+let _studyPresenceRef = null;
 const STUDY_MAX_CHAPTERS = 64;
 const STUDY_NOTE_MAX = 2000;
 const STUDY_TITLE_MAX = 80;
@@ -227,7 +230,6 @@ function studyMixin() {
 		_studyChOff: [],
 		_studyNodesRaw: null,
 		_studyPendingNode: '',
-		_studyPresenceRef: null,
 		_studyPresenceTimer: null,
 		_studyMarksHooked: false,
 
@@ -774,22 +776,22 @@ function studyMixin() {
 		// ---------------- presence ----------------
 
 		_studyStartPresence() {
-			if (!this.studyUid || this._studyPresenceRef) return;
+			if (!this.studyUid || _studyPresenceRef) return;
 			const ref = firebase.database().ref('study_presence/' + this.studyId + '/' + this.studyUid);
-			this._studyPresenceRef = ref;
+			_studyPresenceRef = ref;
 			ref.onDisconnect().remove().catch(() => {});
 			this._studyPresenceWrite();
 			window.addEventListener('pagehide', () => { ref.remove().catch(() => {}); });
 		},
 
 		_studyPresenceSoon() {
-			if (!this._studyPresenceRef) return;
+			if (!_studyPresenceRef) return;
 			clearTimeout(this._studyPresenceTimer);
 			this._studyPresenceTimer = setTimeout(() => this._studyPresenceWrite(), 600);
 		},
 
 		_studyPresenceWrite() {
-			const ref = this._studyPresenceRef;
+			const ref = _studyPresenceRef;
 			if (!ref) return;
 			const node = this._anaNode();
 			const v = { name: this.studyUserName, at: studyTs() };
@@ -995,8 +997,8 @@ function studyMixin() {
 			u['study_joins/' + this.studyId] = null;
 			u['user_studies/' + this.studyUid + '/' + this.studyId] = null;
 			try {
-				if (this._studyPresenceRef) await this._studyPresenceRef.remove();
-				this._studyPresenceRef = null;
+				if (_studyPresenceRef) await _studyPresenceRef.remove();
+				_studyPresenceRef = null;
 				await firebase.database().ref().update(u);
 				window.location.href = 'studies.html';
 			} catch (e) {
