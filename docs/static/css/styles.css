@@ -1097,6 +1097,13 @@ html[data-theme="volcanic"].webp {
 	width: auto;
 }
 
+/* The action column sits over the board on small screens: no typing box there. */
+@media (max-height: 647px), (max-width: 767px) {
+	.actions .typed-turn {
+		display: none !important;
+	}
+}
+
 .typed-turn__label {
 	display: block;
 	font-weight: bold;
