@@ -50,16 +50,16 @@ What is measured, per turn the player made (position i = that turn's sfnBefore):
     read from there; when that score is only a fail-low bound, or the root list
     does not hold the turn at all (the engine never generated it), the position
     after it is searched at depth-1 instead and its score negated (not on a game's
-    last turn, whose recorded after-position keeps the mover's token: that turn
-    then counts only when it matches);
+    last turn, whose recorded after-position keeps the mover's token: the report
+    leaves every game's last turn out);
   * match: the turn reaches the same position as the engine's choice (side-to-move
     and turn-counter tokens aside, as the engine's own probe matches it);
   * loss: best score - played score, both clamped to +-cap centistones (STONE = 100),
     never negative;
   * close: loss <= --close centistones (Sigil has many equivalent orders of a turn).
-Turns left out: each side's first --opening-turns turns (book and formula), forced
-positions (one root turn), positions already decided (|best| >= --decided or a
-forced result), and searches that failed.
+Turns left out: each side's first --opening-turns turns (book and formula), each
+game's last turn, forced positions (one root turn), positions already decided
+(|best| >= --decided or a forced result), and searches that failed.
 
 Per player: match rate (T1), mean loss (ACPL) and close rate, each with a 95%
 interval from a bootstrap over GAMES (turns of one game are not independent), and
@@ -422,6 +422,11 @@ def player_stats(lines, rows, opts):
             c = g['movers'][i]
             seen[c] += 1
             if c not in sums or seen[c] <= opts['opening_turns']:
+                continue
+            # The game's last turn, always: its played value cannot be searched
+            # (the recorded final position keeps the mover's token), and keeping
+            # it only when it matched would favour everyone.
+            if i == n_pos - 1:
                 continue
             tm = turn_measure(rows.get((gid, i)), opts)
             if tm is None:

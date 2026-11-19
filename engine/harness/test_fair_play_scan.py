@@ -88,8 +88,16 @@ class Report(unittest.TestCase):
 
     def test_counts_and_intervals(self):
         p = self.by['u05']
-        # 8 games x 12 turns as red, less each side's first two.
+        # 8 games x 12 turns as red, less each side's first two (the game's
+        # last turn is blue's).
         self.assertEqual((p['games'], p['turns']), (8, 8 * 10))
+        # Every game's last turn is left out (here red's fourth).
+        movers = ['red', 'blue'] * 3 + ['red']
+        one = {'g': {'roomCode': 'R', 'timestamp': 1, 'uids': {'red': 'x', 'blue': 'y'}, 'ratings': {'red': 1000, 'blue': 1000},
+                     'analyze': ['red'], 'movers': movers, 'positions': ['p'] * 8}}
+        rows = {('g', i): {'score': 0, 'played': 0, 'match': True, 'n': 9} for i in range(0, 7, 2)}
+        b = fp.build_report(one, rows, dict(OPTS, opening_turns=0, min_games=1, min_turns=1, min_peers=1))[0]
+        self.assertEqual([(x['uid'], x['turns']) for x in b], [('x', 3)])
         for key in ('t1', 'acpl', 'close'):
             self.assertLessEqual(p[key]['lo'], p[key]['est'])
             self.assertLessEqual(p[key]['est'], p[key]['hi'])
