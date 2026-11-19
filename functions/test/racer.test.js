@@ -74,6 +74,12 @@ test('a public race is listed in the lobby; a private one is not; one open lobby
 	assert.strictEqual(d.puzzle_races[pub.id].status, 'closed');
 	assert.deepStrictEqual(Object.keys(d.puzzle_race_lobby), [again.id]);
 	await assert.rejects(racer.joinRace(db, pub.id, bob, T + 2000), reason('closed'));
+	// Two at once (two tabs): the host index orders them, and one stays open.
+	const [x, y] = await Promise.all([racer.createRace(db, bob, { public: true }, T + 3000), racer.createRace(db, bob, { public: true }, T + 3000)]);
+	d = db.dump();
+	const open = [x.id, y.id, priv.id].filter((k) => d.puzzle_races[k].status === 'lobby');
+	assert.deepStrictEqual(open, [d.puzzle_race_hosts.bob], 'exactly the indexed one is open');
+	assert.ok(!d.puzzle_race_lobby[x.id] !== !d.puzzle_race_lobby[y.id], 'and only it is listed');
 });
 
 test('joining: up to ten racers, never after the start, a seat left is given up', async () => {
@@ -195,6 +201,21 @@ test('a rematch: the first racer opens it, the rest join it', async () => {
 	assert.strictEqual(third.id, first.id);
 	assert.ok(!d.puzzle_races.losingRace01 && !(d.puzzle_race_lobby || {}).losingRace01, 'the losing rematch is removed');
 	assert.ok(d.puzzle_races[first.id].players.anon1);
+	// A linked rematch nobody can join any more (everyone left it) is replaced.
+	for (const u of ['bob', 'alice', 'anon1']) await racer.leaveRace(db, first.id, u);
+	assert.strictEqual(db.dump().puzzle_races[first.id].status, 'closed');
+	const fresh = await racer.rematchRace(db, id, alice, endAt + 4000);
+	d = db.dump();
+	assert.notStrictEqual(fresh.id, first.id);
+	assert.strictEqual(d.puzzle_races[id].next, fresh.id);
+	assert.deepStrictEqual([d.puzzle_races[fresh.id].host, d.puzzle_races[fresh.id].status], ['alice', 'lobby']);
+	// ... and so is a full one.
+	for (let i = 10; i < 19; i++) await racer.joinRace(db, fresh.id, guest(i), endAt + 5000);
+	const third2 = await racer.rematchRace(db, id, bob, endAt + 6000);
+	d = db.dump();
+	assert.notStrictEqual(third2.id, fresh.id);
+	assert.strictEqual(d.puzzle_races[id].next, third2.id);
+	assert.strictEqual(d.puzzle_races[third2.id].host, 'bob');
 });
 
 test('the sweep: stale lobbies, abandoned lobbies, old races and leftovers go', async () => {

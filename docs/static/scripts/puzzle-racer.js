@@ -219,8 +219,13 @@ async function bootRacer(all, params) {
 			R.joinTried = true;
 			act('join');
 		}
-		if (me && (phase === 'lobby' || phase === 'countdown' || phase === 'racing')) presence(true);
-		else if (!me) presence(false);     // left, or given up a seat while away
+		if (me && (phase === 'lobby' || phase === 'countdown' || phase === 'racing')) {
+			presence(true);
+			// Another tab of this account closed (its onDisconnect said gone): still here.
+			if (me.gone === true) db.ref('puzzle_races/' + R.id + '/players/' + R.uid + '/gone').set(false).catch(() => {});
+		} else if (!me) {
+			presence(false);     // left, or given up a seat while away
+		}
 		if (phase !== R.phase) enter(phase);
 		render();
 	}

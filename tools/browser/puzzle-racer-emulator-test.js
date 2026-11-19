@@ -120,8 +120,8 @@ if (process.env.SIGIL_RACER_POOL) {
 	const errors = [];
 	if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
 	const shot = async (pg, name) => { if (SHOTS) await pg.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage: true }); };
-	const newPage = async (label) => {
-		const ctx = await browser.createBrowserContext();
+	const newPage = async (label, sameAs) => {
+		const ctx = sameAs ? sameAs.browserContext() : await browser.createBrowserContext();
 		const p = await ctx.newPage();
 		await p.setViewport({ width: 412, height: 915 });
 		await p.evaluateOnNewDocument(useEmulators, EMU);
@@ -374,6 +374,15 @@ if (process.env.SIGIL_RACER_POOL) {
 		await pc.close();
 		r = await until(async () => { const x = await race(id2); return x.players[cUid] && x.players[cUid].gone === true ? x : null; }, 20000);
 		check('closing the tab marks the racer gone (onDisconnect)', !!r, r && r.players);
+		// The same account in a second tab: closing that tab does not make it gone.
+		const pb2 = await newPage('guest-b-tab2', pb);
+		await open(pb2, '?tab=racer&race=' + encodeURIComponent(id2));
+		await pb2.waitForFunction(() => window.SIGIL_RACER.phase === 'lobby', { timeout: 20000, polling: 250 });
+		check('a second tab is the same racer', (await R(pb2)).uid === bUid);
+		await pb2.close();
+		await sleep(3000);
+		r = await until(async () => { const x = await race(id2); return x.players[bUid] && x.players[bUid].gone === false ? x : null; }, 15000);
+		check('closing one of two tabs leaves the racer present', !!r, (await race(id2)).players[bUid]);
 		await pb.waitForFunction(() => /is-gone/.test(document.querySelector('.racer-players').innerHTML), { timeout: 15000, polling: 250 }).catch(() => {});
 		t = await text(pb);
 		check('the host sees who is still there', /1 of 10 racers/.test(t) && /Waiting for at least one more racer/.test(t), t);

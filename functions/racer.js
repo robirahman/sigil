@@ -143,21 +143,25 @@ async function raceTransaction(db, id, fn) {
 }
 
 /**
- * Open a race hosted by `me` ({ uid, name, guest }). The host's earlier race
- * still in its lobby is closed first: one open lobby a host.
+ * Open a race hosted by `me` ({ uid, name, guest }). One open lobby a host:
+ * the race is written first, then it takes the host's index entry in a
+ * transaction, and whichever race the entry held is closed. Two creations
+ * at once (two tabs) are ordered by the transaction: the later closes the
+ * earlier, so exactly one stays open.
  */
 async function createRace(db, me, opts, now) {
 	const pub = !!(opts && opts.public);
-	const prev = (await db.ref('puzzle_race_hosts/' + me.uid).once('value')).val();
-	if (typeof prev === 'string' && ID_RE.test(prev)) await closeLobby(db, prev, me.uid);
 	const id = (opts && opts.id) || newRaceId();
 	const race = {
 		host: me.uid, public: pub, status: 'lobby', createdAt: now, max: RACE_MAX_PLAYERS,
 		players: { [me.uid]: { name: me.name, guest: !!me.guest, joinedAt: now } },
 	};
-	const updates = { ['puzzle_races/' + id]: race, ['puzzle_race_hosts/' + me.uid]: id };
+	const updates = { ['puzzle_races/' + id]: race };
 	if (pub) updates['puzzle_race_lobby/' + id] = lobbyEntry(race);
 	await db.ref().update(updates);
+	let prev = null;
+	await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => { prev = cur; return id; });
+	if (typeof prev === 'string' && prev !== id && ID_RE.test(prev)) await closeLobby(db, prev, me.uid);
 	return { id };
 }
 
@@ -268,14 +272,29 @@ async function rematchRace(db, id, me, now, newId) {
 	if (!old) throw new RaceError('not-found');
 	if (!old.players || !old.players[me.uid]) throw new RaceError('not-a-racer');
 	if (old.status !== 'racing' || !(now >= old.endAt)) throw new RaceError('not-finished');
-	if (typeof old.next === 'string') return joinRace(db, old.next, me, now);
-	const created = await createRace(db, me, { public: !!old.public, id: newId || newRaceId() }, now);
-	const res = await db.ref('puzzle_races/' + id + '/next').transaction((cur) => (cur === null ? created.id : undefined));
-	const next = res.snapshot.val();
-	if (res.committed && next === created.id) return created;
-	// Another racer's rematch won: drop this one, join theirs.
-	await db.ref().update({ ['puzzle_races/' + created.id]: null, ['puzzle_race_lobby/' + created.id]: null, ['puzzle_race_hosts/' + me.uid]: null });
-	return joinRace(db, next, me, now);
+	const nextRef = db.ref('puzzle_races/' + id + '/next');
+	for (let k = 0; k < 3; k++) {
+		const linked = (await nextRef.once('value')).val();
+		if (typeof linked === 'string') {
+			try {
+				return await joinRace(db, linked, me, now);
+			} catch (e) {
+				// A rematch that can no longer be joined (everyone left it, it
+				// filled up, it started or was swept) is replaced below.
+				if (!e || !['closed', 'full', 'started', 'not-found'].includes(e.raceError)) throw e;
+			}
+		}
+		const created = await createRace(db, me, { public: !!old.public, id: (k === 0 && newId) || newRaceId() }, now);
+		// Linked in place of what was read; the cache's first null run is
+		// answered unchanged, so the server reruns it on the real value.
+		const want = typeof linked === 'string' ? linked : null;
+		const res = await nextRef.transaction((cur) => (cur === want ? created.id : (cur === null ? null : undefined)));
+		if (res.committed && res.snapshot.val() === created.id) return created;
+		// Another racer linked theirs first: drop this one and join that.
+		await db.ref().update({ ['puzzle_races/' + created.id]: null, ['puzzle_race_lobby/' + created.id]: null });
+		await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => (cur === created.id ? null : (cur === null ? null : undefined)));
+	}
+	throw new RaceError('closed');
 }
 
 /** The callable: { action: 'create' | 'join' | 'leave' | 'start' | 'rematch', id?, public? }. */
