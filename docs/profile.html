@@ -241,6 +241,37 @@
 		}
 		.ins-sub { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.85em; margin: -4px 0 8px; }
 		.ins-table summary { cursor: pointer; font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.85em; margin-top: 6px; }
+		/* Badges, title, streamer link, private note, Saved tab (social.js) */
+		.profile__extras { display: flex; flex-direction: column; gap: 10px; margin: -4px 0 16px; font-family: 'Overlock', sans-serif; }
+		.profile__badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+		.profile__badges-label, .profile__extras-line { color: var(--color-text-dim); font-size: 0.9em; }
+		.profile__extras-line a { color: var(--color-accent); }
+		.profile__catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 6px; }
+		.profile__catalog-desc { color: var(--color-text-dim); font-size: 0.8em; margin-left: 4px; }
+		.profile__catalog summary { cursor: pointer; color: var(--color-text-dim); font-size: 0.85em; }
+		.private-note { background: var(--color-surface); border-radius: 8px; padding: 10px 12px; }
+		.private-note label { display: block; color: var(--color-text-dim); font-size: 0.85em; margin-bottom: 4px; }
+		.private-note textarea, .saved-row textarea, .saved-row input {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 6px 8px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-bg-mid);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			resize: vertical;
+		}
+		.private-note__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; font-size: 0.85em; color: var(--color-text-dim); }
+		.bookmark-star { background: none; border: none; padding: 0 2px; color: var(--color-accent); cursor: pointer; font-size: 1.05em; line-height: 1; }
+		.bookmark-star:disabled { opacity: 0.5; cursor: default; }
+		.saved-row { background: var(--color-surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-family: 'Overlock', sans-serif; overflow-wrap: anywhere; }
+		.saved-row__head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 6px; }
+		.saved-row__head a { color: var(--color-accent); text-decoration: none; font-weight: bold; }
+		.saved-row__meta { color: var(--color-text-dim); font-size: 0.85em; }
+		.saved-row__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+		.activity-wrap { background: var(--color-surface); border-radius: 8px; }
 		@media (max-width: 520px) {
 			.profile { padding: 16px; }
 			.profile__head { flex-wrap: wrap; }
@@ -274,6 +305,7 @@
 							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI, 'profile__name--dev': user.isDeveloper }">
 								<span x-text="user.displayName"></span>
 								<template x-if="user.isDeveloper"><span class="profile__name-dev-badge">[dev]</span></template>
+								<span class="title-chip" x-show="extras.title" x-cloak x-text="extras.title" x-bind:title="'Verified title, granted by the site admins: ' + extras.title" data-testid="profile-title"></span>
 								<span class="profile__online" x-show="online" x-cloak title="Online now"></span>
 							</div>
 							<div class="profile__stat-line">
@@ -305,8 +337,36 @@
 						<span class="profile__social-error" x-show="social.error" x-text="social.error"></span>
 					</div>
 
+					<div class="profile__extras" x-show="!user.isAI" x-cloak>
+						<div class="profile__badges" data-testid="profile-badges">
+							<span class="profile__badges-label" x-text="extras.badges.length ? 'Badges' : 'No badges yet'"></span>
+							<span style="display: contents;" x-ref="badgeChips"></span>
+						</div>
+						<details class="profile__catalog">
+							<summary>All badges and how to earn them</summary>
+							<div class="profile__catalog" x-ref="badgeCatalog"></div>
+						</details>
+						<div class="profile__extras-line" x-show="extras.puzzleStreak" x-text="extras.puzzleStreak"></div>
+						<div class="profile__extras-line" x-show="extras.streamer" data-testid="profile-streamer">
+							<template x-if="extras.streamer">
+								<span>
+									<span x-text="'Streams on ' + extras.streamer.platform + ': '"></span><a x-bind:href="extras.streamer.url" target="_blank" rel="noopener nofollow ugc" x-text="extras.streamer.channel"></a><span x-show="extras.streamer.live" style="color: var(--color-error); font-weight: bold;"> &middot; LIVE</span>
+									&middot; <a href="streamers.html">all streamers</a>
+								</span>
+							</template>
+						</div>
+						<div class="private-note" x-show="note.can" data-testid="private-note">
+							<label for="private-note-text">Your private note on this player (only you can see it)</label>
+							<textarea id="private-note-text" rows="2" maxlength="1000" x-model="note.text" placeholder="e.g. Likes early Meteor; offers rematches"></textarea>
+							<div class="private-note__row">
+								<button class="profile-btn" type="button" x-on:click="saveNote()" x-bind:disabled="note.busy || note.text === note.saved" data-testid="save-note">Save note</button>
+								<span x-text="note.status" role="status"></span>
+							</div>
+						</div>
+					</div>
+
 					<div class="profile-tabs" role="tablist">
-						<template x-for="t in tabs" x-bind:key="t.id">
+						<template x-for="t in tabs.filter((x) => x.id !== 'saved' || isOwn)" x-bind:key="t.id">
 							<button class="profile-tab" role="tab" x-bind:id="'tab-' + t.id" x-bind:aria-selected="tab === t.id" x-bind:class="{ 'is-active': tab === t.id }" x-on:click="setTab(t.id)" x-text="t.label"></button>
 						</template>
 					</div>
@@ -390,6 +450,13 @@
 													<span x-bind:class="g.result === 'win' ? 'result--win' : 'result--loss'" x-text="g.result === 'win' ? 'Win' : 'Loss'"></span>
 													<template x-if="g.roomCode">
 														<span> &middot; <a class="review-link" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-on:click.stop="">review</a></span>
+													</template>
+													<template x-if="g.roomCode && bookmarks.can">
+														<button type="button" class="bookmark-star" x-bind:data-room="g.roomCode" x-bind:disabled="bookmarks.busy[g.roomCode]"
+															x-bind:aria-pressed="bookmarks.rooms[g.roomCode] ? 'true' : 'false'"
+															x-bind:aria-label="bookmarks.rooms[g.roomCode] ? 'Remove bookmark' : 'Bookmark this game'"
+															x-bind:title="bookmarks.rooms[g.roomCode] ? 'Bookmarked (Saved tab on your profile): click to remove' : 'Bookmark this game'"
+															x-on:click.stop="toggleBookmark(g)" x-text="bookmarks.rooms[g.roomCode] ? '\u2605' : '\u2606'"></button>
 													</template>
 												</td>
 												<td style="text-align:right;">
@@ -575,6 +642,49 @@
 						<p class="meta-note" x-show="metaNote" x-text="metaNote"></p>
 					</section>
 
+					<!-- Activity: what the server posted for this player (social.js) -->
+					<section x-show="tab === 'activity'" x-cloak role="tabpanel" aria-labelledby="tab-activity">
+						<h3>Recent activity</h3>
+						<p class="empty-msg" x-show="extras.activityLoaded && extras.activityCount === 0">Nothing yet.</p>
+						<div class="activity-wrap" x-show="extras.activityCount > 0"><ul class="activity-list" x-ref="activityList" data-testid="profile-activity"></ul></div>
+						<p class="meta-note">Wins, rating milestones, daily-puzzle streaks and badges, posted by the site's server. Followers see them on their <a class="review-link" href="feed.html">activity feed</a>.</p>
+					</section>
+
+					<!-- Saved (own profile): bookmarked games and private notes on players -->
+					<section x-show="tab === 'saved' && isOwn" x-cloak role="tabpanel" aria-labelledby="tab-saved" data-testid="saved-tab">
+						<h3>Bookmarked games</h3>
+						<p class="empty-msg" x-show="saved.loaded && saved.bookmarks.length === 0">No bookmarks yet. Use the &#x2606; next to a game (here or on any profile) or Bookmark on a game's page.</p>
+						<template x-for="b in saved.bookmarks" x-bind:key="b.room">
+							<div class="saved-row" x-bind:data-bookmark="b.room">
+								<div class="saved-row__head">
+									<a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(b.room)" x-text="b.title"></a>
+									<span class="saved-row__meta" x-text="'saved ' + (b.at ? new Date(b.at).toLocaleDateString() : '')"></span>
+								</div>
+								<input type="text" maxlength="500" x-model="b.draft" placeholder="A note (only you see it)" aria-label="Bookmark note" />
+								<div class="saved-row__actions">
+									<button class="profile-btn" type="button" x-on:click="saveBookmarkNote(b)" x-bind:disabled="saved.busy || (b.draft || '') === (b.note || '')">Save note</button>
+									<button class="profile-btn" type="button" x-on:click="removeSavedBookmark(b)" x-bind:disabled="saved.busy">Remove</button>
+								</div>
+							</div>
+						</template>
+						<h3>Notes on players</h3>
+						<p class="empty-msg" x-show="saved.loaded && saved.notes.length === 0">No notes yet. Write one on another player's profile.</p>
+						<template x-for="n in saved.notes" x-bind:key="n.uid">
+							<div class="saved-row" x-bind:data-note="n.uid">
+								<div class="saved-row__head">
+									<a x-bind:href="'profile.html?uid=' + encodeURIComponent(n.uid)" x-text="n.name"></a>
+									<span class="saved-row__meta" x-text="n.at ? new Date(n.at).toLocaleDateString() : ''"></span>
+								</div>
+								<textarea rows="2" maxlength="1000" x-model="n.draft" aria-label="Note"></textarea>
+								<div class="saved-row__actions">
+									<button class="profile-btn" type="button" x-on:click="saveSavedNote(n)" x-bind:disabled="saved.busy || n.draft === n.text">Save</button>
+									<button class="profile-btn" type="button" x-on:click="removeSavedNote(n)" x-bind:disabled="saved.busy">Delete</button>
+								</div>
+							</div>
+						</template>
+						<p class="meta-note">Bookmarks and notes are private: the database lets only you read them.</p>
+					</section>
+
 					<a class="back-link" href="leaderboard.html">&larr; Back to leaderboard</a>
 				</div>
 			</template>
@@ -603,6 +713,8 @@
 	<script src="static/scripts/engine/notation.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/profile-stats.js?v=35"></script>
+	<script src="static/scripts/engine/badges.js?v=1"></script>
+	<script src="static/scripts/social.js?v=1"></script>
 
 	<script>
 		// Room fields the Stats and Insights tabs need (rooms/{code} is public;
@@ -668,8 +780,18 @@
 				followerCount: 0,
 				online: false,
 
-				tabs: [{ id: 'games', label: 'Games' }, { id: 'stats', label: 'Stats' }, { id: 'insights', label: 'Insights' }],
+				tabs: [{ id: 'games', label: 'Games' }, { id: 'stats', label: 'Stats' }, { id: 'insights', label: 'Insights' },
+					{ id: 'activity', label: 'Activity' }, { id: 'saved', label: 'Saved' }],
 				tab: 'games',
+
+				// Badges, title, streamer link, puzzle streak and activity
+				// (public, server- or admin-written), and the viewer's own
+				// private note on this player and bookmarks (social.js).
+				extras: { title: '', badges: [], streamer: null, puzzleStreak: '', activityCount: 0, activityLoaded: false },
+				note: { can: false, text: '', saved: '', busy: false, status: '' },
+				bookmarks: { can: false, rooms: {}, busy: {} },
+				saved: { loaded: false, busy: false, bookmarks: [], notes: [] },
+				get isOwn() { return !!(this.user && this.viewerUid && this.viewerUid === this.user.uid && !this.user.isAI); },
 
 				// Search
 				filters: { opponent: '', result: 'all', rated: 'all', spell: '', from: '', to: '' },
@@ -743,6 +865,7 @@
 					this.tab = id;
 					try { history.replaceState(null, '', id === 'games' ? location.pathname + location.search : '#' + id); } catch (e) { /* file: URLs */ }
 					if (id === 'insights') this.$nextTick(() => this.renderCharts());
+					if (id === 'saved') this.loadSaved();
 				},
 
 				async init() {
@@ -814,6 +937,7 @@
 						}));
 
 						this._watchSocial(db, uid);
+						this._loadExtras(db, uid);
 						this._buildOpponentSummary();
 						// Chart wants chronological order (oldest -> newest left to right);
 						// the games array was just sorted newest-first for the table, so
@@ -1033,6 +1157,159 @@
 					}
 					this.social.busy = false;
 				},
+
+				/** Wait (briefly) for an x-ref inside the profile template to render. */
+				async _ref(name) {
+					for (let i = 0; i < 40 && !this.$refs[name]; i++) await new Promise((r) => setTimeout(r, 50));
+					return this.$refs[name] || null;
+				},
+
+				/** The public extras: title, badges, streamer link, puzzle streak, activity. */
+				async _loadExtras(db, uid) {
+					if (this.user.isAI || !window.SigilSocial) return;
+					const val = (p) => db.ref(p).once('value').then((s) => s.val(), () => null);
+					const [title, badges, streamer, streak, activity] = await Promise.all([
+						val('titles/' + uid + '/title'),
+						SigilSocial.loadBadges(uid).catch(() => []),
+						val('streamers/' + uid),
+						val('achievements/' + uid + '/puzzleStreak'),
+						SigilSocial.loadActivity(uid, 30).catch(() => []),
+					]);
+					const today = sigilUtcDay(Date.now(), 0);
+					const yesterday = sigilUtcDay(Date.now(), -1);
+					// A streak whose last solve is older than yesterday has ended.
+					const current = streak && (streak.day === today || streak.day === yesterday) ? streak.n : 0;
+					this.extras = {
+						title: typeof title === 'string' ? title : '',
+						badges,
+						streamer: SigilSocial.describeStreamer(streamer),
+						puzzleStreak: streak && streak.best ? 'Daily puzzle streak: ' + current + (streak.best > current ? ' (best ' + streak.best + ')' : '') : '',
+						activityCount: activity.length,
+						activityLoaded: true,
+					};
+					const chips = await this._ref('badgeChips');
+					if (chips) {
+						chips.textContent = '';
+						for (const b of badges) { const c = SigilSocial.badgeChip(b.id, b); if (c) chips.appendChild(c); }
+					}
+					const cat = await this._ref('badgeCatalog');
+					if (cat) {
+						cat.textContent = '';
+						const have = new Set(badges.map((b) => b.id));
+						for (const b of SIGIL_BADGES) {
+							const row = document.createElement('div');
+							const c = SigilSocial.badgeChip(b.id);
+							if (!have.has(b.id)) c.classList.add('badge-chip--locked');
+							const d = document.createElement('span');
+							d.className = 'profile__catalog-desc';
+							d.textContent = b.desc;
+							row.append(c, d);
+							cat.appendChild(row);
+						}
+					}
+					const list = await this._ref('activityList');
+					if (list) {
+						list.textContent = '';
+						for (const e of activity) {
+							const li = SigilSocial.activityNode({ uid, name: this.user.displayName }, e);
+							if (li) list.appendChild(li);
+						}
+					}
+					firebase.auth().onAuthStateChanged((me) => this._viewerExtras(db, uid, me));
+				},
+
+				/** The viewer's own: their note on this player and their bookmarks. */
+				async _viewerExtras(db, uid, me) {
+					this.note = { can: false, text: '', saved: '', busy: false, status: '' };
+					this.bookmarks = { can: false, rooms: {}, busy: {} };
+					this.saved = { loaded: false, busy: false, bookmarks: [], notes: [] };
+					if (!me || me.isAnonymous) return;
+					try {
+						const marks = (await db.ref('bookmarks/' + me.uid).once('value')).val() || {};
+						const rooms = {};
+						for (const k of Object.keys(marks)) rooms[k] = true;
+						this.bookmarks = { can: true, rooms, busy: {} };
+					} catch (e) { /* no stars */ }
+					if (me.uid !== uid) {
+						try {
+							const n = await SigilSocial.getNote(uid);
+							const text = (n && n.text) || '';
+							this.note = { can: true, text, saved: text, busy: false, status: n && n.at ? 'Saved ' + new Date(n.at).toLocaleDateString() : '' };
+						} catch (e) { /* no note box */ }
+					} else if (this.tab === 'saved') {
+						this.loadSaved();
+					}
+				},
+
+				async saveNote() {
+					this.note.busy = true;
+					try {
+						await SigilSocial.setNote(this.user.uid, this.note.text);
+						this.note.text = this.note.text.trim();
+						this.note.saved = this.note.text;
+						this.note.status = this.note.text ? 'Saved.' : 'Note deleted.';
+					} catch (e) {
+						this.note.status = 'Could not save: ' + (e.message || e);
+					}
+					this.note.busy = false;
+				},
+
+				async toggleBookmark(g) {
+					const room = g.roomCode;
+					if (!room || this.bookmarks.busy[room]) return;
+					this.bookmarks.busy = Object.assign({}, this.bookmarks.busy, { [room]: true });
+					const on = !!this.bookmarks.rooms[room];
+					try {
+						if (on) await SigilSocial.removeBookmark(room);
+						else {
+							const me = this.user.displayName;
+							await SigilSocial.addBookmark(room, g.color === 'red' ? me + ' vs ' + g.opponent : g.opponent + ' vs ' + me);
+						}
+						const rooms = Object.assign({}, this.bookmarks.rooms);
+						if (on) delete rooms[room]; else rooms[room] = true;
+						this.bookmarks.rooms = rooms;
+					} catch (e) {
+						console.warn('[Profile] bookmark:', e);
+					}
+					this.bookmarks.busy = Object.assign({}, this.bookmarks.busy, { [room]: false });
+				},
+
+				async loadSaved() {
+					if (!this.isOwn || !window.SigilSocial) return;
+					try {
+						const [marks, notes] = await Promise.all([SigilSocial.listBookmarks(), SigilSocial.listNotes()]);
+						const db = firebase.database();
+						await Promise.all(notes.map(async (n) => {
+							try { n.name = (await db.ref('users/' + n.uid + '/displayName').once('value')).val() || 'Player'; } catch (e) { n.name = 'Player'; }
+						}));
+						this.saved = {
+							loaded: true,
+							busy: false,
+							bookmarks: marks.map((b) => Object.assign(b, { draft: b.note || '' })),
+							notes: notes.map((n) => Object.assign(n, { draft: n.text || '' })),
+						};
+					} catch (e) {
+						console.warn('[Profile] saved:', e);
+					}
+				},
+
+				async _savedWrite(fn) {
+					this.saved.busy = true;
+					try { await fn(); } catch (e) { console.warn('[Profile] saved:', e); }
+					this.saved.busy = false;
+					await this.loadSaved();
+				},
+				saveBookmarkNote(b) { return this._savedWrite(() => SigilSocial.setBookmarkNote(b.room, b.draft)); },
+				removeSavedBookmark(b) {
+					return this._savedWrite(async () => {
+						await SigilSocial.removeBookmark(b.room);
+						const rooms = Object.assign({}, this.bookmarks.rooms);
+						delete rooms[b.room];
+						this.bookmarks.rooms = rooms;
+					});
+				},
+				saveSavedNote(n) { return this._savedWrite(() => SigilSocial.setNote(n.uid, n.draft)); },
+				removeSavedNote(n) { return this._savedWrite(() => SigilSocial.setNote(n.uid, '')); },
 
 				_buildOpponentSummary() {
 					const map = new Map();

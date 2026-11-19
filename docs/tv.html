@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Sigil TV - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 16px; }
+		.tv {
+			width: 100%;
+			box-sizing: border-box;
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 8px 16px 24px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.tv h2 { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; margin: 0; }
+		.tv h3 { font-family: 'Arvo', serif; color: var(--color-text-warm); font-size: 1.1em; margin: 20px 0 8px; }
+		.tv a { color: var(--color-accent); }
+		.tv__sub { color: var(--color-text-dim); margin: 2px 0 12px; }
+		.tv__match {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: baseline;
+			gap: 4px 12px;
+			padding: 10px 14px;
+			background: var(--color-surface);
+			border-radius: 8px 8px 0 0;
+		}
+		.tv__players { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.1em; }
+		.tv__player--red { color: var(--color-red-glow, #ff8a80); }
+		.tv__player--blue { color: var(--color-blue-glow, #82b1ff); }
+		.tv__meta { color: var(--color-text-dim); font-size: 0.9em; }
+		.tv__open { margin-left: auto; font-size: 0.9em; }
+		.tv__screen {
+			position: relative;
+			background: var(--color-bg-mid);
+			border-radius: 0 0 8px 8px;
+			overflow: hidden;
+			min-height: 200px;
+		}
+		.tv__frame { display: block; width: 100%; height: max(480px, 78vh); border: 0; }
+		.tv__overlay {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			background: rgba(0, 0, 0, 0.72);
+			color: #fff;
+			font-family: 'Arvo', serif;
+			font-size: 1.4em;
+			text-align: center;
+			padding: 16px;
+		}
+		.tv__overlay small { font-family: 'Overlock', sans-serif; font-size: 0.65em; opacity: 0.85; }
+		.tv__empty { padding: 48px 16px; text-align: center; color: var(--color-text-dim); font-style: italic; }
+		.tv-list { display: flex; flex-direction: column; gap: 6px; }
+		.tv-list__row {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px 12px;
+			padding: 8px 12px;
+			background: var(--color-surface);
+			border-radius: 6px;
+		}
+		.tv-list__who { flex: 1 1 220px; color: var(--color-text-bright); }
+		.tv-list__meta { color: var(--color-text-dim); font-size: 0.85em; }
+		.tv-list__btn {
+			padding: 4px 12px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			font-family: inherit;
+			cursor: pointer;
+		}
+		.tv-list__btn:hover { background: var(--color-surface-hover); }
+		.tv__note { color: var(--color-text-dim); font-size: 0.85em; margin-top: 12px; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="sigilTv()">
+		<div class="tv">
+			<h2>Sigil TV</h2>
+			<p class="tv__sub">The top-rated game being played right now. When it ends, Sigil TV switches to the next one by itself.</p>
+
+			<div class="tv__match" x-show="current" x-cloak data-testid="tv-match">
+				<span class="tv__players">
+					<span class="tv__player--red" x-text="current && current.red.label"></span>
+					<span> vs </span>
+					<span class="tv__player--blue" x-text="current && current.blue.label"></span>
+				</span>
+				<span class="tv__meta" x-text="current ? current.meta : ''"></span>
+				<a class="tv__open" x-bind:href="current ? 'multiplayer.html?id=' + current.code : '#'">Open the game page</a>
+			</div>
+			<div class="tv__screen">
+				<iframe class="tv__frame" x-ref="frame" title="Live game" x-show="current" x-cloak data-testid="tv-frame"></iframe>
+				<div class="tv__overlay" x-show="overlay" x-cloak role="status" data-testid="tv-overlay">
+					<span x-text="overlay"></span>
+					<small x-text="overlaySub"></small>
+				</div>
+				<p class="tv__empty" x-show="!current" data-testid="tv-empty" x-text="loading ? 'Looking for a live game…' : 'No live games right now. Sigil TV tunes in by itself as soon as one starts.'"></p>
+			</div>
+
+			<template x-if="others.length > 0">
+				<div>
+					<h3>Also live</h3>
+					<div class="tv-list">
+						<template x-for="g in others" x-bind:key="g.code">
+							<div class="tv-list__row" x-bind:data-code="g.code">
+								<span class="tv-list__who" x-text="g.red.label + ' vs ' + g.blue.label"></span>
+								<span class="tv-list__meta" x-text="g.meta"></span>
+								<button class="tv-list__btn" type="button" x-on:click="pick(g)">Watch here</button>
+							</div>
+						</template>
+					</div>
+				</div>
+			</template>
+			<p class="tv__note">Games whose players allow spectators, from the lobby's Watch Live list, ranked by the players' average rating (guests count as unrated). A game you pick stays on until it ends.</p>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+
+	<script>
+		// Sigil TV: the top-rated game in live_rooms/ (the index behind the
+		// lobby's Watch Live list), shown through the spectator view of
+		// multiplayer.html (?tv=1, framed). Its room's status is watched here;
+		// when the game ends the result shows for TV_RESULT_MS and the next
+		// top-rated game comes on.
+		const TV_RESULT_MS = window.__TV_RESULT_MS || 8000;
+		// The list of live games is read again this often (and whenever the
+		// index changes, debounced).
+		const TV_REFRESH_MS = 30000;
+		// Room fields read per listed game (not its turns, which can be long).
+		const TV_ROOM_FIELDS = ['status', 'allowSpectators', 'local', 'red', 'blue', 'ranked', 'timeControl', 'variant', 'startSfn'];
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('sigilTv', () => ({
+				loading: true,
+				current: null,
+				others: [],
+				overlay: '',
+				overlaySub: '',
+				_elo: {},
+				_statusRef: null,
+				_switching: false,
+				_refreshTimer: null,
+
+				async init() {
+					// friends.js (loaded by auth-status.js) names the clocks and variants.
+					for (let i = 0; i < 30 && !window.SigilFriends; i++) await new Promise((r) => setTimeout(r, 100));
+					const db = firebase.database();
+					db.ref('live_rooms').on('value', () => this._soon(), () => { this.loading = false; });
+					setInterval(() => this.refresh(), TV_REFRESH_MS);
+					this.refresh();
+				},
+
+				_soon() {
+					clearTimeout(this._refreshTimer);
+					this._refreshTimer = setTimeout(() => this.refresh(), 500);
+				},
+
+				async refresh() {
+					let games = [];
+					try { games = await this._listLive(); } catch (e) { console.warn('[TV] live games unavailable:', e); }
+					this.loading = false;
+					if (!this.current && !this._switching) this.tune(games[0] || null);
+					this.others = games.filter((g) => !this.current || g.code !== this.current.code).slice(0, 8);
+				},
+
+				async _readRoom(code) {
+					const db = firebase.database();
+					const r = {};
+					await Promise.all(TV_ROOM_FIELDS.map((f) => db.ref('rooms/' + code + '/' + f).once('value')
+						.then((s) => { if (s.exists()) r[f] = s.val(); }, () => {})));
+					return r;
+				},
+
+				async _eloOf(seat) {
+					if (!seat || !seat.uid || seat.anon || seat.uid === 'deleted') return null;
+					if (!(seat.uid in this._elo)) {
+						this._elo[seat.uid] = firebase.database().ref('users/' + seat.uid + '/elo').once('value')
+							.then((s) => (typeof s.val() === 'number' ? s.val() : null), () => null);
+					}
+					return this._elo[seat.uid];
+				},
+
+				/** Games now being played that spectators may watch, best first. */
+				async _listLive() {
+					const db = firebase.database();
+					const codes = Object.keys((await db.ref('live_rooms').once('value')).val() || {}).filter((c) => /^[A-Z0-9]{4,10}$/.test(c));
+					const rooms = await Promise.all(codes.map((c) => this._readRoom(c)));
+					const out = [];
+					await Promise.all(codes.map(async (code, i) => {
+						const r = rooms[i];
+						if (r.status !== 'playing' || r.allowSpectators === false || r.local === true) return;
+						if (!r.red || !r.red.uid || !r.blue || !r.blue.uid) return;
+						// A player at the board (as Watch Live requires).
+						if (r.red.connected === false && r.blue.connected === false) return;
+						const [re, be] = await Promise.all([this._eloOf(r.red), this._eloOf(r.blue)]);
+						out.push({
+							code,
+							score: ((re || 0) + (be || 0)) / 2,
+							red: { uid: r.red.uid, label: (r.red.displayName || 'Guest') + (re !== null ? ' (' + re + ')' : '') },
+							blue: { uid: r.blue.uid, label: (r.blue.displayName || 'Guest') + (be !== null ? ' (' + be + ')' : '') },
+							meta: [this._tcLabel(r.timeControl), r.startSfn ? 'From a position' : this._variantLabel(r.variant), r.ranked === true ? 'Rated' : 'Unrated'].join(' · '),
+						});
+					}));
+					out.sort((a, b) => (b.score - a.score) || a.code.localeCompare(b.code));
+					return out;
+				},
+
+				_tcLabel(tc) {
+					return window.SigilFriends ? SigilFriends.tcLabel(tc) : (tc && tc.type === 'realtime' ? 'Timed' : tc && tc.type === 'correspondence' ? 'Correspondence' : 'Untimed');
+				},
+				_variantLabel(v) {
+					return window.SigilFriends ? SigilFriends.variantLabel(v) : (!v || v === 'standard' ? 'Standard' : String(v));
+				},
+
+				/** Show `game` (null: nothing live) and watch its room until it ends. */
+				tune(game) {
+					if (this._statusRef) this._statusRef.off();
+					this._statusRef = null;
+					this.overlay = '';
+					this.overlaySub = '';
+					this.current = game;
+					const frame = this.$refs.frame;
+					if (!game) {
+						if (frame && frame.getAttribute('src')) frame.removeAttribute('src');
+						return;
+					}
+					frame.src = 'multiplayer.html?id=' + encodeURIComponent(game.code) + '&tv=1';
+					const ref = firebase.database().ref('rooms/' + game.code + '/status');
+					this._statusRef = ref;
+					ref.on('value', (s) => { if (s.val() !== 'playing') this._ended(game); }, () => this._ended(game));
+				},
+
+				/** A game picked from the list stays on until it ends. */
+				pick(g) {
+					this._switching = false;
+					this.tune(g);
+					this.others = this.others.filter((o) => o.code !== g.code);
+				},
+
+				async _ended(game) {
+					if (!this.current || this.current.code !== game.code || this._switching) return;
+					this._switching = true;
+					if (this._statusRef) this._statusRef.off();
+					this._statusRef = null;
+					let status = null;
+					let winner = null;
+					try {
+						const db = firebase.database();
+						[status, winner] = await Promise.all(['status', 'winner'].map((f) => db.ref('rooms/' + game.code + '/' + f).once('value').then((s) => s.val())));
+					} catch (e) { /* shown without a result */ }
+					const name = (c) => (c === 'red' ? game.red.label : game.blue.label);
+					this.overlay = winner === 'red' || winner === 'blue'
+						? (winner === 'red' ? 'Red' : 'Blue') + ' wins: ' + name(winner)
+						: (status === 'aborted' ? 'Game aborted' : 'Game over');
+					this.overlaySub = 'The next game comes on in a few seconds…';
+					setTimeout(async () => {
+						if (!this._switching) return; // the viewer picked a game meanwhile
+						this.current = null;
+						this._switching = false;
+						await this.refresh();
+					}, TV_RESULT_MS);
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Activity - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 16px; }
+		.feed {
+			width: 100%;
+			box-sizing: border-box;
+			max-width: 720px;
+			margin: 0 auto;
+			padding: 8px 16px 24px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.feed h2 { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; margin: 0 0 4px; }
+		.feed a { color: var(--color-accent); }
+		.feed__sub, .feed__msg, .feed__note { color: var(--color-text-dim); }
+		.feed__msg { font-style: italic; padding: 8px 0; }
+		.feed__note { font-size: 0.85em; margin-top: 12px; }
+		.feed__list { background: var(--color-surface); border-radius: 8px; }
+		.feed__bar { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; }
+		.feed__refresh { background: none; border: none; color: var(--color-border-hover); cursor: pointer; font-family: 'Overlock', sans-serif; text-decoration: underline; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="feedPage()">
+		<div class="feed">
+			<h2>Activity</h2>
+			<p class="feed__sub">Wins, rating milestones, daily-puzzle streaks and badges of the players you follow.</p>
+
+			<p class="feed__msg" x-show="state === 'loading'">Loading&hellip;</p>
+			<p class="feed__msg" x-show="state === 'signed-out'" x-cloak data-testid="feed-signed-out">Sign in on the <a href="account.html">account page</a> and follow players from their profiles to see what they are up to here.</p>
+			<p class="feed__msg" x-show="state === 'ready' && following === 0" x-cloak>You don't follow anyone yet. Find players on the <a href="leaderboard.html">leaderboard</a> and press Follow on their profile.</p>
+
+			<template x-if="state === 'ready' && following > 0">
+				<div>
+					<div class="feed__bar">
+						<span class="feed__note" x-text="'Following ' + following + (following === 1 ? ' player' : ' players')"></span>
+						<button class="feed__refresh" type="button" x-on:click="load()">Refresh</button>
+					</div>
+					<p class="feed__msg" x-show="empty">Nothing yet: entries appear as the players you follow win games, reach new ratings, keep up daily-puzzle streaks and earn badges.</p>
+					<div class="feed__list"><ul class="activity-list" x-ref="list" data-testid="feed-list"></ul></div>
+				</div>
+			</template>
+			<p class="feed__note">The site's server writes these entries when a game is rated or a puzzle solved, so nobody can post one for themselves. Your own activity is on your <a x-bind:href="uid ? 'profile.html?uid=' + encodeURIComponent(uid) + '#activity' : 'account.html'">profile</a>.</p>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/engine/badges.js?v=1"></script>
+	<script src="static/scripts/social.js?v=1"></script>
+
+	<script>
+		// The feed is read, not pushed: each followed player's newest
+		// activity/{uid} entries (written only by functions/social.js), merged
+		// newest first. Follows are few, so this stays a handful of small reads.
+		const FEED_PER_PLAYER = 15;
+		const FEED_SHOWN = 60;
+		// Followed players read (a very long follow list is cut, newest-keyed last).
+		const FEED_MAX_PLAYERS = 200;
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('feedPage', () => ({
+				state: 'loading',
+				uid: null,
+				following: 0,
+				empty: false,
+				_uids: [],
+
+				init() {
+					firebase.auth().onAuthStateChanged(async (u) => {
+						if (!u || u.isAnonymous) { this.uid = null; this.state = 'signed-out'; return; }
+						this.uid = u.uid;
+						try {
+							const f = (await firebase.database().ref('follows/' + u.uid).once('value')).val() || {};
+							this._uids = Object.keys(f).filter((k) => f[k] === true).slice(-FEED_MAX_PLAYERS);
+						} catch (e) { this._uids = []; }
+						this.following = this._uids.length;
+						this.state = 'ready';
+						if (this.following) this.$nextTick(() => this.load());
+					});
+				},
+
+				async load() {
+					const rows = await SigilSocial.loadFeed(this._uids, FEED_PER_PLAYER, FEED_SHOWN);
+					const list = this.$refs.list;
+					if (!list) return;
+					list.textContent = '';
+					for (const r of rows) {
+						const li = SigilSocial.activityNode({ uid: r.uid, name: r.name }, r.entry);
+						if (li) list.appendChild(li);
+					}
+					this.empty = list.children.length === 0;
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

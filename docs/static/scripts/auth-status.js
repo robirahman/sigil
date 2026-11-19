@@ -53,8 +53,12 @@
 
 	// "Your move" badge and turn notifications (turn-notify.js), which need
 	// the shared turn rule (engine/room-clock.js) first; then follows, blocks
-	// and the challenge banner (friends.js).
+	// and the challenge banner (friends.js); then the events and
+	// announcements banner (site-events.js). Sigil TV's embedded game
+	// (multiplayer.html?tv=1 in tv.html) leaves all of these to the page
+	// around it.
 	(function loadTurnNotify() {
+		if (window.top !== window && /[?&]tv=1(&|$)/.test(location.search)) return;
 		const add = (src) => {
 			const s = document.createElement('script');
 			s.src = ROOT + src;
@@ -64,6 +68,7 @@
 		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js?v=35');
 		add('static/scripts/turn-notify.js?v=35');
 		add('static/scripts/friends.js?v=35');
+		add('static/scripts/site-events.js?v=1');
 	})();
 
 	const el = document.getElementById('auth-status');

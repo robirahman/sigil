@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Events - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 16px; }
+		.events {
+			width: 100%;
+			box-sizing: border-box;
+			max-width: 760px;
+			margin: 0 auto;
+			padding: 8px 16px 24px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.events h2 { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; margin: 0 0 4px; }
+		.events h3 { font-family: 'Arvo', serif; color: var(--color-text-warm); font-size: 1.1em; margin: 24px 0 8px; }
+		.events a { color: var(--color-accent); }
+		.events__msg { color: var(--color-text-dim); font-style: italic; padding: 6px 0; }
+		.event-card {
+			padding: 12px 16px;
+			margin-bottom: 10px;
+			background: var(--color-surface);
+			border-radius: 8px;
+			border-left: 4px solid var(--color-border);
+			overflow-wrap: anywhere;
+			scroll-margin-top: 16px;
+		}
+		.event-card--live { border-left-color: var(--color-success, #4caf50); }
+		.event-card--soon, .event-card--upcoming { border-left-color: var(--color-accent); }
+		.event-card--announcement { border-left-color: #7fb2e5; }
+		.event-card--over { opacity: 0.75; }
+		.event-card:target { outline: 2px solid var(--color-accent); }
+		.event-card__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+		.event-card__kind { font-family: 'Arvo', serif; color: var(--color-accent); text-transform: uppercase; font-size: 0.75em; letter-spacing: 0.06em; }
+		.event-card__title { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.1em; }
+		.event-card__when { color: var(--color-text-dim); font-size: 0.9em; }
+		.event-card__status { color: var(--color-success, #4caf50); font-weight: bold; font-size: 0.9em; }
+		.event-card__body { white-space: pre-wrap; margin: 8px 0 4px; }
+		.event-card__links { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.9em; margin-top: 6px; }
+		.event-card__links button { background: none; border: none; padding: 0; color: var(--color-accent); font: inherit; text-decoration: underline; cursor: pointer; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="eventsPage()">
+		<div class="events">
+			<h2>Events</h2>
+			<p class="events__msg" x-show="isAdmin" x-cloak>You are an admin: post events and announcements on the <a href="admin.html#events">admin page</a>.</p>
+			<p class="events__msg" x-show="loading">Loading&hellip;</p>
+
+			<template x-for="sec in sections" x-bind:key="sec.key">
+				<section x-show="!loading" x-bind:data-section="sec.key">
+					<h3 x-text="sec.title"></h3>
+					<p class="events__msg" x-show="sec.items.length === 0" x-text="sec.empty"></p>
+					<template x-for="e in sec.items" x-bind:key="e.id">
+						<article class="event-card" x-bind:id="e.id" x-bind:class="'event-card--' + (e.kind === 'announcement' && e.state !== 'over' ? 'announcement' : e.state)" x-bind:data-event="e.id">
+							<div class="event-card__head">
+								<span class="event-card__kind" x-text="e.kind === 'announcement' ? 'Announcement' : 'Event'"></span>
+								<span class="event-card__title" x-text="e.title"></span>
+								<span class="event-card__status" x-show="e.state === 'live' && e.kind === 'event'">Happening now</span>
+							</div>
+							<div class="event-card__when" x-text="e.whenText"></div>
+							<p class="event-card__body" x-show="e.body" x-text="e.body"></p>
+							<div class="event-card__links">
+								<template x-if="e.href"><a x-bind:href="e.href" x-bind:target="e.external ? '_blank' : null" x-bind:rel="e.external ? 'noopener' : null">More</a></template>
+								<template x-if="e.kind === 'event' && e.state !== 'over'"><button type="button" x-on:click="downloadIcs(e)">Add to calendar (.ics)</button></template>
+							</div>
+						</article>
+					</template>
+				</section>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+
+	<script>
+		// site_events/ (site-events.js has the shared status rules and draws the
+		// banner): what is on now and coming up, current announcements, and the
+		// most recent past ones.
+		const EVENTS_PAST_SHOWN = 20;
+		const EVENTS_CURRENT_READ = 100;
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('eventsPage', () => ({
+				loading: true,
+				isAdmin: false,
+				sections: [],
+				_current: [],
+				_past: [],
+
+				async init() {
+					// site-events.js is loaded by auth-status.js.
+					for (let i = 0; i < 50 && !window.SigilEvents; i++) await new Promise((r) => setTimeout(r, 100));
+					const db = firebase.database();
+					const read = (q, into) => q.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { const v = c.val(); if (v && typeof v.title === 'string') list.push(Object.assign({ id: c.key }, v)); });
+						this[into] = list;
+						this.build();
+					}, () => { this.loading = false; });
+					const now = Date.now();
+					read(db.ref('site_events').orderByChild('endsAt').startAt(now).limitToFirst(EVENTS_CURRENT_READ), '_current');
+					read(db.ref('site_events').orderByChild('endsAt').endAt(now).limitToLast(EVENTS_PAST_SHOWN), '_past');
+					setInterval(() => this.build(), 60000);
+					firebase.auth().onAuthStateChanged(async (u) => {
+						this.isAdmin = false;
+						if (!u || u.isAnonymous) return;
+						try { this.isAdmin = (await db.ref('admins/' + u.uid).once('value')).val() === true; } catch (e) { /* not an admin */ }
+					});
+				},
+
+				build() {
+					const now = Date.now();
+					const E = window.SigilEvents;
+					const fmt = (t) => new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+					const all = new Map();
+					for (const e of this._past.concat(this._current)) all.set(e.id, e);
+					const rows = Array.from(all.values()).map((e) => {
+						const href = E.safeLink(e.link);
+						return Object.assign({}, e, {
+							state: E.status(e, now),
+							href,
+							external: !!href && /^https:/.test(e.link),
+							whenText: e.kind === 'announcement'
+								? 'Posted ' + new Date(e.startsAt).toLocaleDateString()
+								: fmt(e.startsAt) + ' \u2013 ' + fmt(e.endsAt) + (E.status(e, now) === 'soon' ? ' (starts in ' + E.untilText(e.startsAt - now) + ')' : ''),
+						});
+					});
+					const events = rows.filter((e) => e.kind === 'event');
+					this.sections = [
+						{ key: 'upcoming', title: 'Now and coming up', empty: 'No events scheduled right now.',
+							items: events.filter((e) => e.state !== 'over').sort((a, b) => a.startsAt - b.startsAt) },
+						{ key: 'announcements', title: 'Announcements', empty: 'No announcements.',
+							items: rows.filter((e) => e.kind === 'announcement' && e.state === 'live').sort((a, b) => b.startsAt - a.startsAt) },
+						{ key: 'past', title: 'Past', empty: 'Nothing yet.',
+							items: rows.filter((e) => e.state === 'over').sort((a, b) => b.endsAt - a.endsAt).slice(0, EVENTS_PAST_SHOWN) },
+					];
+					this.loading = false;
+					if (location.hash && !this._scrolled) {
+						this._scrolled = true;
+						this.$nextTick(() => { const el = document.getElementById(decodeURIComponent(location.hash.slice(1))); if (el) el.scrollIntoView(); });
+					}
+				},
+
+				/** An .ics file for one event (UTC times), built here. */
+				downloadIcs(e) {
+					const t = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+					const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (c) => '\\' + c);
+					const url = new URL('events.html#' + encodeURIComponent(e.id), location.href).href;
+					const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Sigil Online//Events//EN', 'BEGIN:VEVENT',
+						'UID:' + e.id + '@sigil-online', 'DTSTAMP:' + t(Date.now()), 'DTSTART:' + t(e.startsAt), 'DTEND:' + t(e.endsAt),
+						'SUMMARY:' + esc(e.title), 'DESCRIPTION:' + esc((e.body ? e.body + '\n\n' : '') + url), 'URL:' + url,
+						'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+					const a = document.createElement('a');
+					a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+					a.download = 'sigil-event-' + e.id + '.ics';
+					document.body.appendChild(a);
+					a.click();
+					a.remove();
+					setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

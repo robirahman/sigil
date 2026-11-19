@@ -74,6 +74,22 @@
 		.flags-table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
 		.flags-table th, .flags-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-bg-mid); }
 		.flags-table th { color: var(--color-text-dim); font-family: 'Arvo', serif; font-size: 0.8em; text-transform: uppercase; }
+		.admin-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; padding: 12px 16px; background: var(--color-surface); border-radius: 8px; }
+		.admin-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.85em; color: var(--color-text-dim); }
+		.admin-form label.admin-form__wide { grid-column: 1 / -1; }
+		.admin-form input, .admin-form select, .admin-form textarea {
+			background: var(--color-bg-mid);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			box-sizing: border-box;
+			color: var(--color-text);
+			font-family: inherit;
+			font-size: 1em;
+			padding: 6px;
+			min-width: 0;
+		}
+		.admin-form__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+		.admin-note { color: var(--color-text-dim); font-size: 0.85em; }
 	</style>
 </head>
 <body>
@@ -103,9 +119,11 @@
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + (openTruncated ? '+, oldest shown' : '') + ')'"></button>
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'all' }" x-on:click="view = 'all'" x-text="'All reports (' + reports.length + ')'"></button>
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'players' }" x-on:click="view = 'players'">Suspensions and abandonments</button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'events' }" x-on:click="openEvents()" data-testid="admin-events-tab">Events and announcements</button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'titles' }" x-on:click="openTitles()" data-testid="admin-titles-tab">Verified titles</button>
 					</div>
 
-					<template x-if="view !== 'players'">
+					<template x-if="view === 'open' || view === 'all'">
 						<div>
 							<p class="admin__msg" x-show="shownReports.length === 0">No reports here.</p>
 							<template x-for="r in shownReports" x-bind:key="r.id">
@@ -144,6 +162,98 @@
 									</template>
 								</div>
 							</template>
+						</div>
+					</template>
+
+					<!-- site_events/: the banner on every page and events.html -->
+					<template x-if="view === 'events'">
+						<div>
+							<h3>Post an event or announcement</h3>
+							<div class="admin-form" data-testid="event-form">
+								<label>Kind
+									<select x-model="ev.kind" x-on:change="evDefaults()">
+										<option value="event">Event (with a start and end)</option>
+										<option value="announcement">Announcement</option>
+									</select>
+								</label>
+								<label class="admin-form__wide">Title (shown in the banner)
+									<input type="text" maxlength="120" x-model="ev.title" data-testid="event-title" />
+								</label>
+								<label class="admin-form__wide">Details (optional, on the events page)
+									<textarea rows="3" maxlength="1000" x-model="ev.body"></textarea>
+								</label>
+								<label class="admin-form__wide">Link (optional): https://… or a page of this site, e.g. multiplayer.html
+									<input type="text" maxlength="300" x-model="ev.link" placeholder="https://discord.gg/…" />
+								</label>
+								<label><span x-text="ev.kind === 'event' ? 'Starts (your time)' : 'Shown from (your time)'"></span>
+									<input type="datetime-local" x-model="ev.start" data-testid="event-start" />
+								</label>
+								<label><span x-text="ev.kind === 'event' ? 'Ends' : 'Shown until'"></span>
+									<input type="datetime-local" x-model="ev.end" data-testid="event-end" />
+								</label>
+								<div class="admin-form__actions">
+									<button class="admin__btn" type="button" x-on:click="postEvent()" x-bind:disabled="busy" data-testid="event-post">Post</button>
+									<span class="admin-note">Events show in the banner from a day before they start until they end; announcements for their whole window. Visitors can dismiss each one.</span>
+								</div>
+							</div>
+							<h3>Posted</h3>
+							<p class="admin__msg" x-show="siteEvents.length === 0">Nothing posted yet.</p>
+							<template x-for="e in siteEvents" x-bind:key="e.id">
+								<div class="report-card" x-bind:class="{ 'report-card--resolved': e.endsAt <= Date.now() }" x-bind:data-event="e.id">
+									<div class="report-card__head">
+										<span class="report-card__reason" x-text="e.kind"></span>
+										<span x-text="e.title"></span>
+										<span class="report-card__meta" x-text="when(e.startsAt) + ' \u2013 ' + when(e.endsAt)"></span>
+									</div>
+									<p class="report-card__note" x-show="e.body" x-text="e.body"></p>
+									<div class="report-card__controls">
+										<a x-bind:href="'events.html#' + encodeURIComponent(e.id)">view</a>
+										<button class="admin__btn admin__btn--danger" type="button" x-on:click="deleteEvent(e)" x-bind:disabled="busy">Delete</button>
+									</div>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<!-- titles/: verified titles on profiles -->
+					<template x-if="view === 'titles'">
+						<div>
+							<h3>Grant a title</h3>
+							<div class="admin-form" data-testid="title-form">
+								<label>Player (name or uid)
+									<input type="text" maxlength="128" x-model="tg.who" data-testid="title-who" />
+								</label>
+								<label>Title (up to 32 characters)
+									<input type="text" maxlength="32" x-model="tg.title" list="title-suggestions" data-testid="title-text" />
+									<datalist id="title-suggestions">
+										<option value="Site Champion"></option>
+										<option value="Developer"></option>
+										<option value="Moderator"></option>
+										<option value="Tournament Director"></option>
+										<option value="Coach"></option>
+										<option value="Spell Designer"></option>
+									</datalist>
+								</label>
+								<div class="admin-form__actions">
+									<button class="admin__btn" type="button" x-on:click="grantTitle()" x-bind:disabled="busy" data-testid="title-grant">Grant</button>
+									<span class="admin-note">Shown next to the player's name on their profile, marked as verified. Granting again replaces it.</span>
+								</div>
+							</div>
+							<h3>Titles</h3>
+							<p class="admin__msg" x-show="titleRows.length === 0">No titles granted.</p>
+							<table class="flags-table" x-show="titleRows.length > 0">
+								<thead><tr><th>Player</th><th>Title</th><th>Granted</th><th></th></tr></thead>
+								<tbody>
+									<template x-for="t in titleRows" x-bind:key="t.uid">
+										<tr x-bind:data-title="t.uid">
+											<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(t.uid)" x-text="nameOf(t.uid)"></a></td>
+											<td x-text="t.title"></td>
+											<td x-text="when(t.at) + ' by ' + nameOf(t.by)"></td>
+											<td><button class="admin__btn" type="button" x-on:click="revokeTitle(t.uid)" x-bind:disabled="busy">Remove</button></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
 						</div>
 					</template>
 
@@ -221,8 +331,18 @@
 						.sort((a, b) => (this.banned(b.uid) - this.banned(a.uid)) || ((b.abandons || 0) - (a.abandons || 0)));
 				},
 
+				// Events and announcements (site_events/), verified titles (titles/).
+				ev: { kind: 'event', title: '', body: '', link: '', start: '', end: '' },
+				siteEvents: [],
+				tg: { who: '', title: '' },
+				titles: {},
+				get titleRows() {
+					return Object.keys(this.titles).map((uid) => Object.assign({ uid }, this.titles[uid])).sort((a, b) => (b.at || 0) - (a.at || 0));
+				},
+
 				init() {
 					firebase.auth().onAuthStateChanged((u) => this._start(u));
+					this.evDefaults();
 				},
 
 				async _start(u) {
@@ -236,6 +356,8 @@
 					try {
 						await this.reload();
 						this.state = 'ready';
+						if (location.hash === '#events') this.openEvents();
+						else if (location.hash === '#titles') this.openTitles();
 					} catch (e) {
 						console.error('[Admin] load failed:', e);
 						this.error = 'Could not load the reports: ' + (e.message || e);
@@ -335,6 +457,113 @@
 						by: this.uid,
 						at: firebase.database.ServerValue.TIMESTAMP,
 					}));
+				},
+
+				// ---- Events and announcements ----
+
+				_localInput(ms) {
+					const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000);
+					return d.toISOString().slice(0, 16);
+				},
+
+				/** Default window: an event in an hour for two hours; an announcement now for a week. */
+				evDefaults() {
+					const now = Date.now();
+					const start = this.ev.kind === 'event' ? Math.ceil((now + 3600000) / 900000) * 900000 : now;
+					this.ev.start = this._localInput(start);
+					this.ev.end = this._localInput(this.ev.kind === 'event' ? start + 2 * 3600000 : start + 7 * 86400000);
+				},
+
+				async openEvents() {
+					this.view = 'events';
+					try {
+						const snap = await firebase.database().ref('site_events').orderByChild('endsAt').limitToLast(100).once('value');
+						const list = [];
+						snap.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						this.siteEvents = list.sort((a, b) => (b.startsAt || 0) - (a.startsAt || 0));
+					} catch (e) {
+						this.error = 'Could not load events: ' + (e.message || e);
+					}
+				},
+
+				postEvent() {
+					const title = this.ev.title.trim();
+					const startsAt = Date.parse(this.ev.start);
+					const endsAt = Date.parse(this.ev.end);
+					const link = this.ev.link.trim();
+					if (!title) { this.error = 'A title is needed.'; return; }
+					if (!(startsAt > 0) || !(endsAt > startsAt)) { this.error = 'The end must be after the start.'; return; }
+					if (link && !(window.SigilEvents && SigilEvents.safeLink(link))) { this.error = 'The link must start with https:// or be a page of this site (e.g. events.html).'; return; }
+					const body = this.ev.body.trim();
+					return this._write((db) => db.ref('site_events').push({
+						kind: this.ev.kind,
+						title: title.slice(0, 120),
+						body: body ? body.slice(0, 1000) : null,
+						link: link || null,
+						startsAt,
+						endsAt,
+						by: this.uid,
+						at: firebase.database.ServerValue.TIMESTAMP,
+					})).then(() => {
+						if (!this.error) {
+							this.ev = { kind: this.ev.kind, title: '', body: '', link: '', start: '', end: '' };
+							this.evDefaults();
+						}
+						return this.openEvents();
+					});
+				},
+
+				deleteEvent(e) {
+					if (!confirm('Delete "' + e.title + '"?')) return;
+					return this._write((db) => db.ref('site_events/' + e.id).remove()).then(() => this.openEvents());
+				},
+
+				// ---- Verified titles ----
+
+				async openTitles() {
+					this.view = 'titles';
+					try {
+						const db = firebase.database();
+						this.titles = (await db.ref('titles').once('value')).val() || {};
+						const uids = new Set();
+						for (const [u, t] of Object.entries(this.titles)) { uids.add(u); if (t && t.by) uids.add(t.by); }
+						await Promise.all([...uids].filter((u) => !(u in this.names)).map(async (u) => {
+							try { this.names[u] = (await db.ref('users/' + u + '/displayName').once('value')).val() || u; } catch (e) { this.names[u] = u; }
+						}));
+					} catch (e) {
+						this.error = 'Could not load titles: ' + (e.message || e);
+					}
+				},
+
+				/** A uid, or a display name claimed in usernames/ (lower case). */
+				async _resolvePlayer(who) {
+					const db = firebase.database();
+					const w = who.trim();
+					if (!w) return null;
+					if ((await db.ref('users/' + w + '/displayName').once('value')).exists()) return w;
+					const key = w.toLowerCase();
+					if (/^[a-z0-9_-]{1,20}$/.test(key)) {
+						const uid = (await db.ref('usernames/' + key).once('value')).val();
+						if (typeof uid === 'string' && uid) return uid;
+					}
+					return null;
+				},
+
+				async grantTitle() {
+					this.error = '';
+					const title = this.tg.title.trim();
+					if (!title) { this.error = 'A title is needed.'; return; }
+					let uid = null;
+					try { uid = await this._resolvePlayer(this.tg.who); } catch (e) { uid = null; }
+					if (!uid) { this.error = 'No player with that name or uid.'; return; }
+					await this._write((db) => db.ref('titles/' + uid).set({ title: title.slice(0, 32), by: this.uid, at: firebase.database.ServerValue.TIMESTAMP }));
+					if (!this.error) this.tg = { who: '', title: '' };
+					return this.openTitles();
+				},
+
+				revokeTitle(uid) {
+					if (!confirm('Remove ' + this.nameOf(uid) + '\u2019s title?')) return;
+					return this._write((db) => db.ref('titles/' + uid).remove()).then(() => this.openTitles());
 				},
 
 				lift(target) {
