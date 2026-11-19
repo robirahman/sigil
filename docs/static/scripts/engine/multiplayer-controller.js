@@ -344,7 +344,11 @@ class MultiplayerController {
 		let resp;
 		if (isMyTurn) {
 			// Local player: wait for UI click
-			resp = await this._waitForInput(payload);
+			const input = this._waitForInput(payload);
+			this._waiting = true;
+			this._endAsRoom();
+			resp = await input;
+			this._waiting = false;
 			if (this._resetRequested) {
 				throw new ResetError();
 			}
@@ -352,7 +356,11 @@ class MultiplayerController {
 		} else {
 			// Opponent's turn: get next action from Firebase queue
 			this.emit(payload);
-			resp = await this.sync.getNextOpponentAction();
+			const next = this.sync.getNextOpponentAction();
+			this._waiting = true;
+			this._endAsRoom();
+			resp = await next;
+			this._waiting = false;
 		}
 		this._currentTurnActions.push(resp);
 		return resp;
@@ -365,6 +373,10 @@ class MultiplayerController {
 		this.board = new SigilBoard(this.spellNames, variant);
 		// A room from a position opens on its start SFN (sync.startSfn).
 		const startSfn = (this.sync && this.sync.startSfn) || null;
+		// Back in a game in progress (a reload, or a fresh page): the turns
+		// played so far, which the sync skips (rebuilt by _seedHistory).
+		const earlier = (this.sync && this.sync.reconnectTurns) || [];
+		const rejoin = !!reconnectSfn || earlier.length > 0;
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
 		} else if (startSfn) {
@@ -387,6 +399,12 @@ class MultiplayerController {
 				this._endByAbort();
 			} else if ((reason === 'time' || reason === 'abandon') && (winner === 'red' || winner === 'blue')) {
 				this._endByRoom(winner === 'red' ? 'blue' : 'red', reason, false);
+			} else if (reason === 'finished' && (winner === 'red' || winner === 'blue')) {
+				// A natural end the other client recorded: this board reaches
+				// the same one from the same turns, and records it too. Should
+				// it not, the room's result stands here (_endAsRoom).
+				this._roomWinner = winner;
+				this._endAsRoom();
 			}
 		});
 		// The opponent's connection (the claim-win countdown) and our own
@@ -422,7 +440,7 @@ class MultiplayerController {
 		this.emit(this.board.getBoardStatePayload());
 
 		const colorName = this.myColor[0].toUpperCase() + this.myColor.slice(1);
-		if (reconnectSfn) {
+		if (rejoin) {
 			this.emit({ type: 'message', message: 'Reconnected as ' + colorName + '.', awaiting: null });
 		} else if (startSfn) {
 			this.emit({ type: 'message', message: 'You are ' + colorName + '. The game starts from a position; '
@@ -431,15 +449,97 @@ class MultiplayerController {
 			this.emit({ type: 'message', message: 'You are ' + colorName + '. Red goes first.', awaiting: null });
 		}
 
+		// Rebuild the game so far before the loop gives anyone a move.
+		this._unseenTurns = earlier.length;
+		if (rejoin) await this._seedHistory(variant);
+
 		// Initialize timer (red, on fresh games)
-		if (this.myColor === 'red' && !reconnectSfn) {
+		if (this.myColor === 'red' && !rejoin) {
 			await this.sync.initTimer(this._timeControl, firstColor);
 		}
 		this._startTimer();
 
 		this._emitSfn();
 		await this._delay(500);
+		// A forfeit, flag or abort while the game was being rebuilt has
+		// ended it (and said so) already.
+		if (this.board.gameover) return;
 		this._runGameLoop();
+	}
+
+	/**
+	 * A player whose page reloaded (or who comes back in a fresh page) opens
+	 * on the room's currentSfn, which says nothing of the positions before
+	 * it: the repetition counts would start empty, so a threefold the
+	 * opponent's board declares would go unseen here, and the game log
+	 * would hold only the turns since. Replay the turns the reconnect
+	 * skipped (sync.reconnectTurns) with replayRoomHistory (game-review.js),
+	 * as a spectator joining does, and when the replay reaches the room's
+	 * position take from it:
+	 *   - the repetition counts and Silence state (part of the repetition
+	 *     key, not of the SFN), so this board ends the game exactly where
+	 *     the opponent's does;
+	 *   - the game log, so the record this client writes at the end
+	 *     (writeRoomFinalState), its review and a takeback hold every turn,
+	 *     as they do for a player who never left;
+	 *   - the position, when currentSfn trailed the turns (a reload between
+	 *     a turn and its currentSfn write): the turns are skipped either way.
+	 * On any failure the board keeps the room's position with a warning,
+	 * and a natural end the other client records still ends the game here
+	 * (_endAsRoom).
+	 */
+	async _seedHistory(variant) {
+		const turns = (this.sync && this.sync.reconnectTurns) || [];
+		if (!turns.length || typeof replayRoomHistory !== 'function') return;
+		const h = await replayRoomHistory(this.spellNames, variant, (this.sync && this.sync.startSfn) || null,
+			turns, boardToSfn(this.board), 'Controller');
+		// A forfeit or a flag may have ended the game meanwhile.
+		if (!h || this.board.gameover) return;
+		if (h.behind) {
+			this.board.loadFromSfn(h.sfn);
+			this.emit(this.board.getBoardStatePayload());
+		}
+		this.board.allLoopingSnapshotCounts = Object.assign({}, h.board.allLoopingSnapshotCounts);
+		this.board.silenced = Object.assign({ red: false, blue: false }, h.board.silenced);
+		this._gameLog = h.log.map((t) => ({
+			color: t.color, turnNumber: t.turnNumber, sfnBefore: t.sfnBefore, sfnAfter: t.sfnAfter, actions: t.actions.slice(),
+		})).concat(this._gameLog);
+		this._unseenTurns = 0;
+		this.emit({ type: 'history', sfns: h.sfns });
+	}
+
+	/**
+	 * The room finished naturally (the other client recorded the end:
+	 * _roomWinner) and this board has not ended the game although it has
+	 * played every turn the room holds: it missed the ending, e.g. a
+	 * threefold repetition after a reload whose history could not be
+	 * rebuilt. Take the room's result, as for a flag the other client saw
+	 * first: the board goes back to the start of the turn it began (the
+	 * game ended before it), and nothing is written. Checked when the
+	 * result arrives and whenever the loop waits for input, so the board's
+	 * own ending, which comes first, always has its chance.
+	 */
+	_endAsRoom() {
+		const winner = this._roomWinner;
+		const board = this.board;
+		if (!winner || !this._waiting || !board || board.gameover
+			|| this._timedOut || this._forfeitHandled || this._aborted) return;
+		const roomTurns = ((this.sync && this.sync._turnKeys) || []).length;
+		if ((this._unseenTurns || 0) + this._gameLog.length < roomTurns) return;
+		console.warn('[Controller] the room finished without this board ending the game; taking its result.', { winner });
+		this._timedOut = true;
+		this._stopTimer();
+		this._inputResolve = null;
+		this._turnBuffer = [];
+		board.restoreSnapshot();
+		board.gameover = true;
+		board.winner = winner;
+		board.update();
+		this.emit(board.getBoardStatePayload());
+		this._emitSfn();
+		this.emit({ type: 'message', awaiting: null, message: 'Game over: ' + (winner === 'red' ? 'Red' : 'Blue') + ' wins.' });
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
+		this._reportRating();
 	}
 
 	_emitSfn() {
@@ -795,7 +895,8 @@ class MultiplayerController {
 	/**
 	 * Accept the opponent's takeback: the position after the last turn kept
 	 * comes from our own log, so it must hold every turn of the game (after
-	 * a reload it holds only the turns since, and we decline).
+	 * a reload, when _seedHistory could not rebuild the game so far, it holds
+	 * only the turns since, and we decline).
 	 */
 	_acceptTakeback() {
 		const req = this._takebackReq;

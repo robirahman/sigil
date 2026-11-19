@@ -102,6 +102,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### During a game
 
 - [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
+- [x] **Keep the game's history when a player reloads mid-game** (from PR #67's notes): a reloaded page started its threefold-repetition counts empty, so it could miss a repetition the opponent's board declared.
+  Done: a seated player who comes back to a game in progress replays the room's turns (`replayRoomHistory` in engine/game-review.js, shared with spectators joining) before anyone can move, so the repetition counts, Silence state and game log match the opponent's; both boards end on the same third occurrence and write the same record. A board that still misses a natural end takes the room's result. The rating function now counts threefold repetition (it had overturned such wins as the finisher's resignation).
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
 - [x] **Add zen mode** that hides everything but the board and clocks.

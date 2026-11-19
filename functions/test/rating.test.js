@@ -174,6 +174,56 @@ test('a result the room does not support is the finisher\'s resignation', async 
 	['completed_games/G10/eloProcessed', 'completed_games/G10/unratedReason']);
 });
 
+// Threefold repetition: each side places twice, then plays "null" turns
+// (move, dash sacrificing that stone and another, put the other back), so
+// the position before Red's turn 5 comes up again before turns 7 and 9.
+// Both clients end the game as a Blue win at the start of turn 9.
+const REP_SPELLS = ['Starfall', 'Flourish', 'Seal_of_Lightning', 'Grow', 'Fireblast', 'Hail_Storm', 'Surge', 'Slash', 'Sprout'];
+const REP_NULL = { red: ['a6', 'dash', 'a6', 'a2', 'a2', 'pass'], blue: ['b6', 'dash', 'b6', 'b2', 'b2', 'pass'] };
+const REP_TURNS = [['a11', 'pass'], ['b11', 'pass'], ['a2', 'pass'], ['b2', 'pass'],
+	REP_NULL.red, REP_NULL.blue, REP_NULL.red, REP_NULL.blue];
+function repetitionRoom(finishedBy, extra) {
+	const turns = {};
+	let ts = 1_700_000_000_000;
+	REP_TURNS.concat(extra || []).forEach((actions, i) => {
+		ts += 10_000;
+		turns['-r' + String(i).padStart(4, '0')] = { color: i % 2 ? 'blue' : 'red', actions, timestamp: ts };
+	});
+	return {
+		spellNames: REP_SPELLS, status: 'finished', created: 1_700_000_000_000,
+		red: { uid: 'alice', displayName: 'Alice', connected: false },
+		blue: { uid: 'bob', displayName: 'Bob', connected: false },
+		ranked: true, timeControl: { type: 'none' }, variant: 'standard',
+		turns, winner: 'blue', finishedBy,
+	};
+}
+
+test('a threefold repetition is a Blue win, whichever client closed the room', async () => {
+	for (const by of ['red', 'blue']) {
+		const room = repetitionRoom(by);
+		const v = await judgeGame(onlineRecord(room), ctx({ room }));
+		assert.deepStrictEqual([v.rated, v.winner, !!v.overturned], [true, 'blue', false], by + ': ' + JSON.stringify(v));
+	}
+	// The replay ends there: with one repetition fewer the game is still on,
+	// and a claimed end is the finisher's resignation.
+	const early = repetitionRoom('blue');
+	delete early.turns['-r0007'];
+	const v = await judgeGame(onlineRecord(early), ctx({ room: early }));
+	assert.deepStrictEqual([v.winner, v.overturned], ['red', true]);
+	// A turn played after the third occurrence is past the end of the game.
+	const past = repetitionRoom('blue', [REP_NULL.red]);
+	assert.strictEqual((await judgeGame(onlineRecord(past), ctx({ room: past }))).reason, 'transcript-invalid');
+	// The replay board keeps the counts up to the last turn played (a
+	// client rebuilding the game seeds its own board with them).
+	const engine = freshEngine();
+	const result = {};
+	let board = null;
+	const numbered = REP_TURNS.map((actions, i) => ({ color: i % 2 ? 'blue' : 'red', turnNumber: i + 1, actions }));
+	await engine.reconstructGameLog(REP_SPELLS, 'standard', null, numbered, { result, onBoard: (b) => { board = b; } });
+	assert.deepStrictEqual(result, { gameover: true, winner: 'blue' });
+	assert.deepStrictEqual(Object.values(board.allLoopingSnapshotCounts).sort(), [1, 1, 1, 1, 2, 2]);
+});
+
 test('a forfeit counts only when the loser wrote it', async () => {
 	const room = Object.assign(onlineRoom(), { winner: 'red', forfeitedBy: 'blue' });
 	delete room.gameLog;

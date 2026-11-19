@@ -525,6 +525,9 @@ class FirebaseSync {
 			});
 
 			this._isReconnect = true;
+			// Fixed when the room was made: the reconnect's turns are put in
+			// play order with it (reconnectTurns).
+			this._seq = data.seq === true;
 			await this._listenForTurns();
 			return {
 				spellNames: normalizeSpellNames(data.spellNames),
@@ -563,11 +566,7 @@ class FirebaseSync {
 		// at currentSfn, and SpectatorController replays these to recover the
 		// game's earlier positions (threefold repetition, live analysis).
 		// Exactly the turns _listenForAllTurns skips.
-		const turns = data.turns || {};
-		this.spectatorJoinTurns = syncOrderTurnKeys(turns, data.seq === true).map((k) => ({
-			color: turns[k] && turns[k].color,
-			actions: ((turns[k] && turns[k].actions) || []).map(normalizeSpellName),
-		}));
+		this.spectatorJoinTurns = roomTurnList(data.turns, data.seq === true);
 
 		// Register spectator presence
 		const specRef = this.roomRef.child('spectators').push();
@@ -890,10 +889,15 @@ class FirebaseSync {
 
 		// Count existing turns so we can skip them on reconnection
 		let existingCount = 0;
+		// The turns skipped, in play order: the board starts at currentSfn,
+		// and MultiplayerController replays these to recover the game so far
+		// (threefold repetition, the game log).
+		this.reconnectTurns = [];
 		if (this._isReconnect) {
 			const existingSnap = await turnsRef.once('value');
 			if (existingSnap.val()) {
 				existingCount = Object.keys(existingSnap.val()).length;
+				this.reconnectTurns = roomTurnList(existingSnap.val(), await this._isSequenced());
 			}
 			console.log('[Sync] Reconnecting, skipping', existingCount, 'existing turns');
 		}
@@ -1592,6 +1596,21 @@ function syncOrderTurnKeys(turns, seq) {
 	const out = [];
 	for (let k = roots[0]; k !== undefined && out.length <= keys.length; k = next[k]) out.push(k);
 	return out.length === keys.length ? out : byTime;
+}
+
+/**
+ * A room's turns (rooms/{id}/turns) in play order as { color, actions },
+ * spell tokens normalized: what a client opening the room mid-game replays
+ * to rebuild the game so far (replayRoomHistory, game-review.js).
+ * @param {object} turns - key -> turn
+ * @param {boolean} seq - the room's `seq`
+ */
+function roomTurnList(turns, seq) {
+	const all = turns || {};
+	return syncOrderTurnKeys(all, seq).map((k) => ({
+		color: all[k] && all[k].color,
+		actions: ((all[k] && all[k].actions) || []).map(normalizeSpellName),
+	}));
 }
 
 /**
