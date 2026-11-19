@@ -14,7 +14,9 @@
 		<title>Node Trainer - Sigil Online</title>
 		<style>
 			header { position: absolute; }
-			body > .main { padding-top: 0px; }
+			/* The page grows with its content (the board would otherwise shrink
+			   to fit layout.css's fixed-height column). */
+			body > .main { padding-top: 0px; height: auto; min-height: calc(100% - 80px); }
 
 			.trainer-panel {
 				font-family: 'Overlock', sans-serif;

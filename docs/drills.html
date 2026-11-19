@@ -150,6 +150,11 @@
 			.practice-ai__row select { font: inherit; }
 			.practice-ai__row .action-button { margin: 0; }
 			.practice-ai__error { color: #e0604a; }
+			/* The game log and the spell dice sit in the page here, under the
+			   panel, instead of floating over its text (the game page's fixed
+			   overlay). The dice count the spells cast: the sixth ends the game. */
+			#tutorial-root .feed--history { position: static; height: auto; max-height: 96px; margin: 8px 0; max-width: 640px; }
+			#tutorial-root .dice { position: static; margin: 6px 0 8px; }
 		</style>
 		<script>
 			var webpDetector = new Image();
