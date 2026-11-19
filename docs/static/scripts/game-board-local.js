@@ -2601,13 +2601,12 @@ document.addEventListener('alpine:init', () => {
 				let _practiceTurnSfn = null;
 				let _practiceGen = 0;
 				function _practiceOnTurnStart(color) {
-					if (color !== _humanColor || !_engineRef || !_engineRef.board) {
-						_practiceTurnSfn = null;
-						return;
-					}
 					let sfn = null;
-					try { sfn = boardToSfn(SimBoard.fromSigilBoard(_engineRef.board)); } catch (e) { sfn = null; }
-					// Reset Turn re-announces the same turn: keep its hint.
+					if (color === _humanColor && _engineRef && _engineRef.board) {
+						try { sfn = boardToSfn(SimBoard.fromSigilBoard(_engineRef.board)); } catch (e) { sfn = null; }
+					}
+					// Reset Turn re-announces the same turn: keep its hint. The
+					// AI's turn clears it.
 					if (sfn && sfn === _practiceTurnSfn) return;
 					_practiceTurnSfn = sfn;
 					++_practiceGen;

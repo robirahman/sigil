@@ -128,7 +128,7 @@
 				{ do: 'pass', say: 'Crushed. Press <strong>End Turn</strong>.', why: { dash: 'A dash costs two of your stones for one move. Even if that move crushes the other red stone too, it only trades one of your stones for one of Red\'s.' } },
 			],
 			hint: 'The red stones on a1 and a11 touch only each other and your stones on a2, a6 and c10. Move onto either of them.',
-			success: '<p>The pair a1, a11 touched only your stones, so the push found no empty node anywhere: either stone was crushed. Taking a1 also took Red\'s mana node.</p>',
+			success: '<p>The pair a1, a11 touched only your stones, so the push found no empty node anywhere: either stone was crushed. (Crushing the stone on a1 also takes Red\'s mana node.)</p>',
 		},
 
 		// ----------------------------------------------------------- dashing

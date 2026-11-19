@@ -116,9 +116,11 @@ async function waitG(page, pred, what, ms = 60000) {
 		await page.evaluate(() => { const n = Object.keys(window.__last.moveoptions)[0]; window.__last = null; window.__gc.handlePlayerAction(n); });
 		await page.waitForFunction(passPrompt, { timeout: 60000 });
 		await page.evaluate(() => { window.__last = null; window.__gc.handlePlayerAction('pass'); });
+		s = await waitG(page, s => s.hint.status === 'idle', 'the hint to clear', 15000);
+		check(s.hint.status === 'idle' && s.ringed === 0, 'the end of the turn clears the hint (' + s.whoseTurn + ' to move)');
 		await page.waitForFunction(humanPrompt, { timeout: 60000 });
 		s = await waitG(page, s => s.whoseTurn === 'blue', 'the next turn');
-		check(s.hint.status === 'idle' && s.ringed === 0, 'a new turn clears the hint');
+		check(s.hint.status === 'idle' && s.ringed === 0 && s.canHint, 'the next turn starts without a hint, and offers one');
 
 		// 4. Reload: still a practice game, hint count kept.
 		await page.evaluate(() => { window.onbeforeunload = null; });

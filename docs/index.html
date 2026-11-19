@@ -349,7 +349,7 @@
 					saves.forEach(function(s) {
 						var modeLabel = s.mode === 'local_1v1'
 							? 'Local 1v1'
-							: ('vs ' + (AI_LABELS[s.aiMode] || s.aiMode || 'AI'));
+							: ((s.practice ? 'practice ' : '') + 'vs ' + (AI_LABELS[s.aiMode] || s.aiMode || 'AI'));
 						var _vs = s.variant || 'standard';
 						var _vparts = [];
 						if (_vs.indexOf('competitive') !== -1) _vparts.push('Competitive');
@@ -362,6 +362,7 @@
 						var a = document.createElement('a');
 						var resumeHref = 'game.html?id=' + encodeURIComponent(s.id);
 						if (s.aiMode) resumeHref += '&ai=' + encodeURIComponent(s.aiMode);
+						if (s.practice) resumeHref += '&practice=1';
 						if (s.variant && s.variant !== 'standard') resumeHref += '&variant=' + encodeURIComponent(s.variant);
 						if (s.clock && s.clock.baseMs > 0) {
 							var min = s.clock.baseMs / 60000;

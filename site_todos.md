@@ -130,7 +130,7 @@ Items already listed above are not repeated; chess-only features (opening names,
   Done: `position_evals/{key}`, written only by the server (`analyzeGame`, the `evalPositions` callable); read by Quick reviews and the analysis board.
 - [x] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
   Done: a review-panel button on game.html and multiplayer.html opens the player's mistakes as winning-turn puzzles on `puzzles.html?learn=`.
-- [ ] **Add practice-from-position** against the AI with hints.
+- [x] **Add practice-from-position** against the AI with hints. Done: `game.html?practice=1` (unrated, never uploaded, take-backs allowed) with a Hint button (the wasm engine, 3 s: first where the best turn starts, then the whole turn); started from the analysis board, a finished puzzle, a review ("Practise from here"), Import Position or the form on drills.html.
 - [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
 - [x] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase. Done: the Insights tab, win rate by colour, game length and spell on the board (time control is in Stats; game phase needs evals, not stored per game).
 
@@ -142,8 +142,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Learning
 
-- [ ] **Add guided practice drills** (dashing, cast timing, pushes).
-- [ ] **Add a node-naming trainer** for the board coordinates.
+- [x] **Add guided practice drills** (dashing, cast timing, pushes). Done: `drills.html`, 10 drills on the tutorial's board machinery, each wrong move explained; every answer proved against the browser rules over every possible turn (`tools/drills-verify.js`).
+- [x] **Add a node-naming trainer** for the board coordinates. Done: `nodes.html`, 30 s rounds of "find the node" and "name the node"; best scores in `users/<uid>/nodeTrainer` for accounts, localStorage for guests.
 - [ ] **Add classes** where teachers manage students and track their progress.
 - [ ] **Add a coach directory and a video library.**
 - [x] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.

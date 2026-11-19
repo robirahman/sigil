@@ -129,3 +129,24 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Practice drills, node trainer, practice vs AI
+
+```sh
+node tools/drills-verify.js [--only <id>] [--verbose]          # no browser: proves the drills against the rules
+node tools/browser/drills-test.js docs [port]                   # plays every drill on drills.html
+node tools/browser/node-trainer-test.js http://localhost:8765   # nodes.html; account checks need the emulators:
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/node-trainer-test.js http://localhost:8765'
+node tools/browser/practice-test.js http://localhost:8765       # game.html?practice=1 with the wasm engine
+```
+
+`drills-verify.js` walks every complete turn each drill's position allows through the real
+GameController (every token offered at every prompt) and fails a drill whose script accepts a
+turn that misses its goal, refuses one that meets it (or wins the game), or explains a move
+(`why`) that could still meet it. `--verbose` prints the best outcome behind each explanation,
+to check its wording. `drills-test.js` then plays each drill on the page, makes its first
+explained mistake, and checks "Show me", the progress key and the practice form.
+`practice-test.js` checks the Hint button (two levels, the replay gate), that a new turn clears
+it, resume after a reload, that a finished practice game is announced unrated and queues
+nothing for upload, the side picker's practice note and the analysis board's link.
