@@ -196,6 +196,18 @@ test('teams: the member count, requests, acceptance and roles', async () => {
 	await community.onTeamMember(db, 'reds', 'bob', joined, Object.assign({}, joined, { role: 'mod' }), 22);
 	const p = await get('notifications/bob/team-reds');
 	assert.deepStrictEqual([p.event, p.role], ['role', 'mod']);
+	// The leader and the successor deleted at once: the successor's role
+	// write left a stub, and the leader named is gone. The stub goes and the
+	// next live member leads; a second leader steps down.
+	await db.ref().update({ 'team_members/reds/zed': { role: 'leader' }, 'teams/reds/leader': 'ghost', 'team_members/reds/alice': null });
+	await community.onTeamMember(db, 'reds', 'zed', null, { role: 'leader' }, 23);
+	assert.strictEqual(await get('team_members/reds/zed'), null);
+	await community.onTeamMember(db, 'reds', 'zed', { role: 'leader' }, null, 24);
+	assert.strictEqual(await get('teams/reds/leader'), 'carol');
+	assert.strictEqual(await get('team_members/reds/carol/role'), 'leader');
+	await db.ref('team_members/reds/bob/role').set('leader');
+	await community.onTeamMember(db, 'reds', 'bob', { role: 'mod', joined: 20, by: 'alice' }, { role: 'leader', joined: 20, by: 'alice' }, 25);
+	assert.strictEqual(await get('team_members/reds/bob/role'), 'mod');
 	// Joining an open team alone tells nobody.
 	await community.onTeamMember(db, 'reds', 'dave', null, { role: 'member', joined: 30, by: 'dave' }, 31);
 	assert.strictEqual(await get('notifications/dave'), null);

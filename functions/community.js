@@ -248,8 +248,15 @@ async function teamStaff(db, tid) {
  * admitted (by someone else) or of a new role.
  */
 async function onTeamMember(db, tid, uid, before, after, now, send) {
+	// A role written onto a member removed in the meantime (two accounts
+	// deleted at once) leaves a stub without `joined`: it goes.
+	if (after && typeof after.joined !== 'number') {
+		await db.ref('team_members/' + tid + '/' + uid).remove();
+		return null;
+	}
 	const team = await val(db, 'teams/' + tid);
 	if (!team) return null;
+	await ensureLeader(db, tid, now);
 	const membersRef = db.ref('team_members/' + tid);
 	const count = await settleCount(db, 'teams/' + tid, 'memberCount', async () => (await membersRef.once('value')).numChildren());
 	if (!before && after) await joinRunningBattles(db, tid, uid, after.joined, now);
@@ -265,6 +272,43 @@ async function onTeamMember(db, tid, uid, before, after, now, send) {
 		});
 	}
 	return { count };
+}
+
+/**
+ * The team named by teams/{id}/leader must be a live member with the leader
+ * role. If not (the leader and the chosen successor deleted their accounts
+ * at once), the senior live moderator, else the oldest live member, takes
+ * over; a team with nobody left goes. Resolves to the leader.
+ */
+async function ensureLeader(db, tid, now) {
+	const [team, members] = await Promise.all([val(db, 'teams/' + tid), val(db, 'team_members/' + tid)]);
+	if (!team) return null;
+	const ms = members || {};
+	const live = async (u) => !!ms[u] && typeof ms[u].joined === 'number' && !(await val(db, 'deleted_users/' + u));
+	// Anyone else holding the leader role (two handovers raced) steps down.
+	const demote = (keep) => {
+		const u = {};
+		Object.keys(ms).forEach((m) => { if (m !== keep && ms[m] && ms[m].role === 'leader' && typeof ms[m].joined === 'number') u['team_members/' + tid + '/' + m + '/role'] = 'mod'; });
+		return u;
+	};
+	if (await live(team.leader) && ms[team.leader].role === 'leader') {
+		const extra = demote(team.leader);
+		if (Object.keys(extra).length) await db.ref().update(extra);
+		return team.leader;
+	}
+	const candidates = [];
+	for (const u of Object.keys(ms)) if (await live(u)) candidates.push(u);
+	candidates.sort((a, b) => ((ms[b].role === 'mod') - (ms[a].role === 'mod')) || ((ms[a].joined || 0) - (ms[b].joined || 0)));
+	if (!candidates.length) {
+		await db.ref('teams/' + tid + '/closing').set(true);
+		const again = Object.keys((await val(db, 'team_members/' + tid)) || {});
+		if (again.length) { await db.ref('teams/' + tid + '/closing').remove(); return null; }
+		await db.ref().update(await teamRemoval(db, tid, now, {}));
+		return null;
+	}
+	const next = candidates[0];
+	await db.ref().update(Object.assign(demote(next), { ['teams/' + tid + '/leader']: next, ['team_members/' + tid + '/' + next + '/role']: 'leader' }));
+	return next;
 }
 
 /**
@@ -654,10 +698,13 @@ async function deletionUpdates(db, uid, updates) {
 			}
 			await db.ref('teams/' + tid + '/closing').remove();
 		}
-		const rest = others(members)
-			.sort((a, b) => ((members[b].role === 'mod') - (members[a].role === 'mod')) || ((members[a].joined || 0) - (members[b].joined || 0)));
+		// The successor: a member not being deleted too (teamMember's
+		// ensureLeader repairs the race this read cannot see).
+		const rest = [];
+		for (const m of others(members)) if (!(await val(db, 'deleted_users/' + m))) rest.push(m);
+		rest.sort((a, b) => ((members[b].role === 'mod') - (members[a].role === 'mod')) || ((members[a].joined || 0) - (members[b].joined || 0)));
 		updates['team_members/' + tid + '/' + uid] = null;
-		if (team && team.leader === uid) {
+		if (team && team.leader === uid && rest.length) {
 			updates['teams/' + tid + '/leader'] = rest[0];
 			updates['team_members/' + tid + '/' + rest[0] + '/role'] = 'leader';
 		}
@@ -672,7 +719,7 @@ async function deletionUpdates(db, uid, updates) {
 }
 
 module.exports = {
-	notify, pushAllowed, pushNotice, ensureRoster, joinRunningBattles,
+	notify, pushAllowed, pushNotice, ensureRoster, joinRunningBattles, ensureLeader,
 	onFollow, onChallenge, onMessage, onForumPost, onBlogComment,
 	onTeamMember, onTeamRequest, onBattleCreated, battleTick,
 	scoreGame, gameResultNotice, onUserGame, disbandTeam, deletionUpdates,
