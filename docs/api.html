@@ -64,6 +64,7 @@
 					<tr><td>With a token</td><td>300 requests a minute per token</td></tr>
 					<tr><td>Event streams</td><td>20 opened a minute per token; at most 8 open at once</td></tr>
 					<tr><td>Bot challenges</td><td>10 a minute; at most 5 waiting at once</td></tr>
+					<tr><td>Bot turns</td><td>120 a minute per token, across all its games</td></tr>
 				</table>
 				<p>Every answer carries <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code> (Unix seconds). Over the limit you get <code>429</code> with <code>Retry-After</code> (seconds).</p>
 			</section>
