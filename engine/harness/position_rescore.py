@@ -59,13 +59,23 @@ def main():
     if a.limit:
         recs = recs[:a.limit]
     depths = [int(x) for x in a.depths.split(',')]
+    import sigil_engine as se
     done = set()
-    if os.path.exists(a.out):   # resume
+    if os.path.exists(a.out):   # resume: only from a run with the same eval and depths
+        bad = 0
         for line in open(a.out):
             if line.startswith('POSRESULT '):
-                done.add(json.loads(line[10:])['i'])
+                r = json.loads(line[10:])
+                if r.get('eval') != se.SHIPPED_EVAL or not all(str(d) in (r.get('evals') or {}) for d in depths):
+                    bad += 1
+                    continue
+                done.add(r['i'])
+        if bad:
+            # The fit labels the whole model with one eval and reads every requested depth:
+            # mixing records from another eval or depth set would miscalibrate it silently.
+            sys.exit(f'{a.out}: {bad} existing records were scored with another eval or without depths '
+                     f'{depths} (this run: {se.SHIPPED_EVAL}); move the file aside and rerun')
     todo = [r for r in recs if r['i'] not in done]
-    import sigil_engine as se
     print(f'RESCORE eval={se.SHIPPED_EVAL} policy={tuple(se.SHIPPED_POLICY)} depths={depths} '
           f'starts={len(recs)} done={len(done)} todo={len(todo)} workers={a.workers}', flush=True)
     t0 = time.time()
