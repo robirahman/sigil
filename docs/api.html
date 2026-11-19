@@ -180,7 +180,7 @@ node tools/sigil-bot.js --token sgl_… --challenge OtherBot --tc 5+3 --rated --
 					<tr><td>401</td><td><code>unauthenticated</code>: no token, or one revoked or never made</td></tr>
 					<tr><td>403</td><td><code>missing-scope</code>, <code>not-a-bot</code>, <code>not-your-game</code>, <code>not-your-challenge</code>, <code>blocked</code>, <code>private-game</code></td></tr>
 					<tr><td>404</td><td><code>not-found</code></td></tr>
-					<tr><td>409</td><td><code>not-your-turn</code>, <code>not-playing</code>, <code>conflict</code> (the game moved on: read it again), <code>not-waiting</code>, <code>too-late</code></td></tr>
+					<tr><td>409</td><td><code>not-your-turn</code>, <code>not-playing</code>, <code>conflict</code> (the game moved on: read it again), <code>time-out</code> (your clock ran out: the game is lost on time), <code>not-waiting</code>, <code>too-late</code></td></tr>
 					<tr><td>429</td><td><code>rate-limited</code>, <code>too-many-streams</code>, <code>too-many-challenges</code></td></tr>
 				</table>
 			</section>
