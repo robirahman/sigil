@@ -260,7 +260,7 @@
 			</div>
 
 			<div class="games-section games-section--friends" x-show="authUser && !isOffline" x-cloak>
-				<h3>Friends</h3>
+				<h3>Friends <a class="friends-feed-link" href="feed.html" style="font-size: 0.7em; color: var(--color-accent);">activity</a></h3>
 				<p class="games-section__none" x-show="friends.length === 0">You don't follow anyone yet. Follow players from their profile (the leaderboard links to them) to see when they are online and challenge them.</p>
 				<div class="friends-list">
 					<template x-for="f in friends" x-bind:key="f.uid">

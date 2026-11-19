@@ -242,6 +242,17 @@ test('deleting an account removes its records and keeps its games anonymous', as
 		await a.ref('users/' + dave.uid).update({ puzzle: { rating: 1500, plays: 3 }, puzzleProgress: { solved: { p1: 1 } }, puzzleStorm: { best: 12, runs: 2 } });
 		await a.ref('puzzle_leaderboard/' + dave.uid).set({ displayName: 'dave', rating: 1500, plays: 3 });
 		await a.ref('storm_leaderboard/' + dave.uid).set({ displayName: 'dave', score: 12 });
+		// Badges and activity (social.js), a title, a streamer listing, and
+		// Dave's private notes and bookmarks.
+		await a.ref().update({
+			['badges/' + dave.uid + '/first-win']: { at: 1 },
+			['activity/' + dave.uid + '/r_1100']: { t: 'rating', at: 1, elo: 1100 },
+			['achievements/' + dave.uid + '/milestones/r1100']: 1,
+			['titles/' + dave.uid]: { title: 'Coach', by: 'someone', at: 1 },
+			['streamers/' + dave.uid]: { url: 'https://www.twitch.tv/dave_plays', at: 1 },
+			['notes/' + dave.uid + '/' + erin.uid]: { text: 'x', at: 1 },
+			['bookmarks/' + dave.uid + '/ABC234']: { title: 'x', at: 1 },
+		});
 	}
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
@@ -259,7 +270,8 @@ test('deleting an account removes its records and keeps its games anonymous', as
 		`blocks/${dave.uid}`, `blockedBy/${gus.uid}/${dave.uid}`, `blocks/${frank.uid}/${dave.uid}`, `blockedBy/${dave.uid}`]) {
 		assert.strictEqual((await admin.ref(p).once('value')).exists(), false, p);
 	}
-	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/', 'users/', 'puzzle_leaderboard/', 'storm_leaderboard/']) {
+	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/', 'users/', 'puzzle_leaderboard/', 'storm_leaderboard/',
+		'badges/', 'activity/', 'achievements/', 'titles/', 'streamers/', 'notes/', 'bookmarks/']) {
 		assert.strictEqual((await admin.ref(p + dave.uid).once('value')).exists(), false, p);
 	}
 });

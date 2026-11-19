@@ -153,21 +153,21 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add arena tournaments** (scheduled and user-created), with berserk (halve your clock for a bonus point).
 - [ ] **Add Swiss tournaments.**
 - [ ] **Add simultaneous exhibitions** (one player against many).
-- [ ] **Add scheduled site events and announcements.**
+- [x] **Add scheduled site events and announcements.** Done: admins post events and announcements on admin.html (`site_events/`, admin-only writes, https or same-site links only); a dismissible banner on every page that loads auth-status.js (`site-events.js`; events from a day before they start, never on a game screen) and `events.html` (now and coming up, announcements, past; .ics download).
 - [ ] **Add broadcasts** relaying games from over-the-board events.
 
 ### Social
 
 - [x] **Add blocking** alongside the friends / follow list. Done: Block on profile.html; the rules refuse a blocked player's challenge, follow and seat in the blocker's rooms, and the lobby hides their open games.
-- [ ] **Add an activity feed / timeline** ("X won a game", "X joined a tournament").
+- [x] **Add an activity feed / timeline** ("X won a game", "X joined a tournament"). Done: `feed.html` merges the followed players' `activity/{uid}` (wins, rating milestones, daily-puzzle streaks, badges), written only by the `socialGame` / `socialPuzzle` functions (functions/social.js); a profile's Activity tab shows one player's. "Joined a tournament" is wired (`recordTournamentEntry`) for when tournaments exist.
 - [ ] **Add private messaging.**
 - [ ] **Add a notifications inbox** plus web push.
 - [ ] **Add teams** with team tournaments and team battles.
 - [ ] **Add forums.**
 - [ ] **Add user blogs and a site blog.**
-- [ ] **Add private notes on players** and bookmarking games.
-- [ ] **Add a streamer listing.**
-- [ ] **Add Sigil TV** showing the top-rated live game.
+- [x] **Add private notes on players** and bookmarking games. Done: a private note box on other players' profiles (`notes/{owner}/{target}`), a bookmark star on profile game rows and a Bookmark button on the game-over and review screens (`bookmarks/{owner}/{room}`, with an optional note); both readable by their owner only (rules); the own profile's Saved tab lists them.
+- [x] **Add a streamer listing.** Done: `streamers.html`; players list one Twitch or YouTube channel (the rules accept only canonical channel URLs), shown on their profile too. Live first, as far as the site can tell without API keys: a self-declared "I'm live now" marker (expires, 12 h at most) and "Playing on Sigil now" from live_rooms. Twitch / YouTube live status needs API keys the site does not have.
+- [x] **Add Sigil TV** showing the top-rated live game. Done: `tv.html` picks the live_rooms game with the highest average rating, shows it through multiplayer.html's spectator view (`?tv=1`, framed), shows the result when it ends and switches to the next; other live games can be picked.
 - [ ] **Add an end-of-year recap** of each player's games.
 - [ ] **Add supporter patrons** with a badge.
 
@@ -176,7 +176,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents. Done: Stats tab tiles, by the opponent's rating before the game.
 - [x] **Add game search** by player, result, spell layout and date. Done: Games tab filters (opponent, result, rated, spell, date range).
 - [x] **Add bulk export** of all a player's games. Done: "Download all games", JSON lines with the stored entry, start/final SFN, transcript and SGN-T.
-- [ ] **Add trophies, badges and verified titles.**
+- [x] **Add trophies, badges and verified titles.** Done: 16 badges (first win, rated game counts, win streaks, giant killer, rating 1200–2000, daily-puzzle streaks, tournament champion) awarded only by the server (`badges/{uid}`, catalog in engine/badges.js), shown on profiles with the full catalog; verified titles (`titles/{uid}`) granted on admin.html, admins only. Badges catch up on a player's next game (no backfill run); the tournament badge waits for tournaments.
 - [x] **Add account closing** (Danger zone on the account page).
 - [ ] **Add two-factor authentication and an active-sessions list.**
 - [ ] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode.

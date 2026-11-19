@@ -14,9 +14,15 @@
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
 	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
 	<title>Online Multiplayer - Sigil Online</title>
+	<script>
+		// Sigil TV (tv.html) shows a game here as multiplayer.html?id=CODE&tv=1
+		// in a frame: just the game, without the site header or banners.
+		if (window.top !== window && /[?&]tv=1(&|$)/.test(location.search)) document.documentElement.classList.add('tv-embed');
+	</script>
 	<style>
 		header { position: absolute; }
 		body > .main { padding-top: 0px; }
+		html.tv-embed body > header, html.tv-embed .spectator-banner, html.tv-embed .win-modal { display: none !important; }
 		.lobby {
 			max-width: 400px;
 			margin: 80px auto 0;
@@ -435,7 +441,7 @@
 					<p class="lobby-list__empty" x-show="openGames.length === 0">No open games right now.</p>
 				</div>
 
-				<div class="lobby-section-title"><h3>Watch Live</h3><button class="lobby-refresh" x-on:click="refreshLiveGames()">Refresh</button></div>
+				<div class="lobby-section-title"><h3>Watch Live</h3><span><a class="lobby-refresh" href="tv.html" title="The top-rated live game, switching when it ends">Sigil TV</a> <button class="lobby-refresh" x-on:click="refreshLiveGames()">Refresh</button></span></div>
 				<div class="lobby-list lobby-list--live">
 					<template x-for="g in liveGames" x-bind:key="g.code">
 						<div class="lobby-game" x-bind:data-code="g.code">
@@ -949,6 +955,10 @@
 						<button class="win-modal__btn" x-on:click="openAnalysis(reviewSfns.length - 1)" x-show="reviewSfns.length > 0">Analyse</button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<button class="win-modal__btn" x-on:click="copyGameLink" x-show="shareUrl" x-text="linkCopied ? 'Link Copied!' : 'Copy Share Link'"></button>
+						<button class="win-modal__btn bookmark-btn" type="button" x-data="sigilBookmarkButton()" x-effect="bmWatch(winner || reviewMode ? _roomCodeForReview : '')"
+							x-show="bm.can" x-cloak x-bind:disabled="bm.busy" x-bind:aria-pressed="bm.on ? 'true' : 'false'"
+							x-on:click="bmToggle(_roomCodeForReview, (redName || 'Red') + ' vs ' + (blueName || 'Blue'))"
+							title="Save this game to your bookmarks (profile, Saved tab)" x-text="bm.on ? '\u2605 Bookmarked' : '\u2606 Bookmark'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
 						<button class="report-link" type="button" data-testid="report-opponent"
 							x-show="!isSpectator && (myColor === 'red' ? blueUid : redUid) && !/^__ai_/.test(myColor === 'red' ? blueUid : redUid)"
@@ -973,6 +983,10 @@
 						title="Open an online room from this position">Rematch from here</button>
 					<button class="review-bar__btn review-bar__btn--text" x-on:click="openAnalysis()" x-bind:disabled="reviewReplaying"
 						title="Open this position on the analysis board">Analyse</button>
+					<button class="review-bar__btn bookmark-btn" type="button" x-data="sigilBookmarkButton()" x-effect="bmWatch(winner || reviewMode ? _roomCodeForReview : '')"
+						x-show="bm.can" x-cloak x-bind:disabled="bm.busy" x-bind:aria-pressed="bm.on ? 'true' : 'false'"
+						x-bind:aria-label="bm.on ? 'Remove bookmark' : 'Bookmark this game'" x-bind:title="bm.on ? 'Bookmarked (profile, Saved tab): click to remove' : 'Bookmark this game'"
+						x-on:click="bmToggle(_roomCodeForReview, (redName || 'Red') + ' vs ' + (blueName || 'Blue'))" x-text="bm.on ? '\u2605' : '\u2606'"></button>
 					<button class="review-bar__btn review-bar__btn--exit" aria-label="Exit review" title="Exit review" x-on:click="exitReview" x-bind:disabled="reviewReplaying">&#x2715;</button>
 				</div>
 
@@ -2357,6 +2371,7 @@
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 	<script src="static/scripts/report-dialog.js?v=35"></script>
+	<script src="static/scripts/social.js?v=1"></script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 </body>

@@ -49,6 +49,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./packs/index.html',
 	'./strategy-guide.html',
 	'./admin.html',
+	'./tv.html',
+	'./feed.html',
+	'./events.html',
+	'./streamers.html',
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
@@ -196,6 +200,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
+	// Badges, the activity feed, notes, bookmarks, streamers; site events.
+	'./static/scripts/engine/badges.js?v=1',
+	'./static/scripts/social.js?v=1',
+	'./static/scripts/site-events.js?v=1',
 	// Spell art is added by spellArtUrls() below.
 ];
 

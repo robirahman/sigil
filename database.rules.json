@@ -614,6 +614,144 @@
         ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
         ".validate": "newData.val() === now && (!data.exists() || data.val() <= now - 60000)"
       }
+    },
+    "notes": {
+      "$owner": {
+        ".read": "auth !== null && auth.uid === $owner && auth.provider !== 'anonymous'",
+        "$target": {
+          ".write": "auth !== null && auth.uid === $owner && auth.provider !== 'anonymous'",
+          ".validate": "newData.hasChildren(['text', 'at']) && $target !== $owner && $target.length <= 128 && root.child('users/' + $target + '/displayName').exists()",
+          "text": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 1000"
+          },
+          "at": {
+            ".validate": "newData.val() === now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "bookmarks": {
+      "$owner": {
+        ".read": "auth !== null && auth.uid === $owner && auth.provider !== 'anonymous'",
+        ".indexOn": [
+          "at"
+        ],
+        "$room": {
+          ".write": "auth !== null && auth.uid === $owner && auth.provider !== 'anonymous'",
+          ".validate": "newData.hasChildren(['at', 'title']) && $room.matches(/^[A-Z0-9]{4,10}$/) && root.child('rooms/' + $room + '/status').exists()",
+          "at": {
+            ".validate": "newData.isNumber() && (newData.val() === now || newData.val() === data.val())"
+          },
+          "title": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120"
+          },
+          "note": {
+            ".validate": "newData.isString() && newData.val().length <= 500"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "activity": {
+      "$uid": {
+        ".read": true,
+        ".indexOn": [
+          "at"
+        ]
+      }
+    },
+    "badges": {
+      "$uid": {
+        ".read": true
+      }
+    },
+    "achievements": {
+      "$uid": {
+        ".read": true
+      }
+    },
+    "titles": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['title', 'by', 'at']) && root.child('users/' + $uid + '/displayName').exists()",
+        "title": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 32"
+        },
+        "by": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "at": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "streamers": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth !== null && ((auth.uid === $uid && auth.provider !== 'anonymous') || (!newData.exists() && root.child('admins/' + auth.uid).val() === true))",
+        ".validate": "newData.hasChildren(['url', 'at']) && root.child('users/' + $uid + '/displayName').exists() && !root.child('deleted_users/' + $uid).exists()",
+        "url": {
+          ".validate": "newData.isString() && (newData.val().matches(/^https:\\/\\/www\\.twitch\\.tv\\/[A-Za-z0-9_]{4,25}$/) || newData.val().matches(/^https:\\/\\/www\\.youtube\\.com\\/@[A-Za-z0-9._-]{3,30}$/) || newData.val().matches(/^https:\\/\\/www\\.youtube\\.com\\/channel\\/UC[A-Za-z0-9_-]{22}$/))"
+        },
+        "about": {
+          ".validate": "newData.isString() && newData.val().length <= 140"
+        },
+        "at": {
+          ".validate": "newData.val() === now"
+        },
+        "liveUntil": {
+          ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 43200000"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "site_events": {
+      ".read": true,
+      ".indexOn": [
+        "endsAt"
+      ],
+      "$id": {
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['kind', 'title', 'startsAt', 'endsAt', 'by', 'at']) && newData.child('endsAt').val() > newData.child('startsAt').val()",
+        "kind": {
+          ".validate": "newData.val() === 'announcement' || newData.val() === 'event'"
+        },
+        "title": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120"
+        },
+        "body": {
+          ".validate": "newData.isString() && newData.val().length <= 1000"
+        },
+        "link": {
+          ".validate": "newData.isString() && newData.val().length <= 300 && (newData.val().matches(/^https:\\/\\/[^ ]+$/) || newData.val().matches(/^[a-z0-9-]+\\.html([?#][^ ]*)?$/))"
+        },
+        "startsAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "endsAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "by": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "at": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
     }
   }
 }

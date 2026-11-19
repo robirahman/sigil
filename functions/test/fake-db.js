@@ -67,16 +67,19 @@ function fakeDb(initial) {
 				const v = read(get(ps));
 				return { val: () => v, exists: () => v !== null, key: ps[ps.length - 1] };
 			},
-			// orderByChild(c).endAt(x).limitToFirst(n), the one query the tests need.
+			// orderByChild(c).endAt(x).limitToFirst(n) / .limitToLast(n), the
+			// queries the tests need.
 			orderByChild(c) {
-				const q = { end: Infinity, n: Infinity };
+				const q = { end: Infinity, n: Infinity, last: false };
 				const api = {
 					endAt(x) { q.end = x; return api; },
 					limitToFirst(n) { q.n = n; return api; },
+					limitToLast(n) { q.n = n; q.last = true; return api; },
 					async once() {
 						const all = read(get(ps)) || {};
-						const kids = Object.entries(all).filter(([, v]) => v && typeof v[c] === 'number' && v[c] <= q.end)
-							.sort((a, b) => a[1][c] - b[1][c]).slice(0, q.n);
+						const sorted = Object.entries(all).filter(([, v]) => v && typeof v[c] === 'number' && v[c] <= q.end)
+							.sort((a, b) => a[1][c] - b[1][c]);
+						const kids = q.last ? sorted.slice(Math.max(0, sorted.length - q.n)) : sorted.slice(0, q.n);
 						return { forEach: (f) => kids.forEach(([k, v]) => f({ key: k, val: () => v })) };
 					},
 				};

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Streamers - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 16px; }
+		.streamers {
+			width: 100%;
+			box-sizing: border-box;
+			max-width: 760px;
+			margin: 0 auto;
+			padding: 8px 16px 24px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.streamers h2 { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; margin: 0 0 4px; }
+		.streamers h3 { font-family: 'Arvo', serif; color: var(--color-text-warm); font-size: 1.1em; margin: 24px 0 8px; }
+		.streamers a { color: var(--color-accent); }
+		.streamers__sub, .streamers__note, .streamers__msg { color: var(--color-text-dim); }
+		.streamers__msg { font-style: italic; padding: 8px 0; }
+		.streamer {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 6px 14px;
+			padding: 12px 14px;
+			margin-bottom: 8px;
+			background: var(--color-surface);
+			border-radius: 8px;
+			border-left: 4px solid transparent;
+		}
+		.streamer--live { border-left-color: var(--color-error, #e53935); }
+		.streamer__who { flex: 1 1 200px; min-width: 0; }
+		.streamer__name { font-family: 'Arvo', serif; color: var(--color-text-bright); text-decoration: none; }
+		.streamer__about { color: var(--color-text-dim); font-size: 0.9em; overflow-wrap: anywhere; }
+		.streamer__channel { white-space: nowrap; }
+		.streamer__live {
+			display: inline-block;
+			padding: 1px 8px;
+			border-radius: 4px;
+			background: var(--color-error, #e53935);
+			color: #fff;
+			font-size: 0.8em;
+			font-weight: bold;
+			letter-spacing: 0.04em;
+		}
+		.streamer__playing { font-size: 0.85em; }
+		.streamers-form {
+			display: grid;
+			gap: 8px;
+			padding: 12px 14px;
+			background: var(--color-surface);
+			border-radius: 8px;
+		}
+		.streamers-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.85em; color: var(--color-text-dim); }
+		.streamers-form input, .streamers-form select {
+			min-width: 0;
+			padding: 6px 8px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-bg-mid);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1.05em;
+		}
+		.streamers-form__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+		.streamers-btn {
+			padding: 6px 14px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			cursor: pointer;
+		}
+		.streamers-btn:hover:not(:disabled) { background: var(--color-surface-hover); }
+		.streamers-btn:disabled { opacity: 0.5; cursor: default; }
+		.streamers-btn--primary { border-color: var(--color-accent); color: var(--color-text-bright); }
+		.streamers-form__error { color: var(--color-error); }
+		.streamers-form__ok { color: var(--color-success); }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="streamersPage()">
+		<div class="streamers">
+			<h2>Streamers</h2>
+			<p class="streamers__sub">Players who stream Sigil on Twitch or YouTube. Live ones first.</p>
+
+			<p class="streamers__msg" x-show="loading" x-cloak>Loading&hellip;</p>
+			<p class="streamers__msg" x-show="!loading && list.length === 0" x-cloak>Nobody has listed a channel yet.</p>
+			<template x-for="s in list" x-bind:key="s.uid">
+				<div class="streamer" x-bind:class="{ 'streamer--live': s.live || s.playing }" x-bind:data-uid="s.uid">
+					<div class="streamer__who">
+						<a class="streamer__name" x-bind:href="'profile.html?uid=' + encodeURIComponent(s.uid)" x-text="s.name"></a>
+						<span class="title-chip" x-show="s.title" x-text="s.title" x-bind:title="'Verified title: ' + s.title"></span>
+						<div class="streamer__about" x-show="s.about" x-text="s.about"></div>
+					</div>
+					<span class="streamer__live" x-show="s.live" title="The streamer says they are live (it turns off by itself)">LIVE</span>
+					<a class="streamer__playing" x-show="s.playing" x-bind:href="'multiplayer.html?id=' + s.playing">Playing on Sigil now: watch</a>
+					<a class="streamer__channel" x-bind:href="s.url" target="_blank" rel="noopener nofollow ugc" x-text="s.platform + ': ' + s.channel"></a>
+					<button class="streamers-btn" type="button" x-show="isAdmin && s.uid !== uid" x-on:click="adminRemove(s)">Remove listing</button>
+				</div>
+			</template>
+
+			<h3>Your channel</h3>
+			<p class="streamers__msg" x-show="!uid" x-cloak>Sign in on the <a href="account.html">account page</a> to list your channel here.</p>
+			<template x-if="uid">
+				<div class="streamers-form" data-testid="streamer-form">
+					<label>Channel link (Twitch or YouTube)
+						<input type="url" x-model="form.url" placeholder="https://www.twitch.tv/yourname or https://www.youtube.com/@yourhandle" maxlength="200" data-testid="streamer-url" />
+					</label>
+					<label>About (optional, 140 characters)
+						<input type="text" x-model="form.about" maxlength="140" placeholder="Sigil every Friday evening" />
+					</label>
+					<div class="streamers-form__row">
+						<button class="streamers-btn streamers-btn--primary" type="button" x-on:click="save()" x-bind:disabled="busy" data-testid="streamer-save" x-text="mine ? 'Update listing' : 'List my channel'"></button>
+						<button class="streamers-btn" type="button" x-show="mine" x-on:click="remove()" x-bind:disabled="busy">Remove my listing</button>
+					</div>
+					<div class="streamers-form__row" x-show="mine">
+						<template x-if="!(mine && mine.live)">
+							<span style="display: contents;">
+								<select x-model="liveHours" aria-label="For how long">
+									<option value="1">for 1 hour</option>
+									<option value="2">for 2 hours</option>
+									<option value="4">for 4 hours</option>
+									<option value="8">for 8 hours</option>
+								</select>
+								<button class="streamers-btn" type="button" x-on:click="goLive()" x-bind:disabled="busy" data-testid="streamer-live">I'm live now</button>
+							</span>
+						</template>
+						<template x-if="mine && mine.live">
+							<button class="streamers-btn" type="button" x-on:click="endLive()" x-bind:disabled="busy">End my live marker</button>
+						</template>
+					</div>
+					<span class="streamers-form__error" x-show="error" x-text="error" role="alert"></span>
+					<span class="streamers-form__ok" x-show="ok" x-text="ok" role="status"></span>
+				</div>
+			</template>
+
+			<p class="streamers__note">How "live" is known: Sigil cannot ask Twitch or YouTube who is streaming without API keys, which the site does not have. A listing shows LIVE when its streamer marks themselves live here (the marker turns off by itself after the hours they choose, 12 at most), and "Playing on Sigil now" when they are seated in a game spectators may watch.</p>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/engine/badges.js?v=1"></script>
+	<script src="static/scripts/social.js?v=1"></script>
+
+	<script>
+		// streamers/{uid}: { url, about, at, liveUntil } (social.js describes
+		// them; the rules accept only the canonical Twitch / YouTube channel
+		// URLs normalizeStreamUrl produces). Live ones first: self-declared
+		// LIVE, or seated in a game in live_rooms/.
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('streamersPage', () => ({
+				loading: true,
+				list: [],
+				uid: null,
+				isAdmin: false,
+				mine: null,
+				form: { url: '', about: '' },
+				liveHours: '2',
+				busy: false,
+				error: '',
+				ok: '',
+				_raw: {},
+
+				init() {
+					const db = firebase.database();
+					db.ref('streamers').on('value', (s) => { this._raw = s.val() || {}; this.render(); }, () => { this.loading = false; });
+					// Who is seated in a live game, for "Playing on Sigil now".
+					this._playing = {};
+					db.ref('live_rooms').on('value', (s) => this._readPlaying(Object.keys(s.val() || {})), () => {});
+					setInterval(() => this.render(), 60000);
+					firebase.auth().onAuthStateChanged(async (u) => {
+						this.uid = u && !u.isAnonymous ? u.uid : null;
+						this.isAdmin = false;
+						if (this.uid) {
+							try { this.isAdmin = (await db.ref('admins/' + this.uid).once('value')).val() === true; } catch (e) { /* not an admin */ }
+						}
+						this.render();
+						const m = this.uid && this._raw[this.uid];
+						this.form = { url: m ? m.url : '', about: m && m.about ? m.about : '' };
+					});
+				},
+
+				async _readPlaying(codes) {
+					const db = firebase.database();
+					const playing = {};
+					await Promise.all(codes.filter((c) => /^[A-Z0-9]{4,10}$/.test(c)).map(async (code) => {
+						try {
+							const [st, red, blue, spec] = await Promise.all(['status', 'red/uid', 'blue/uid', 'allowSpectators']
+								.map((f) => db.ref('rooms/' + code + '/' + f).once('value').then((s) => s.val())));
+							if (st !== 'playing' || spec === false) return;
+							if (red) playing[red] = code;
+							if (blue) playing[blue] = code;
+						} catch (e) { /* unreadable room */ }
+					}));
+					this._playing = playing;
+					this.render();
+				},
+
+				async render() {
+					const db = firebase.database();
+					const now = Date.now();
+					const uids = Object.keys(this._raw);
+					this._names = this._names || {};
+					this._titles = this._titles || {};
+					await Promise.all(uids.filter((u) => !(u in this._names)).map(async (u) => {
+						this._names[u] = '';
+						try {
+							const [n, t] = await Promise.all([
+								db.ref('users/' + u + '/displayName').once('value').then((s) => s.val()),
+								db.ref('titles/' + u + '/title').once('value').then((s) => s.val()),
+							]);
+							this._names[u] = n || 'Player';
+							this._titles[u] = t || '';
+						} catch (e) { this._names[u] = 'Player'; }
+					}));
+					const rows = [];
+					for (const u of uids) {
+						const d = SigilSocial.describeStreamer(this._raw[u], now);
+						if (!d) continue;
+						rows.push(Object.assign(d, { uid: u, name: this._names[u] || 'Player', title: this._titles[u] || '', playing: this._playing[u] || null, at: this._raw[u].at || 0 }));
+					}
+					// Live first (self-declared, then playing on the site), then the newest listings.
+					const rank = (r) => (r.live ? 0 : r.playing ? 1 : 2);
+					rows.sort((a, b) => (rank(a) - rank(b)) || (b.at - a.at));
+					this.list = rows;
+					this.mine = rows.find((r) => r.uid === this.uid) || null;
+					this.loading = false;
+				},
+
+				async _write(fn, okText) {
+					this.busy = true;
+					this.error = '';
+					this.ok = '';
+					try {
+						await fn(firebase.database().ref('streamers/' + this.uid));
+						this.ok = okText;
+					} catch (e) {
+						this.error = 'That was refused: ' + (e.message || e);
+					}
+					this.busy = false;
+				},
+
+				save() {
+					const n = SigilSocial.normalizeStreamUrl(this.form.url);
+					if (!n) {
+						this.error = 'Use a Twitch channel (twitch.tv/name) or a YouTube channel (youtube.com/@handle or youtube.com/channel/UC…).';
+						this.ok = '';
+						return;
+					}
+					this.form.url = n.url;
+					const about = String(this.form.about || '').trim().slice(0, 140);
+					const live = this._raw[this.uid] && this._raw[this.uid].liveUntil > Date.now() ? this._raw[this.uid].liveUntil : null;
+					return this._write((ref) => ref.set({ url: n.url, about: about || null, at: firebase.database.ServerValue.TIMESTAMP, liveUntil: live }), 'Listed.');
+				},
+
+				remove() {
+					if (!confirm('Remove your channel from the streamer list?')) return;
+					return this._write((ref) => ref.remove(), 'Removed.');
+				},
+
+				goLive() {
+					const h = Math.min(12, Math.max(1, Number(this.liveHours) || 2));
+					// A little under the hours chosen: the rules check against the server's clock.
+					return this._write((ref) => ref.update({ liveUntil: Date.now() + h * 3600000 - 60000 }), 'Marked live.');
+				},
+
+				endLive() {
+					return this._write((ref) => ref.update({ liveUntil: null }), 'Live marker ended.');
+				},
+
+				adminRemove(s) {
+					if (!confirm('Remove ' + s.name + '’s listing?')) return;
+					this.busy = true;
+					firebase.database().ref('streamers/' + s.uid).remove()
+						.catch((e) => { this.error = 'That was refused: ' + (e.message || e); })
+						.then(() => { this.busy = false; });
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>
