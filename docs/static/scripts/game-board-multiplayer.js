@@ -69,6 +69,77 @@ document.addEventListener('alpine:init', () => {
 			// This player's rating line once the server has rated the game.
 			ratingText: '',
 
+			// A tournament game (rooms/{code}/tournament, written by the
+			// server: functions/tournaments.js): { id, kind, name, pairing,
+			// berserk }, else null. No rematch, takeback, abort or gift then.
+			tournament: null,
+			// Each seat's berserk (half its clock, no increment).
+			berserk: { red: false, blue: false },
+			// We have played a turn of our own (berserk is offered before it).
+			movedOnce: false,
+			// After the game: back to the event in this many seconds (null: staying).
+			tourReturnIn: null,
+			_tourReturnTimer: null,
+			// A simul's host: the other boards waiting for our move.
+			simulHost: false,
+			simulQueue: [],
+			simulAuto: (() => { try { return localStorage.getItem('sigilSimulAuto') === 'true'; } catch (e) { return false; } })(),
+			_simulStop: null,
+			get canBerserk() {
+				return !!(this.tournament && this.tournament.berserk) && !this.isSpectator && this.timerType === 'realtime'
+					&& !this.winner && !this.gameAborted && !this.reviewMode && !this.movedOnce
+					&& (this.myColor === 'red' || this.myColor === 'blue') && !this.berserk[this.myColor];
+			},
+			handleBerserk() { if (this.canBerserk) this.sendEvent('berserk'); },
+			tournamentUrl() { return this.tournament ? 'tournament.html?id=' + encodeURIComponent(this.tournament.id) : ''; },
+			tournamentLabel() {
+				const t = this.tournament;
+				if (!t) return '';
+				const kind = { arena: 'Arena', swiss: 'Swiss', simul: 'Simul' }[t.kind] || 'Tournament';
+				return kind + ': ' + (t.name || '');
+			},
+			backToTournament() {
+				clearInterval(this._tourReturnTimer);
+				window.onbeforeunload = null;
+				window.location.href = this.tournamentUrl();
+			},
+			stayHere() {
+				clearInterval(this._tourReturnTimer);
+				this.tourReturnIn = null;
+			},
+			/** After an arena or Swiss game, back to the event (where the next game is paired). */
+			_startTourReturn() {
+				if (!this.tournament || this.isSpectator || this.tournament.kind === 'simul') return;
+				this.tourReturnIn = 5;
+				clearInterval(this._tourReturnTimer);
+				this._tourReturnTimer = setInterval(() => {
+					if (this.tourReturnIn === null) return clearInterval(this._tourReturnTimer);
+					if (--this.tourReturnIn <= 0) this.backToTournament();
+				}, 1000);
+			},
+			/** The simul host's next board waiting for a move. */
+			simulNext() {
+				const code = this.simulQueue[0];
+				if (!code) return;
+				window.onbeforeunload = null;
+				window.location.href = 'multiplayer.html?id=' + encodeURIComponent(code);
+			},
+			saveSimulAuto() { try { localStorage.setItem('sigilSimulAuto', this.simulAuto ? 'true' : 'false'); } catch (e) { /* storage blocked */ } },
+			/** A simul's host: watch every board, keep our seat on each live. */
+			async _startSimulHost() {
+				const t = this.tournament;
+				if (!t || t.kind !== 'simul' || this.isSpectator || !window.SigilTournaments) return;
+				const uid = this.myColor === 'red' ? this.redUid : this.blueUid;
+				let host = null;
+				try { host = (await firebase.database().ref('tournaments/' + t.id + '/host').once('value')).val(); } catch (e) { return; }
+				if (!host || host !== uid) return;
+				this.simulHost = true;
+				const here = this._roomCodeForReview;
+				this._simulStop = SigilTournaments.watchSimul(t.id, uid, (s) => {
+					this.simulQueue = s.toMove.filter((c) => c !== here);
+				});
+			},
+
 			// Game review state
 			reviewMode: false,
 			reviewIndex: 0,
@@ -244,7 +315,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			get canAbort() {
 				void this._presenceTick;
-				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !!this.whoseTurn
+				return !this.tournament && !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !!this.whoseTurn
 					&& this.turnsPlayed() < 2;
 			},
 			handleClaimWin() { if (this.canClaimWin) this.sendEvent('claim_win'); },
@@ -258,7 +329,7 @@ document.addEventListener('alpine:init', () => {
 				// (firebase-sync.js requestTakeback says why).
 				const sync = this._engine && this._engine.sync;
 				const tc = (sync && sync.timeControl) || {};
-				if (tc.type === 'correspondence') return false;
+				if (tc.type === 'correspondence' || this.tournament) return false;
 				if (tc.type === 'realtime' && sync && sync._turnKeys && sync._turnKeys.length <= 2) return false;
 				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !this.takebackRequest
 					&& !!log && log.some((t) => t.color === this.myColor);
@@ -286,7 +357,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			// Give the opponent 15 s (live timed games).
 			get canGiveTime() {
-				return !this.isSpectator && this.timerType === 'realtime' && !this.winner && !this.gameAborted
+				return !this.tournament && !this.isSpectator && this.timerType === 'realtime' && !this.winner && !this.gameAborted
 					&& !this.reviewMode && !!this.whoseTurn && this.giftsLeft > 0 && !this.claimingFlag
 					// Not once the opponent's clock reads zero (a gift then would
 					// only spoil our own claim).
@@ -410,7 +481,7 @@ document.addEventListener('alpine:init', () => {
 			// (same sides and time control) is offered to the opponent through
 			// this room's rematch node, as "Play online from here" does.
 			get canPlayOnDeathmatch() {
-				if (!this.winner || this.isSpectator || this._lastEndReason || !this._roomCodeForReview) return false;
+				if (!this.winner || this.isSpectator || this.tournament || this._lastEndReason || !this._roomCodeForReview) return false;
 				const n = this.reviewSfns.length;
 				return n > 0 && typeof deathmatchPlayOnSfn === 'function' && !!deathmatchPlayOnSfn(this.reviewSfns[n - 1]);
 			},
@@ -970,6 +1041,7 @@ document.addEventListener('alpine:init', () => {
 					_this.myColor = myColor || '';
 					_this.ranked = !!state.ranked;
 					_this.unratedText = state.ranked ? '' : describeUnratedReason(state.unratedWhy);
+					_this.tournament = state.tournament || null;
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
 					_this.isDeveloper = !!state.isDeveloper;
 					_this.showAiEval = !!state.showAiEval;
@@ -1029,6 +1101,7 @@ document.addEventListener('alpine:init', () => {
 					// A spectator who arrives before the first move of a room
 					// from a position replays from its start.
 					engine.startGame(reconnectSfn || (isSpectator && sync && sync.startSfn) || null);
+					if (_this.tournament) _this._startSimulHost();
 				}, 100);
 
 				// Keyboard shortcuts (game-keys.js, shared with game.html)
@@ -1167,6 +1240,9 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 					else if (type === 'whoseturndisplay') {
+						// Our own turns so far, from the room (a reload's log starts empty).
+						const info = (_this._engine && _this._engine.sync && _this._engine.sync._turnInfo) || {};
+						if (!_this.movedOnce && Object.values(info).some((x) => x && x.color === _this.myColor)) _this.movedOnce = true;
 						_this.showReset = false;
 						if (rest.message === _turnMsgText
 							&& _turnMsgMark >= 0 && _turnMsgMark <= _this.messageHistory.length) {
@@ -1187,6 +1263,11 @@ document.addEventListener('alpine:init', () => {
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
+						if (t && t.color === _this.myColor) {
+							_this.movedOnce = true;
+							// A simul's host moves on to the next board waiting.
+							if (_this.simulHost && _this.simulAuto && _this.simulQueue.length && !_this.winner) setTimeout(() => _this.simulNext(), 700);
+						}
 					}
 					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: sigilScrollBehavior(), block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
 					else if (type === 'push_animation') {
@@ -1206,6 +1287,16 @@ document.addEventListener('alpine:init', () => {
 						_this.claimingFlag = !!rest.claiming;
 						const p = rest.paused || {};
 						if (p.red !== _this.pausedUntil.red || p.blue !== _this.pausedUntil.blue) _this.pausedUntil = { red: p.red || null, blue: p.blue || null };
+					}
+					else if (type === 'berserk_state') {
+						const b = rest.berserk || {};
+						for (const c of ['red', 'blue']) {
+							if (b[c] === true && !_this.berserk[c]) {
+								_this.messageHistory.push((c === _this.myColor ? 'You' : (c === 'red' ? _this.redName : _this.blueName) || 'Your opponent')
+									+ ' went berserk: half the clock, no increment.');
+							}
+						}
+						_this.berserk = { red: b.red === true, blue: b.blue === true };
 					}
 					else if (type === 'time_gift') { _this.messageHistory.push(rest.mine ? 'You gave your opponent 15 seconds.' : 'Your opponent gave you 15 seconds.'); }
 					else if (type === 'rematch_state_changed') {
@@ -1262,6 +1353,8 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 					else if (type === 'game_aborted') {
+						// A tournament's no-show: back to the event for the next pairing.
+						if (!_this.gameAborted) _this._startTourReturn();
 						_this.gameAborted = true;
 						_this.actionList = [];
 						clearInterval(_this._presenceTimer);
@@ -1276,6 +1369,7 @@ document.addEventListener('alpine:init', () => {
 						_this._lastEndReason = rest.endReason || null;
 						_this.winner = rest.winner;
 						_this._openAfterGameEmotes();
+						_this._startTourReturn();
 						if (rest.gameLog && rest.gameLog.length > 0) {
 							const sfns = [rest.gameLog[0].sfnBefore];
 							const labels = ['Start'];

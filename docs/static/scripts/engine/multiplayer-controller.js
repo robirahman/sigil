@@ -236,8 +236,15 @@ class MultiplayerController {
 		});
 		if (typeof this.sync.listenToClockRecords === 'function') {
 			let seen = null;
+			let berserk = null;
 			this.sync.listenToClockRecords((rec) => {
 				this._clockRec = rec;
+				// A tournament room's berserks, for the page's notice.
+				const b = JSON.stringify(rec.berserk || null);
+				if (b !== berserk) {
+					berserk = b;
+					this.emit({ type: 'berserk_state', berserk: rec.berserk || null });
+				}
 				// New gifts, either way, once the first load is in.
 				const keys = Object.keys(rec.gifts || {});
 				if (seen && rec.ready) {

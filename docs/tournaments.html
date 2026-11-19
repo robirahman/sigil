@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/tournaments.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Tournaments - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="tournamentsPage()">
+		<div class="tour">
+			<h2>Tournaments</h2>
+			<p class="tour__intro">Arenas, Swiss events and simuls. Scheduled events are run by the site; anyone with an account can start a casual one.</p>
+
+			<p class="tour__msg" x-show="isOffline" x-cloak>Tournaments are unavailable while offline.</p>
+			<p class="tour__msg" x-show="loading && !isOffline" x-cloak>Loading events...</p>
+
+			<template x-for="section in sections" x-bind:key="section.id">
+				<div x-show="!loading" x-bind:data-section="section.id">
+					<h3 x-text="section.title"></h3>
+					<p class="tour__msg" x-show="section.items.length === 0" x-text="section.empty"></p>
+					<div class="tour-list">
+						<template x-for="e in section.items" x-bind:key="e.id">
+							<a class="tour-card" x-bind:href="'tournament.html?id=' + e.id" x-bind:data-id="e.id">
+								<span>
+									<span class="tour-badge" x-text="kindLabel(e.kind)"></span>
+								</span>
+								<span>
+									<span class="tour-card__name" x-text="e.name"></span>
+									<span class="tour-badge tour-badge--official" x-show="e.official">Scheduled</span>
+									<div class="tour-card__meta" x-text="metaLine(e)"></div>
+								</span>
+								<span class="tour-card__when" x-text="whenLine(e)"></span>
+							</a>
+						</template>
+					</div>
+				</div>
+			</template>
+
+			<div x-show="authUser && !isOffline" x-cloak>
+				<h3>Your events</h3>
+				<p class="tour__msg" x-show="mine.length === 0">You have not created or joined any event yet.</p>
+				<div class="tour-list">
+					<template x-for="e in mine" x-bind:key="e.id">
+						<a class="tour-card" x-bind:href="'tournament.html?id=' + e.id" x-bind:data-mine="e.id">
+							<span><span class="tour-badge" x-text="kindLabel(e.kind)"></span></span>
+							<span>
+								<span class="tour-card__name" x-text="e.name"></span>
+								<div class="tour-card__meta" x-text="metaLine(e) + (e.private ? ' · private' : '')"></div>
+							</span>
+							<span class="tour-card__when" x-text="whenLine(e)"></span>
+						</a>
+					</template>
+				</div>
+			</div>
+
+			<h3>Create an event</h3>
+			<p class="tour__msg" x-show="!authUser && !isOffline" x-cloak><a href="account.html">Sign in</a> with an account to create or join an event.</p>
+			<form class="tour-form" x-show="authUser && !isOffline" x-cloak x-on:submit.prevent="create()" data-testid="create-form">
+				<label>Kind</label>
+				<div class="tour-form__row" role="radiogroup" aria-label="Kind of event">
+					<label><input type="radio" value="arena" x-model="form.kind" /> Arena</label>
+					<label><input type="radio" value="swiss" x-model="form.kind" /> Swiss</label>
+					<label><input type="radio" value="simul" x-model="form.kind" /> Simul (you play everyone)</label>
+				</div>
+				<p class="tour-form__wide tour__msg" x-text="kindHelp()"></p>
+
+				<label for="t-name">Name</label>
+				<input id="t-name" type="text" maxlength="50" x-model="form.name" required />
+				<label for="t-desc">Description</label>
+				<textarea id="t-desc" maxlength="300" x-model="form.description" placeholder="Optional"></textarea>
+
+				<label>Clock</label>
+				<div class="tour-form__row">
+					<label x-show="form.kind === 'simul'"><input type="checkbox" x-model="form.untimed" /> Untimed</label>
+					<span x-show="form.kind !== 'simul' || !form.untimed">
+						<select x-model.number="form.minutes" aria-label="Minutes per player">
+							<template x-for="m in [1, 2, 3, 5, 10, 15, 20, 30, 45, 60]"><option x-bind:value="m" x-text="m + ' min'" x-bind:selected="m === form.minutes"></option></template>
+						</select>
+						+
+						<select x-model.number="form.increment" aria-label="Increment in seconds">
+							<template x-for="s in [0, 1, 2, 3, 5, 10, 15, 30]"><option x-bind:value="s" x-text="s + ' s'" x-bind:selected="s === form.increment"></option></template>
+						</select>
+					</span>
+				</div>
+
+				<template x-if="form.kind === 'arena'">
+					<label for="t-dur">Duration</label>
+				</template>
+				<template x-if="form.kind === 'arena'">
+					<div class="tour-form__row">
+						<select id="t-dur" x-model.number="form.durationMin">
+							<template x-for="m in [10, 20, 30, 45, 60, 90, 120, 180]"><option x-bind:value="m" x-text="m + ' min'" x-bind:selected="m === form.durationMin"></option></template>
+						</select>
+						<label title="Halve your own clock before your first move for a bonus point if you win"><input type="checkbox" x-model="form.berserk" /> Berserk allowed</label>
+					</div>
+				</template>
+
+				<template x-if="form.kind === 'swiss'">
+					<label for="t-rounds">Rounds</label>
+				</template>
+				<template x-if="form.kind === 'swiss'">
+					<div class="tour-form__row">
+						<select id="t-rounds" x-model.number="form.rounds">
+							<template x-for="r in [3, 4, 5, 6, 7, 8, 9, 10, 11]"><option x-bind:value="r" x-text="r" x-bind:selected="r === form.rounds"></option></template>
+						</select>
+						<label>Break between rounds
+							<select x-model.number="form.roundGapSec">
+								<template x-for="s in [0, 30, 60, 120, 300]"><option x-bind:value="s" x-text="s ? s + ' s' : 'none'" x-bind:selected="s === form.roundGapSec"></option></template>
+							</select>
+						</label>
+					</div>
+				</template>
+
+				<template x-if="form.kind === 'simul'">
+					<label for="t-opps">Opponents</label>
+				</template>
+				<template x-if="form.kind === 'simul'">
+					<div class="tour-form__row">
+						<input id="t-opps" type="number" min="1" max="20" x-model.number="form.maxPlayers" style="width: 5em;" />
+						<label>You play
+							<select x-model="form.hostColor">
+								<option value="red">Red everywhere</option>
+								<option value="blue">Blue everywhere</option>
+								<option value="alternate">Red and Blue in turn</option>
+							</select>
+						</label>
+						<label x-show="!form.untimed">Your extra time per opponent
+							<select x-model.number="form.hostExtraSec">
+								<template x-for="s in [0, 15, 30, 60, 120]"><option x-bind:value="s" x-text="s + ' s'" x-bind:selected="s === form.hostExtraSec"></option></template>
+							</select>
+						</label>
+					</div>
+				</template>
+
+				<template x-if="form.kind !== 'simul'">
+					<label for="t-start">Starts</label>
+				</template>
+				<template x-if="form.kind !== 'simul'">
+					<div class="tour-form__row">
+						<select id="t-start" x-model="form.startIn">
+							<option value="2">in 2 minutes</option>
+							<option value="5">in 5 minutes</option>
+							<option value="15">in 15 minutes</option>
+							<option value="30">in 30 minutes</option>
+							<option value="60">in an hour</option>
+							<option value="at">at a set time</option>
+						</select>
+						<input type="datetime-local" x-show="form.startIn === 'at'" x-model="form.startAt" aria-label="Start time" />
+					</div>
+				</template>
+
+				<label for="t-variant">Rules</label>
+				<div class="tour-form__row">
+					<select id="t-variant" x-model="form.variant">
+						<option value="standard">Standard</option>
+						<option value="competitive">Competitive</option>
+					</select>
+					<select x-model="form.spells" aria-label="Spells">
+						<option value="core">Core spells</option>
+						<option value="expansions">Core and the official expansions</option>
+					</select>
+				</div>
+
+				<label>Who sees it</label>
+				<div class="tour-form__row">
+					<label><input type="checkbox" x-model="form.private" /> Private (not listed; share the link)</label>
+				</div>
+
+				<template x-if="isAdmin">
+					<label>Admin</label>
+				</template>
+				<template x-if="isAdmin">
+					<div class="tour-form__row" data-testid="admin-options">
+						<label x-show="form.kind !== 'simul'"><input type="checkbox" x-model="form.rated" /> Rated</label>
+						<label><input type="checkbox" x-model="form.official" /> Scheduled site event</label>
+						<label x-show="form.kind !== 'simul'">Repeat
+							<select x-model="form.repeat">
+								<option value="">never</option>
+								<option value="daily">daily</option>
+								<option value="weekly">weekly</option>
+							</select>
+						</label>
+					</div>
+				</template>
+				<p class="tour-form__wide tour__msg" x-show="!isAdmin">Events made by players are casual: their games do not change ratings.</p>
+
+				<div class="tour-form__wide">
+					<button class="tour-btn tour-btn--primary" type="submit" x-bind:disabled="busy" x-text="busy ? 'Creating…' : 'Create'"></button>
+					<span class="tour__error" role="alert" x-text="error"></span>
+				</div>
+			</form>
+
+			<div style="text-align: center; margin-top: 24px;">
+				<a href="./">&larr; Back to menu</a>
+			</div>
+		</div>
+	</div>
+
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/tournament-client.js"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('tournamentsPage', () => ({
+				isOffline: !navigator.onLine,
+				loading: true,
+				authUser: null,
+				isAdmin: false,
+				events: [],
+				mine: [],
+				busy: false,
+				error: '',
+				now: Date.now(),
+				form: {
+					kind: 'arena', name: '', description: '', minutes: 3, increment: 2, untimed: false,
+					durationMin: 30, berserk: true, rounds: 5, roundGapSec: 30,
+					maxPlayers: 10, hostColor: 'red', hostExtraSec: 30,
+					startIn: '5', startAt: '', variant: 'standard', spells: 'core', private: false,
+					rated: false, official: true, repeat: '',
+				},
+
+				init() {
+					window.addEventListener('online', () => { this.isOffline = false; });
+					window.addEventListener('offline', () => { this.isOffline = true; });
+					setInterval(() => { this.now = Date.now(); }, 1000);
+					const db = firebase.database();
+					// The public list, newest starts last (the index is listable; events are not).
+					db.ref('tournament_index').orderByChild('startsAt').limitToLast(150).on('value', (snap) => {
+						const out = [];
+						snap.forEach((c) => { out.push(Object.assign({ id: c.key }, c.val())); });
+						this.events = out;
+						this.loading = false;
+					}, () => { this.loading = false; });
+					firebase.auth().onAuthStateChanged(async (user) => {
+						this.authUser = user && !user.isAnonymous ? user : null;
+						this.mine = [];
+						this.isAdmin = false;
+						if (!this.authUser) return;
+						try { this.isAdmin = (await db.ref('admins/' + user.uid).once('value')).val() === true; } catch (e) { this.isAdmin = false; }
+						this.form.rated = this.isAdmin;
+						this._loadMine(user.uid);
+					});
+				},
+
+				async _loadMine(uid) {
+					const db = firebase.database();
+					try {
+						const snap = await db.ref('user_tournaments/' + uid).orderByChild('at').limitToLast(30).once('value');
+						const ids = [];
+						snap.forEach((c) => { ids.push(c.key); });
+						const docs = await Promise.all(ids.map((id) => db.ref('tournaments/' + id).once('value').then((s) => s.val(), () => null)));
+						const out = [];
+						ids.forEach((id, i) => { if (docs[i]) out.push(Object.assign({ id }, docs[i])); });
+						out.sort((a, b) => (b.startsAt || b.createdAt || 0) - (a.startsAt || a.createdAt || 0));
+						this.mine = out;
+					} catch (e) { this.mine = []; }
+				},
+
+				get sections() {
+					const live = this.events.filter((e) => e.status === 'started').sort((a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || a.startsAt - b.startsAt);
+					const soon = this.events.filter((e) => e.status === 'created').sort((a, b) => a.startsAt - b.startsAt);
+					const done = this.events.filter((e) => e.status === 'finished').sort((a, b) => b.startsAt - a.startsAt).slice(0, 20);
+					return [
+						{ id: 'live', title: 'Playing now', items: live, empty: 'No event is running right now.' },
+						{ id: 'soon', title: 'Starting soon', items: soon, empty: 'Nothing scheduled. Create one below.' },
+						{ id: 'done', title: 'Finished', items: done, empty: 'No finished events yet.' },
+					];
+				},
+
+				kindLabel(k) { return SigilTournaments.kindLabel(k); },
+
+				metaLine(e) {
+					const parts = [SigilTournaments.tcLabel(e.timeControl), SigilTournaments.variantLabel(e.variant), e.rated ? 'Rated' : 'Casual'];
+					if (e.kind === 'swiss' && e.rounds) parts.push(e.rounds + ' rounds');
+					parts.push((e.nbPlayers || 0) + (e.kind === 'simul' ? ' opponents' : ' players'));
+					if (e.by || e.createdByName) parts.push('by ' + (e.by || e.createdByName));
+					return parts.join(' · ');
+				},
+
+				whenLine(e) {
+					const T = SigilTournaments;
+					if (e.status === 'created') {
+						if (e.kind === 'simul') return 'Waiting for the host';
+						return e.startsAt > this.now ? 'Starts in ' + T.countdown(e.startsAt - this.now) : 'Starting';
+					}
+					if (e.status === 'started') {
+						if (e.kind === 'arena' && e.endsAt) return 'Ends in ' + T.countdown(e.endsAt - this.now);
+						if (e.kind === 'swiss' && e.round) return 'Round ' + e.round + ' of ' + e.rounds;
+						return 'Playing';
+					}
+					if (e.status === 'cancelled') return 'Cancelled';
+					return 'Finished ' + T.when(e.finishedAt || e.endsAt || e.startsAt);
+				},
+
+				kindHelp() {
+					return {
+						arena: 'Play as many games as you can until the time is up. You are paired again as soon as a game ends. A win is 2 points, 4 after two wins in a row; berserk (half your clock) adds 1 to a win.',
+						swiss: 'A fixed number of rounds. Each round pairs players with similar scores, never the same opponent twice; an odd player out gets a bye (1 point).',
+						simul: 'You play every opponent at once, each on their own board. You start it when your opponents have joined.',
+					}[this.form.kind];
+				},
+
+				async create() {
+					const f = this.form;
+					this.error = '';
+					let startsAt = Date.now() + Number(f.startIn || 5) * 60000;
+					if (f.startIn === 'at') {
+						startsAt = f.startAt ? new Date(f.startAt).getTime() : NaN;
+						if (!Number.isFinite(startsAt)) { this.error = 'Choose a start time.'; return; }
+					}
+					const packs = f.spells === 'expansions'
+						? ['core'].concat((typeof EXPANSION_KEYS !== 'undefined' ? EXPANSION_KEYS : []).filter((k) => k !== 'panda' && k !== 'experimental'))
+						: ['core'];
+					const config = {
+						kind: f.kind, name: f.name, description: f.description, minutes: f.minutes, increment: f.increment,
+						variant: f.variant, packs, private: f.private, startsAt,
+					};
+					if (f.kind === 'arena') Object.assign(config, { durationMin: f.durationMin, berserk: f.berserk });
+					if (f.kind === 'swiss') Object.assign(config, { rounds: f.rounds, roundGapSec: f.roundGapSec });
+					if (f.kind === 'simul') Object.assign(config, { untimed: f.untimed, maxPlayers: f.maxPlayers, hostColor: f.hostColor, hostExtraSec: f.hostExtraSec });
+					if (this.isAdmin) Object.assign(config, { rated: f.rated, official: f.official, repeat: f.repeat || null });
+					this.busy = true;
+					try {
+						const res = await SigilTournaments.call('create', { config });
+						window.location.href = 'tournament.html?id=' + encodeURIComponent(res.id);
+					} catch (e) {
+						this.error = SigilTournaments.errorText(e);
+					}
+					this.busy = false;
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

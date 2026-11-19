@@ -151,6 +151,22 @@
 		html[data-theme="parchment"] .rated-badge--rated { color: #6b4e00; }
 		html[data-theme="parchment"] .rated-badge--casual { color: #4a4a4a; }
 		.room-preview { margin-top: 8px; font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.9em; }
+		/* A tournament game: its event, berserk, a simul host's next board. */
+		.tournament-bar {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px 12px;
+			align-items: center;
+			justify-content: center;
+			margin: 6px auto 0;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-dim);
+		}
+		.tournament-bar__name { color: var(--color-accent); font-family: 'Arvo', serif; }
+		.tournament-bar__tag { color: #ff8c00; }
+		.tournament-bar__berserk { border-color: #ff8c00; }
+		.tournament-bar__simul { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+		.win-modal__tournament { display: contents; }
 		.win-modal__rating {
 			margin: 4px 0 0;
 			font-family: 'Arvo', serif;
@@ -610,6 +626,7 @@
 			<!-- Games in progress live on the Active Games page (user_active_games). -->
 			<div class="resume-section">
 				<a class="active-games-link" href="active-games.html" x-text="activeGameCount ? 'Your games in progress (' + activeGameCount + ') \u2192' : 'Your games in progress \u2192'">Your games in progress &rarr;</a>
+				<a class="active-games-link" href="tournaments.html">Tournaments: arenas, Swiss, simuls &rarr;</a>
 			</div>
 		</div>
 
@@ -750,6 +767,21 @@
 							</div>
 						</div>
 					</div>
+				</div>
+				<!-- A tournament game (functions/tournaments.js): its event, berserk, a simul host's next board. -->
+				<div class="tournament-bar" x-show="tournament" x-cloak data-testid="tournament-bar">
+					<a class="tournament-bar__name" x-bind:href="tournamentUrl()" x-text="tournamentLabel()"></a>
+					<span class="tournament-bar__tag" x-show="berserk.red" x-text="(myColor === 'red' ? 'You' : redName) + ' berserked'"></span>
+					<span class="tournament-bar__tag" x-show="berserk.blue" x-text="(myColor === 'blue' ? 'You' : blueName) + ' berserked'"></span>
+					<button type="button" class="action-button tournament-bar__berserk" data-testid="berserk" x-show="canBerserk" x-on:click="handleBerserk"
+						title="Halve your clock (and lose the increment) for 1 more point if you win. Only before your first move.">Berserk</button>
+					<template x-if="simulHost">
+						<span class="tournament-bar__simul">
+							<button type="button" class="action-button" data-testid="simul-next" x-on:click="simulNext()" x-bind:disabled="!simulQueue.length"
+								x-text="simulQueue.length ? 'Next board (' + simulQueue.length + ')' : 'No other board waits'"></button>
+							<label><input type="checkbox" x-model="simulAuto" x-on:change="saveSimulAuto()" /> Go on after each move</label>
+						</span>
+					</template>
 				</div>
 				<div class="container"><div class="container__inner">
 					<template x-if="messageHistory.length > 0">
@@ -933,8 +965,15 @@
 						<a class="win-modal__btn" x-show="opponentPositionRoom && !isSpectator" x-bind:href="'multiplayer.html?id=' + opponentPositionRoom" x-text="opponentPositionRoomDeathmatch ? 'Opponent offers to play on as Deathmatch' : 'Opponent offers a rematch from a position'">Opponent offers a rematch from a position</a>
 						<button class="win-modal__btn" x-on:click="playOnDeathmatch()" x-show="canPlayOnDeathmatch && !opponentPositionRoomDeathmatch"
 							title="Keep playing from this position under Deathmatch rules: the only win is eliminating every enemy stone">Play On (Deathmatch)</button>
-						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
-						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === perType * 3">Play Again (Same Layout)</button>
+						<template x-if="tournament && !isSpectator">
+							<div class="win-modal__tournament" data-testid="tournament-return">
+								<button class="win-modal__btn" x-show="!simulHost" x-on:click="backToTournament()" x-text="tourReturnIn !== null ? 'Back to the tournament (' + tourReturnIn + ')' : 'Back to the tournament'"></button>
+								<button class="win-modal__btn" x-show="tourReturnIn !== null" x-on:click="stayHere()">Stay here</button>
+								<button class="win-modal__btn" x-show="simulHost" x-on:click="simulQueue.length ? simulNext() : backToTournament()" x-text="simulQueue.length ? 'Next board (' + simulQueue.length + ')' : 'Back to the simul'"></button>
+							</div>
+						</template>
+						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator && !tournament">Play Again</button>
+						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && !tournament && _rematchSpells.length === perType * 3">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('quick')"
@@ -1457,6 +1496,7 @@
 						setupSfn: roomData.setupSfn || null,
 						// How the game ended, for the review's replay check.
 						endReason: recordEnding(roomData).endReason,
+						tournament: (roomData.tournament && typeof roomData.tournament.id === 'string') ? roomData.tournament : null,
 						shareUrl: this.shareUrl,
 						roomCode: code,
 						authManager: _authManager,
@@ -1849,6 +1889,7 @@
 						blueUid: _firebaseSync.blueUid || null,
 						ranked: !!_firebaseSync.ranked,
 						unratedWhy: _firebaseSync.unratedWhy,
+						tournament: _firebaseSync.tournament || null,
 						annotationMode: !!(_authManager && _authManager.annotationMode),
 						isDeveloper: !!(_authManager && _authManager.isDeveloper),
 						showAiEval: !!(_authManager && _authManager.showAiEval),
@@ -2334,6 +2375,7 @@
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js?v=35"></script>
 	<script src="static/scripts/live-analysis.js?v=1"></script>
+	<script src="static/scripts/tournament-client.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js?v=43"></script>
 	<script src="static/scripts/rules-reference.js?v=36"></script>
 	<script src="static/scripts/help.js?v=35"></script>

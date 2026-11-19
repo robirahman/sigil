@@ -677,7 +677,10 @@
     },
     "user_tournaments": {
       "$uid": {
-        ".read": true
+        ".read": true,
+        ".indexOn": [
+          "at"
+        ]
       }
     }
   }

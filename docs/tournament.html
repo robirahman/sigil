@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/tournaments.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Tournament - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="tournamentPage()">
+		<div class="tour">
+			<p class="tour__msg" x-show="isOffline" x-cloak>This event is unavailable while offline.</p>
+			<p class="tour__msg" x-show="loading && !isOffline" x-cloak>Loading the event...</p>
+			<p class="tour__msg" x-show="missing" x-cloak>This event does not exist. <a href="tournaments.html">All tournaments</a></p>
+
+			<template x-if="t">
+				<div>
+					<div class="tour-head">
+						<h2><span x-text="t.name"></span></h2>
+						<div class="tour-head__meta">
+							<span class="tour-badge" x-text="kindLabel(t.kind)"></span>
+							<span class="tour-badge tour-badge--official" x-show="t.official">Scheduled</span>
+							<span class="tour-badge" x-text="t.rated ? 'Rated' : 'Casual'" x-bind:title="t.rated ? 'Its games change both players\' ratings.' : 'Its games do not change ratings.'"></span>
+							<span x-text="metaLine()"></span>
+						</div>
+						<p class="tour-head__meta" x-show="t.description" x-text="t.description"></p>
+						<div class="tour-head__clock" data-testid="status-line" x-text="statusLine()"></div>
+						<p class="tour-head__meta" x-show="t.status === 'created' && t.kind !== 'simul'" x-text="'Starts ' + when(t.startsAt)"></p>
+					</div>
+
+					<div class="tour-podium" x-show="t.status === 'finished' && (t.podium || []).length" data-testid="podium">
+						<template x-for="(p, i) in (t.podium || [])" x-bind:key="p.uid">
+							<div class="tour-podium__step">
+								<div x-text="['1st', '2nd', '3rd'][i]"></div>
+								<a x-bind:href="'profile.html?uid=' + encodeURIComponent(p.uid)" x-text="p.name"></a>
+								<div x-text="p.score + (t.kind === 'swiss' ? ' pts' : ' points')"></div>
+							</div>
+						</template>
+					</div>
+					<p class="tour__msg" style="text-align: center;" x-show="t.status === 'finished' && !t.final">Games still in progress count; the final standings follow when they end.</p>
+
+					<!-- Your game, as soon as the server pairs you. -->
+					<div class="tour-banner" x-show="myRoom" x-cloak data-testid="my-game">
+						<div>Your game is ready.</div>
+						<div class="tour-actions">
+							<a class="tour-btn tour-btn--primary" x-bind:href="'multiplayer.html?id=' + myRoom">Play</a>
+						</div>
+						<label><input type="checkbox" x-model="autoJoin" x-on:change="saveAutoJoin()" /> Go to my games automatically</label>
+					</div>
+					<p class="tour__msg" style="text-align: center;" x-show="waitingText()" x-text="waitingText()" data-testid="waiting"></p>
+
+					<div class="tour-actions">
+						<template x-if="canJoin()">
+							<button class="tour-btn tour-btn--primary" data-testid="join" x-on:click="act('join')" x-bind:disabled="busy" x-text="joinLabel()"></button>
+						</template>
+						<template x-if="canLeave()">
+							<button class="tour-btn" data-testid="leave" x-on:click="act('withdraw')" x-bind:disabled="busy" x-text="leaveLabel()"></button>
+						</template>
+						<template x-if="isOwner() && t.status === 'created'">
+							<button class="tour-btn" data-testid="start" x-on:click="act('start')" x-bind:disabled="busy" x-text="t.kind === 'simul' ? 'Start the simul' : 'Start now'"></button>
+						</template>
+						<template x-if="canCancel()">
+							<button class="tour-btn tour-btn--danger" data-testid="cancel" x-on:click="cancel()" x-bind:disabled="busy">Cancel event</button>
+						</template>
+						<button class="tour-btn" x-on:click="copyLink()" x-text="copied ? 'Link copied' : 'Copy link'"></button>
+					</div>
+					<p class="tour__msg" style="text-align: center;" x-show="!authUser && t.status !== 'finished' && t.status !== 'cancelled'"><a href="account.html">Sign in</a> with an account to take part.</p>
+					<p class="tour__error" style="text-align: center;" role="alert" x-text="error"></p>
+
+					<!-- Simul: the host and the boards. -->
+					<template x-if="t.kind === 'simul'">
+						<div data-testid="simul">
+							<p class="tour-head__meta" style="text-align: center;">Host: <a x-bind:href="'profile.html?uid=' + encodeURIComponent(t.host)" x-text="t.hostName"></a>
+								<span x-show="t.status !== 'created'" x-text="'· ' + (t.hostWins || 0) + ' won, ' + (t.hostLosses || 0) + ' lost'"></span></p>
+							<template x-if="t.status === 'created'">
+								<div>
+									<h3 x-text="'Opponents (' + playerRows.length + ' of ' + t.maxPlayers + ')'"></h3>
+									<p class="tour__msg" x-show="playerRows.length === 0">Nobody has joined yet.</p>
+									<div class="tour-games">
+										<template x-for="p in playerRows" x-bind:key="p.uid">
+											<div class="tour-game" x-bind:data-uid="p.uid">
+												<a x-bind:href="'profile.html?uid=' + encodeURIComponent(p.uid)" x-text="p.name"></a>
+												<span class="tour__msg" x-text="p.rating"></span>
+												<button class="tour-btn" x-show="isHost()" x-on:click="act('kick', { uid: p.uid })">Remove</button>
+											</div>
+										</template>
+									</div>
+								</div>
+							</template>
+							<template x-if="t.status !== 'created'">
+								<div>
+									<div class="tour-actions" x-show="isHost()">
+										<button class="tour-btn tour-btn--primary" data-testid="next-board" x-on:click="nextBoard()" x-bind:disabled="!hostToMove().length"
+											x-text="hostToMove().length ? 'Next board (' + hostToMove().length + ' to move)' : 'No board waits for you'"></button>
+									</div>
+									<div class="simul-boards">
+										<template x-for="b in boards" x-bind:key="b.pid">
+											<a class="simul-board" x-bind:href="'multiplayer.html?id=' + b.room" x-bind:data-room="b.room"
+												x-bind:class="{ 'simul-board--your-move': b.toMove && b.toMove === myColorIn(b), 'simul-board--over': b.over }">
+												<span x-html="miniBoard(b.sfn)"></span>
+												<div class="simul-board__line">
+													<span x-bind:class="b.hostColor === 'red' ? 'tour-game__blue' : 'tour-game__red'" x-text="b.oppName"></span>
+													<span x-text="boardState(b)"></span>
+												</div>
+											</a>
+										</template>
+									</div>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<!-- Arena and Swiss standings. -->
+					<template x-if="t.kind !== 'simul'">
+						<div>
+							<h3>Standings</h3>
+							<p class="tour__msg" x-show="playerRows.length === 0">Nobody has joined yet.</p>
+							<table class="tour-table" x-show="playerRows.length > 0" data-testid="standings">
+								<thead>
+									<tr>
+										<th class="num">#</th>
+										<th>Player</th>
+										<th class="num hide-narrow">Rating</th>
+										<th class="num">Score</th>
+										<th x-show="t.kind === 'arena'">Games</th>
+										<th class="num hide-narrow" x-show="t.kind === 'arena'" title="Performance rating">Perf</th>
+										<th class="num hide-narrow" x-show="t.kind === 'swiss'" title="Won-lost">W-L</th>
+										<th class="num hide-narrow" x-show="t.kind === 'swiss'" title="Buchholz: the sum of your opponents' scores">Buch.</th>
+										<th class="num hide-narrow" x-show="t.kind === 'swiss'" title="Sonneborn-Berger: the scores of the opponents you beat">SB</th>
+									</tr>
+								</thead>
+								<tbody>
+									<template x-for="(p, i) in playerRows" x-bind:key="p.uid">
+										<tr x-bind:data-uid="p.uid" x-bind:class="{ 'is-me': authUser && p.uid === authUser.uid, 'is-out': p.withdrawn || (t.kind === 'arena' && p.active === false) }">
+											<td class="num" x-text="i + 1"></td>
+											<td>
+												<a x-bind:href="'profile.html?uid=' + encodeURIComponent(p.uid)" x-text="p.name"></a>
+												<span class="tour-fire" x-show="t.kind === 'arena' && (p.streak || 0) >= 2" title="On a streak: a win is worth 4">&#x1F525;</span>
+												<span class="tour__msg" x-show="p.withdrawn" x-text="t.kind === 'swiss' ? '(withdrawn)' : '(left)'"></span>
+												<span class="tour__msg" x-show="t.kind === 'arena' && p.active === false && !p.withdrawn">(paused)</span>
+												<span class="tour__msg" x-show="p.playing">&#x2694;</span>
+											</td>
+											<td class="num hide-narrow" x-text="p.rating"></td>
+											<td class="num" x-text="p.score || 0"></td>
+											<td x-show="t.kind === 'arena'" class="tour-sheet" x-html="sheetHtml(p.sheet)"></td>
+											<td class="num hide-narrow" x-show="t.kind === 'arena'" x-text="perf(p)"></td>
+											<td class="num hide-narrow" x-show="t.kind === 'swiss'" x-text="(p.wins || 0) + '-' + (p.losses || 0)"></td>
+											<td class="num hide-narrow" x-show="t.kind === 'swiss'" x-text="p.buchholz"></td>
+											<td class="num hide-narrow" x-show="t.kind === 'swiss'" x-text="p.sb"></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+							<p class="tour__msg" x-show="t.kind === 'arena'">A win is 2, a win after two wins in a row 4 (&#x1F525;), a berserk win 1 more; a loss 0. Ties: performance.</p>
+							<p class="tour__msg" x-show="t.kind === 'swiss'">A win or a bye is 1 point. Ties: Buchholz, then Sonneborn-Berger, then rating.</p>
+
+							<template x-if="t.kind === 'swiss' && t.round">
+								<div data-testid="rounds">
+									<h3>Pairings</h3>
+									<div class="tour-rounds" role="group" aria-label="Round">
+										<template x-for="r in t.round" x-bind:key="r">
+											<button class="tour-btn" x-bind:aria-pressed="r === shownRound ? 'true' : 'false'" x-on:click="shownRound = r" x-text="'Round ' + r"></button>
+										</template>
+									</div>
+								</div>
+							</template>
+							<h3 x-show="t.kind === 'arena' && gameRows.length" x-text="'Games'"></h3>
+							<div class="tour-games" data-testid="games">
+								<template x-for="g in gameRows" x-bind:key="g.pid">
+									<div class="tour-game" x-bind:data-room="g.room || ''">
+										<span class="tour-game__red" x-text="nameOf(g.red, g.redName)"></span>
+										<span x-show="!g.bye">vs</span>
+										<span class="tour-game__blue" x-show="!g.bye" x-text="nameOf(g.blue, g.blueName)"></span>
+										<span class="tour__msg" x-text="resultText(g)"></span>
+										<a x-show="g.room" x-bind:href="'multiplayer.html?id=' + g.room" x-text="g.status === 'playing' ? 'Watch' : 'Review'"></a>
+									</div>
+								</template>
+							</div>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<div style="text-align: center; margin-top: 24px;">
+				<a href="tournaments.html">&larr; All tournaments</a>
+			</div>
+		</div>
+	</div>
+
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/tournament-client.js"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script>
+		// The arena page asks the server to move on while this player waits
+		// (it pairs at once on every game end and join; this covers a
+		// rematch that has to wait, and a missed trigger).
+		const TOUR_WAIT_POKE_MS = 12000;
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('tournamentPage', () => ({
+				id: new URLSearchParams(window.location.search).get('id') || '',
+				isOffline: !navigator.onLine,
+				loading: true,
+				missing: false,
+				t: null,
+				players: {},
+				pairings: {},
+				rooms: {},
+				authUser: null,
+				isAdmin: false,
+				busy: false,
+				error: '',
+				copied: false,
+				now: Date.now(),
+				shownRound: 0,
+				autoJoin: (() => { try { return localStorage.getItem('sigilTourAutoJoin') !== 'false'; } catch (e) { return true; } })(),
+				_offset: 0,
+				_presence: null,
+				_seats: null,
+				_seatKey: '',
+				_poked: {},
+				_lastPoke: 0,
+				_seenRoom: null,
+				_roomSubs: {},
+
+				init() {
+					window.addEventListener('online', () => { this.isOffline = false; });
+					window.addEventListener('offline', () => { this.isOffline = true; });
+					if (!/^[A-Za-z0-9_-]{1,40}$/.test(this.id)) { this.loading = false; this.missing = true; return; }
+					const db = firebase.database();
+					db.ref('.info/serverTimeOffset').on('value', (s) => { this._offset = s.val() || 0; });
+					db.ref('tournaments/' + this.id).on('value', (snap) => {
+						this.loading = false;
+						this.t = snap.val();
+						this.missing = !this.t;
+						if (this.t) document.title = this.t.name + ' - Sigil Online';
+						if (this.t && this.t.kind === 'swiss' && (!this.shownRound || this.shownRound === (this.t.round || 1) - 1)) this.shownRound = this.t.round || 0;
+						this._sync();
+					}, () => { this.loading = false; this.missing = true; });
+					db.ref('tournament_players/' + this.id).on('value', (snap) => {
+						const out = {};
+						snap.forEach((c) => { out[c.key] = Object.assign({ uid: c.key }, c.val()); });
+						this.players = out;
+						this._sync();
+					});
+					// An arena's recent games; a Swiss or a simul has all of theirs.
+					db.ref('tournament_pairings/' + this.id).limitToLast(200).on('value', (snap) => {
+						const out = {};
+						snap.forEach((c) => { out[c.key] = Object.assign({ pid: c.key }, c.val()); });
+						this.pairings = out;
+						this._sync();
+					});
+					firebase.auth().onAuthStateChanged(async (user) => {
+						this.authUser = user && !user.isAnonymous ? user : null;
+						this.isAdmin = false;
+						if (this.authUser) {
+							try { this.isAdmin = (await db.ref('admins/' + user.uid).once('value')).val() === true; } catch (e) { this.isAdmin = false; }
+						}
+						this._sync();
+					});
+					setInterval(() => { this.now = Date.now(); this._tick(); }, 1000);
+				},
+
+				serverNow() { return Date.now() + this._offset; },
+				me() { return this.authUser ? this.players[this.authUser.uid] || null : null; },
+				isOwner() { return !!(this.authUser && this.t && (this.t.createdBy === this.authUser.uid || this.isAdmin)); },
+				canCancel() {
+					const t = this.t;
+					if (!t || !this.authUser || (t.status !== 'created' && t.status !== 'started')) return false;
+					return this.isAdmin || (t.createdBy === this.authUser.uid && (t.status === 'created' || !t.official));
+				},
+				isHost() { return !!(this.authUser && this.t && this.t.kind === 'simul' && this.t.host === this.authUser.uid); },
+
+				/** Presence, the simul host's seats and the jump into a new game, after each change. */
+				_sync() {
+					const t = this.t;
+					const me = this.me();
+					const uid = this.authUser && this.authUser.uid;
+					const live = t && t.status !== 'finished' && t.status !== 'cancelled';
+					const wantPresence = !!(live && uid && ((me && !me.removed) || this.isHost()));
+					if (wantPresence && !this._presence) this._presence = SigilTournaments.holdPresence(this.id, uid);
+					if (!wantPresence && this._presence) { this._presence(); this._presence = null; }
+					// The host's seat on every board that is still on.
+					if (this.isHost() && t.status !== 'created') {
+						const rooms = Object.values(this.pairings).filter((g) => g.status === 'playing')
+							.map((g) => ({ code: g.room, color: g.red === uid ? 'red' : 'blue' }));
+						const key = rooms.map((r) => r.code).sort().join();
+						if (key !== this._seatKey) {
+							if (this._seats) this._seats();
+							this._seats = rooms.length ? SigilTournaments.holdSeats(rooms) : null;
+							this._seatKey = key;
+						}
+					}
+					if (t && t.kind === 'simul') this._watchBoards();
+					// A new game of ours: straight into it (not the simul host, who has the boards).
+					const room = this.myRoom;
+					if (room && room !== this._seenRoom) {
+						this._seenRoom = room;
+						if (this.autoJoin && !this.isHost()) setTimeout(() => { if (this.myRoom === room) window.location.href = 'multiplayer.html?id=' + room; }, 1500);
+					}
+				},
+
+				/** Ask the server to move on when a countdown runs out, and while we wait in an arena. */
+				_tick() {
+					const t = this.t;
+					if (!t || t.status === 'finished' || t.status === 'cancelled' || !this.authUser) return;
+					const now = this.serverNow();
+					const due = [];
+					if (t.status === 'created' && t.kind !== 'simul' && now >= t.startsAt) due.push('start' + t.startsAt);
+					if (t.kind === 'arena' && t.status === 'started' && now >= t.endsAt) due.push('end' + t.endsAt);
+					if (t.kind === 'swiss' && t.nextRoundAt && now >= t.nextRoundAt) due.push('round' + t.nextRoundAt);
+					for (const k of due) {
+						if (this._poked[k]) continue;
+						this._poked[k] = true;
+						this._poke();
+					}
+					const me = this.me();
+					if (t.kind === 'arena' && t.status === 'started' && me && me.active && !me.playing && Date.now() - this._lastPoke > TOUR_WAIT_POKE_MS) this._poke();
+				},
+
+				_poke() {
+					this._lastPoke = Date.now();
+					SigilTournaments.call('poke', { id: this.id }).catch(() => {});
+				},
+
+				get myRoom() {
+					const me = this.me();
+					if (me && me.playing) return me.playing;
+					if (this.t && this.t.kind === 'simul' && me && me.room && !me.result) {
+						const g = Object.values(this.pairings).find((x) => x.room === me.room);
+						if (g && g.status === 'playing') return me.room;
+					}
+					return null;
+				},
+
+				get playerRows() {
+					const t = this.t;
+					const list = Object.values(this.players).filter((p) => !p.removed);
+					if (!t) return list;
+					if (t.kind === 'arena') return list.sort((a, b) => (t.final && a.rank && b.rank) ? a.rank - b.rank : SigilTournaments.arenaCompare(a, b));
+					if (t.kind === 'swiss') return SigilTournaments.swissRows(list, Object.values(this.pairings));
+					return list.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+				},
+
+				get gameRows() {
+					const t = this.t;
+					if (!t) return [];
+					const all = Object.values(this.pairings);
+					if (t.kind === 'swiss') return all.filter((g) => g.round === this.shownRound).sort((a, b) => (a.bye ? 1 : 0) - (b.bye ? 1 : 0));
+					// Arena: games on now first, then the latest results.
+					return all.sort((a, b) => (a.status === 'playing' ? 0 : 1) - (b.status === 'playing' ? 0 : 1) || (b.at || 0) - (a.at || 0)).slice(0, 40);
+				},
+
+				get boards() {
+					const t = this.t;
+					if (!t || t.kind !== 'simul') return [];
+					return Object.values(this.pairings).map((g) => {
+						const hostColor = g.red === t.host ? 'red' : 'blue';
+						const r = this.rooms[g.room] || {};
+						const toMove = g.status === 'playing' && r.status !== 'finished' && r.status !== 'aborted'
+							? (r.last && r.last.color ? (r.last.color === 'red' ? 'blue' : 'red') : 'red') : null;
+						return {
+							pid: g.pid, room: g.room, hostColor, sfn: r.currentSfn || '', toMove,
+							oppName: hostColor === 'red' ? g.blueName : g.redName, oppUid: hostColor === 'red' ? g.blue : g.red,
+							over: g.status !== 'playing', winner: g.winner || null, status: g.status, at: g.at || 0,
+						};
+					}).sort((a, b) => a.at - b.at || (a.room < b.room ? -1 : 1));
+				},
+
+				/** Follow each simul board's position and whose move it is. */
+				_watchBoards() {
+					const db = firebase.database();
+					for (const g of Object.values(this.pairings)) {
+						if (!g.room || this._roomSubs[g.room]) continue;
+						const code = g.room;
+						this._roomSubs[code] = true;
+						this.rooms[code] = {};
+						for (const k of ['currentSfn', 'last', 'status']) {
+							db.ref('rooms/' + code + '/' + k).on('value', (s) => {
+								this.rooms[code] = Object.assign({}, this.rooms[code], { [k]: s.val() });
+							});
+						}
+					}
+				},
+
+				myColorIn(b) {
+					const uid = this.authUser && this.authUser.uid;
+					if (!uid || !this.t) return null;
+					if (uid === this.t.host) return b.hostColor;
+					return b.oppUid === uid ? (b.hostColor === 'red' ? 'blue' : 'red') : null;
+				},
+
+				hostToMove() { return this.boards.filter((b) => b.toMove && b.toMove === b.hostColor); },
+
+				nextBoard() {
+					const b = this.hostToMove()[0];
+					if (b) window.location.href = 'multiplayer.html?id=' + b.room + '&simul=' + encodeURIComponent(this.id);
+				},
+
+				boardState(b) {
+					if (b.status === 'void') return 'No game';
+					if (b.over) return b.winner ? ((b.winner === b.hostColor ? 'Host' : 'Opponent') + ' won') : 'Over';
+					if (!b.toMove) return '';
+					return b.toMove === b.hostColor ? 'Host to move' : 'Opponent to move';
+				},
+
+				miniBoard(sfn) { return SigilTournaments.miniBoard(sfn); },
+				kindLabel(k) { return SigilTournaments.kindLabel(k); },
+				when(ms) { return SigilTournaments.when(ms); },
+				perf(p) { const v = SigilTournaments.performance(p); return v === null ? '' : v; },
+				nameOf(uid, fallback) { return (this.players[uid] && this.players[uid].name) || fallback || 'Player'; },
+
+				metaLine() {
+					const t = this.t;
+					const T = SigilTournaments;
+					const parts = [T.tcLabel(t.timeControl), T.variantLabel(t.variant)];
+					if (t.kind === 'arena') parts.push(Math.round((t.durationMs || 0) / 60000) + ' min' + (t.berserk ? ' · berserk allowed' : ''));
+					if (t.kind === 'swiss') parts.push(t.rounds + ' rounds');
+					if (t.kind === 'simul' && t.hostExtraMs) parts.push('host +' + Math.round(t.hostExtraMs / 1000) + ' s per opponent');
+					if (t.createdByName) parts.push('by ' + t.createdByName);
+					if (t.private) parts.push('private');
+					return parts.join(' · ');
+				},
+
+				statusLine() {
+					const t = this.t;
+					const T = SigilTournaments;
+					const now = this.serverNow();
+					void this.now;
+					if (t.status === 'cancelled') return 'Cancelled';
+					if (t.status === 'finished') return 'Finished';
+					if (t.status === 'created') {
+						if (t.kind === 'simul') return 'Waiting for the host to start';
+						return t.startsAt > now ? 'Starts in ' + T.countdown(t.startsAt - now) : 'Starting…';
+					}
+					if (t.kind === 'arena') return t.endsAt > now ? 'Ends in ' + T.countdown(t.endsAt - now) : 'Ending…';
+					if (t.kind === 'swiss') {
+						const next = t.nextRoundAt && t.nextRoundAt > now ? ' · next round in ' + T.countdown(t.nextRoundAt - now) : '';
+						return 'Round ' + t.round + ' of ' + t.rounds + next;
+					}
+					return 'Playing';
+				},
+
+				waitingText() {
+					const t = this.t;
+					const me = this.me();
+					if (!t || !me || this.myRoom) return '';
+					if (t.kind === 'arena' && t.status === 'started') return me.active ? 'Waiting for an opponent…' : 'You are paused: join again to be paired.';
+					if (t.kind === 'arena' && t.status === 'created') return 'You are in. Pairing starts when the arena does.';
+					if (t.kind === 'swiss' && me.withdrawn && t.status === 'started') return 'You are withdrawn from the remaining rounds.';
+					if (t.kind === 'swiss' && t.status === 'started') return 'Waiting for the next round…';
+					if (t.kind === 'swiss' && t.status === 'created') return 'You are in. Round 1 is paired at the start.';
+					if (t.kind === 'simul' && t.status === 'created') return 'You are in. The host starts the simul.';
+					return '';
+				},
+
+				canJoin() {
+					const t = this.t;
+					if (!this.authUser || !t || this.isHost()) return false;
+					const me = this.me();
+					const open = t.kind === 'arena' ? (t.status === 'created' || (t.status === 'started' && this.serverNow() < t.endsAt))
+						: t.kind === 'swiss' ? (t.status === 'created' || (t.status === 'started' && t.round < Math.ceil(t.rounds / 2)))
+							: t.status === 'created';
+					if (!open) return false;
+					if (!me) return true;
+					if (me.removed) return false;
+					return (t.kind === 'arena' && me.active === false) || (t.kind === 'swiss' && me.withdrawn === true);
+				},
+				joinLabel() {
+					const me = this.me();
+					if (me && this.t.kind === 'arena') return 'Join again';
+					if (me && this.t.kind === 'swiss') return 'Rejoin';
+					return 'Join';
+				},
+				canLeave() {
+					const t = this.t;
+					const me = this.me();
+					if (!t || !me || me.removed || t.status === 'finished' || t.status === 'cancelled') return false;
+					if (t.status === 'created') return true;
+					if (t.kind === 'arena') return me.active !== false;
+					if (t.kind === 'swiss') return !me.withdrawn;
+					return false;
+				},
+				leaveLabel() {
+					const t = this.t;
+					if (t.status === 'created') return 'Leave';
+					return t.kind === 'arena' ? 'Pause' : 'Withdraw';
+				},
+
+				sheetHtml(sheet) {
+					return [...(sheet || '')].map((d) => '<span class="' + (d >= '4' ? 'tour-sheet__fire' : d === '0' ? 'tour-sheet__zero' : '') + '">' + d + '</span>').join('');
+				},
+
+				resultText(g) {
+					if (g.bye) return 'bye (1 point)';
+					if (g.status === 'playing') return 'playing';
+					if (g.status === 'void') return g.how === 'noshow' ? 'no-show' : 'no result';
+					const w = g.winner === 'red' ? this.nameOf(g.red, g.redName) : this.nameOf(g.blue, g.blueName);
+					const how = g.how === 'noshow' ? ' (no-show)' : g.how === 'forfeit' ? ' (resigned)' : g.how === 'time' ? ' (on time)' : '';
+					const pts = this.t && this.t.kind === 'arena' && g.points ? ' · ' + g.points.red + '-' + g.points.blue : '';
+					const bz = g.berserk && (g.berserk.red || g.berserk.blue) ? ' · berserk' : '';
+					return w + ' won' + how + pts + bz;
+				},
+
+				async act(action, extra) {
+					this.error = '';
+					this.busy = true;
+					try {
+						await SigilTournaments.call(action, Object.assign({ id: this.id }, extra || {}));
+					} catch (e) {
+						this.error = SigilTournaments.errorText(e);
+					}
+					this.busy = false;
+				},
+
+				cancel() {
+					if (!window.confirm('Cancel this event? This cannot be undone.')) return;
+					this.act('cancel');
+				},
+
+				saveAutoJoin() { try { localStorage.setItem('sigilTourAutoJoin', this.autoJoin ? 'true' : 'false'); } catch (e) { /* storage blocked */ } },
+
+				copyLink() {
+					const url = window.location.origin + window.location.pathname + '?id=' + encodeURIComponent(this.id);
+					if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { this.copied = true; setTimeout(() => { this.copied = false; }, 2000); }).catch(() => {});
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

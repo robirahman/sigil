@@ -1042,7 +1042,7 @@ function leave(S, uid) {
  *   join     - join, or come back from a pause / withdrawal
  *   withdraw - leave (before the start), pause (arena) or withdraw (Swiss)
  *   start    - the creator (or an admin) starts now; a simul's host starts it
- *   cancel   - the creator before the start, or an admin at any time
+ *   cancel   - the creator (of a scheduled site event: before the start), or an admin
  *   kick     - a simul's host before the start, or an admin: removes data.uid
  *   poke     - move the event on (a page whose countdown ran out)
  */
@@ -1081,7 +1081,9 @@ async function act(db, uid, data, ctx) {
 				touchT(S);
 			}
 		} else if (action === 'cancel') {
-			if (!ctx.admin && !(owner && t.status === 'created')) fail('permission-denied', 'not-owner');
+			// A player's own event, at any time before it ends; a scheduled
+			// site event only by an admin once it has started.
+			if (!ctx.admin && !(uid === t.createdBy && (t.status === 'created' || !t.official))) fail('permission-denied', 'not-owner');
 			if (t.status === 'finished') fail('failed-precondition', 'over');
 			cancelEvent(S, now, ctx.admin && uid !== t.createdBy ? 'admin' : 'creator');
 		} else if (action === 'kick') {
