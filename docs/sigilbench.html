@@ -214,28 +214,29 @@
 	<div class="main">
 		<div class="bench">
 			<h2>SigilBench</h2>
-			<p class="bench__lede">Can a language model find a forced win in a game it has never seen? Each puzzle is a real
-				Sigil position and a number N. The model reads the full rules, then submits <em>one complete turn</em>.
-				The turn counts only if the engine <strong>proves</strong> it forces a win within N turns against every
-				defence. Any proven win counts, including one faster than N.</p>
+			<p class="bench__lede">Can a language model find the winning move in a game it has never seen? Each puzzle is a
+				real Sigil position. The model reads the full rules, then submits <em>one complete turn</em>. In a
+				<strong>mate in N</strong> puzzle the turn counts only if the engine <strong>proves</strong> it forces a win
+				within N turns against every defence; any proven win counts, including one faster than N. In a
+				<strong>winning-turn</strong> puzzle (from dev set v3) no forced mate is asked for: exactly one plan wins,
+				and the turn counts only if it carries out that plan in a way that keeps the win.</p>
 
 			<div class="bench__notice" id="notice">
 				<strong>Preview.</strong> These scores are on the public <strong>dev sets</strong>, for building the
 				harness, not benchmark results. Dev set v1 is 100 puzzles from the Puzzles page (mate in 1–3). Mates in
-				1–3 proved too easy, so dev set v2 adds mate in 4 (25 of each length, every spell); the models will be
-				re-run on it. The 1,000-puzzle private test set is not built yet.
+				1–3 proved too easy, so dev set v2 added mate in 4 (25 of each length, every spell). Dev set v3 is harder
+				again: fresh positions, mates in 1–5 and winning-turn puzzles, drawn by the same procedure as the
+				1,000-puzzle private test set, so its scores predict test-set scores. The models will be re-run on it.
 			</div>
 
 			<div class="bench__filters" role="group" aria-label="Puzzle set" id="sets">
 				<button type="button" data-set="dev_v1" aria-pressed="true">Dev set v1 (mate in 1–3)</button>
 				<button type="button" data-set="dev_v2" aria-pressed="false">Dev set v2 (mate in 1–4)</button>
+				<button type="button" data-set="dev_v3" aria-pressed="false">Dev set v3 (mate in 1–5, winning turns)</button>
 			</div>
+			<!-- One button per column of the shown set (drawn by showSet). -->
 			<div class="bench__filters" role="group" aria-label="Puzzle subset" id="filters">
 				<button type="button" data-n="all" aria-pressed="true">All puzzles</button>
-				<button type="button" data-n="1" aria-pressed="false">Mate in 1</button>
-				<button type="button" data-n="2" aria-pressed="false">Mate in 2</button>
-				<button type="button" data-n="3" aria-pressed="false">Mate in 3</button>
-				<button type="button" data-n="4" aria-pressed="false" hidden>Mate in 4</button>
 			</div>
 
 			<div class="chart" id="chart">
@@ -249,16 +250,8 @@
 			<div class="table-wrap">
 				<table class="results" id="results-table">
 					<thead>
-						<tr>
-							<th scope="col">Model</th>
-							<th scope="col">All</th>
-							<th scope="col">Mate in 1</th>
-							<th scope="col">Mate in 2</th>
-							<th scope="col">Mate in 3</th>
-							<th scope="col" class="col-m4" hidden>Mate in 4</th>
-							<th scope="col" title="How the puzzles that were not solved failed">Not solved</th>
-							<th scope="col" title="Mean output tokens per puzzle, reasoning included">Output tokens</th>
-						</tr>
+						<!-- Columns of the shown set, drawn by drawTable. -->
+						<tr></tr>
 					</thead>
 					<tbody></tbody>
 				</table>
@@ -345,23 +338,44 @@
 				<li><strong>Prompt.</strong> The complete rules of the digital game, the 39-node board graph, the position
 					(its notation plus a plain-text rendering) and the text and answer format of the nine spells on the
 					board. About 8,500 tokens.</li>
+				<li><strong>Two kinds of puzzle</strong> (dev set v3 on; v1 and v2 are mates only). Each puzzle says
+					which kind it is. <em>Mate in N</em> (N = 1–5): find a turn that forces a win within N of your own
+					turns, whatever the opponent does. <em>Winning turn</em>: no forced mate is asked for. Exactly one
+					plan wins, meaning where you place stones (the regular move, any dash move and any Providence
+					placement) and which spells you cast; every other plan lets the opponent hold or turn the game.</li>
 				<li><strong>Answer.</strong> One <code>submit_answer</code> tool call holding the whole turn as an ordered
 					action list: the regular move, an optional dash, optional casts and their effects. The first call is
 					final, and no feedback is given. One response per puzzle: a response that ends without an answer,
 					including at the output-token cap, scores as <em>no answer</em>.</li>
-				<li><strong>Grading by proof.</strong> The browser's own rules replay the turn. The engine then checks
+				<li><strong>Grading mates by proof.</strong> The browser's own rules replay the turn. The engine then checks
 					that a legal turn reaches the same position, and enumerates every reply to prove (or refute) the
 					forced win. Mate-in-3 answers this fast pass cannot settle are <em>unproven</em> and count as not
 					solved. From version 0.1.1 an exhaustive resolver that tries every continuation re-grades them as
-					proven right or wrong; <strong>the dev-set runs shown here were not passed through it</strong>, so their
-					unproven answers are first-pass results.</li>
-				<li><strong>Outcomes.</strong> <em>wrong</em>: legal but proven not to win in time. <em>no answer</em>:
+					proven right or wrong; <strong>the dev-set v1 runs shown here were not passed through it</strong>, so
+					their unproven answers are first-pass results.</li>
+				<li><strong>Grading winning turns by lookup.</strong> A winning turn cannot be proven, so its answer key
+					is made complete instead. Every legal turn from the position is judged by the engine (deep
+					fixed-depth searches with independent evaluators, games played out between strong engines, and an
+					expert review of a sample), which finds the one winning plan. Then every way of carrying out that
+					plan is searched: those that keep at least an 80% chance to win, on the site's calibrated scale, are
+					the answer key, and the rest are failed executions. A turn is correct exactly when the position it
+					reaches is in the answer key. The right plan carried out badly (the wrong sacrifice, push or spell
+					resolution) is wrong, and so is any other plan.</li>
+				<li><strong>Certified answer keys.</strong> Every mate verdict in the dev set v3 answer key is certified by
+					two independent checkers. The prover writes its proof as a certificate (its turn against every
+					defence), and two checkers that share no code with it verify it: one in Rust, and one that re-derives
+					every defence from the browser's own rules. The mate columns count each puzzle under its proven
+					shortest forced win. A puzzle that fails a check is dropped, never relabelled.</li>
+				<li><strong>Outcomes.</strong> <em>wrong</em>: legal but proven not to win in time, or (winning turns) not
+					in the answer key. <em>no answer</em>:
 					the response ended without a turn. <em>unproven</em>: legal, but the grader found no proof either
 					way. <em>illegal</em>: no legal turn reaches the position. <em>invalid</em>:
 					the action list is malformed. <em>grader error</em>: the proof hit its size limit.</li>
-				<li><strong>Contamination.</strong> The test set will be 1,000 never-published positions kept in private
-					storage. Its SHA-256 will be published before any model is run, and evaluation accounts must be
-					opted out of training and data retention.</li>
+				<li><strong>Contamination.</strong> The test set is 1,000 never-published puzzles kept in private storage,
+					drawn by the same procedure as dev set v3 and split from it by source game, so no game contributes to
+					both. Its SHA-256 is published before any model is run on it, and the harness refuses a test-set file
+					with any other hash. <span id="test-sha">The hash is not published yet.</span> Evaluation accounts must
+					be opted out of training and data retention.</li>
 			</ul>
 			<p class="footnote">Methodology, harness and grader:
 				<a href="https://github.com/robirahman/sigil/tree/main/bench">github.com/robirahman/sigil/bench</a>.
@@ -370,7 +384,9 @@
 
 			<h3>Changelog</h3>
 			<ul class="footnote" id="changelog">
-				<li><strong>Unreleased</strong>: a password-protected <a href="#try">Try the dev set</a> panel for people and AI models.</li>
+				<li><strong>Unreleased</strong>: dev set v3 (mate in 1–5 and winning-turn puzzles, certified answer keys)
+					on the leaderboard and in the <a href="#try">Try the dev set</a> panel; a password-protected Try panel
+					for people and AI models.</li>
 				<li><strong>0.1.1-dev</strong> (2026-11-01): one response per puzzle (the reminder is gone; earlier runs
 					re-scored from their transcripts); an exhaustive resolver for unproven answers (not yet applied to these
 					runs); GPT-6 Luna added.</li>
@@ -385,7 +401,10 @@
 	(function () {
 		'use strict';
 		const DATA_URLS = { dev_v1: 'static/data/sigilbench/leaderboard.json',
-			dev_v2: 'static/data/sigilbench/leaderboard_dev_v2.json' };
+			dev_v2: 'static/data/sigilbench/leaderboard_dev_v2.json',
+			dev_v3: 'static/data/sigilbench/leaderboard_dev_v3.json' };
+		// The set shown first (sigilbench.html?set=dev_v3 opens another).
+		const DEFAULT_SET = 'dev_v1';
 		const cache = {};
 		const OUTCOMES = [
 			['wrong', 'wrong'], ['unproven', 'unproven'], ['illegal', 'illegal'], ['invalid', 'invalid'],
@@ -397,7 +416,16 @@
 
 		const pct = (x) => (x == null ? '–' : (100 * x).toFixed(0) + '%');
 		const fmtInt = (x) => (x == null ? '–' : Math.round(x).toLocaleString('en-US'));
-		const stat = (e) => (subset === 'all' ? e.overall : (e.by_n || {})[subset]);
+		const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+		// The set's columns as [key, label]: v1 and v2 by N (stated, or v2.1's
+		// proven shortest mate), v3 by the dev set's own categories (m1..m5, win).
+		const byCategory = () => data.columns === 'category';
+		function columns() {
+			if (byCategory()) return data.categories || [];
+			return Object.keys(data.split_counts || {}).sort((a, b) => a - b).map((n) => [n, 'Mate in ' + n]);
+		}
+		const cells = (e) => (byCategory() ? e.by_category : e.by_n) || {};
+		const stat = (e) => (subset === 'all' ? e.overall : cells(e)[subset]);
 		const outcomeText = (sc) => OUTCOMES.filter(([k]) => sc && sc[k]).map(([k, l]) => sc[k] + ' ' + l).join(', ') || '–';
 
 		function el(name, attrs, text) {
@@ -408,8 +436,9 @@
 		}
 
 		function rows() {
+			const acc = (e) => { const s = stat(e); return s && s.accuracy != null ? s.accuracy : -1; };
 			const models = data.entries.filter((e) => e.kind === 'model');
-			models.sort((a, b) => (stat(b).accuracy - stat(a).accuracy) || a.label.localeCompare(b.label));
+			models.sort((a, b) => (acc(b) - acc(a)) || a.label.localeCompare(b.label));
 			const base = data.entries.filter((e) => e.kind === 'baseline');
 			return models.concat(base);
 		}
@@ -425,7 +454,9 @@
 			const labelW = narrow ? 0 : 250, valueW = 48, rowH = narrow ? 58 : 40, top = 8, axisH = 24;
 			const lab = narrow ? { l: 14, c: 28, bar: 36 } : { l: 16, c: 31, bar: 12 };
 			const plotX = labelW, plotW = W - labelW - valueW;
-			const H = top + list.length * rowH + axisH;
+			// No entries yet: one empty row that says so.
+			const nRows = Math.max(1, list.length);
+			const H = top + nRows * rowH + axisH;
 			svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 			svg.setAttribute('width', W);
 			svg.setAttribute('height', H);
@@ -434,12 +465,16 @@
 			const grid = el('g', { class: 'grid' });
 			const axis = el('g', { class: 'axis' });
 			for (let t = 0; t <= 1.0001; t += 0.25) {
-				grid.appendChild(el('line', { x1: x(t), x2: x(t), y1: top, y2: top + list.length * rowH }));
+				grid.appendChild(el('line', { x1: x(t), x2: x(t), y1: top, y2: top + nRows * rowH }));
 				const anchor = (narrow && t === 0) ? 'start' : 'middle';
 				axis.appendChild(el('text', { x: x(t), y: H - 6, 'text-anchor': anchor }, (t * 100).toFixed(0) + '%'));
 			}
 			svg.appendChild(grid);
 			svg.appendChild(axis);
+			if (!list.length) {
+				svg.appendChild(el('text', { class: 'pending', x: x(0) + 6, y: top + lab.bar + 11 },
+					data.set_pending ? 'this set is not published yet' : 'no runs on this set yet'));
+			}
 
 			const tip = document.getElementById('tooltip');
 			const chart = document.getElementById('chart');
@@ -476,7 +511,7 @@
 				const show = (ev) => {
 					g.classList.add('is-hover');
 					const sc = subset === 'all' ? e.status_counts : null;
-					tip.innerHTML = '<b>' + e.label + '</b> <span class="muted">' + e.config + '</span><br>' +
+					tip.innerHTML = '<b>' + esc(e.label) + '</b> <span class="muted">' + esc(e.config) + '</span><br>' +
 						s.correct + ' of ' + s.total + ' solved (' + pct(s.accuracy) + ')<br>' +
 						'<span class="muted">95% CI ' + pct(s.ci95[0]) + '–' + pct(s.ci95[1]) + '</span>' +
 						(sc ? '<br><span class="muted">Not solved: ' + outcomeText(sc) + '</span>' : '');
@@ -493,35 +528,47 @@
 				g.appendChild(hit);
 				svg.appendChild(g);
 			});
-			const label = { all: 'all puzzles', 1: 'mate in 1', 2: 'mate in 2', 3: 'mate in 3', 4: 'mate in 4' }[subset];
-			const count = subset === 'all' ? Object.values(data.split_counts).reduce((a, b) => a + b, 0) : data.split_counts[subset];
-			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + ' (' + count + ' puzzles)';
+			const col = columns().find(([k]) => k === subset);
+			const label = subset === 'all' ? 'all puzzles' : (col ? col[1].toLowerCase() : subset);
+			const counts = data.split_counts || {};
+			const count = subset === 'all' ? Object.values(counts).reduce((a, b) => a + b, 0) : counts[subset];
+			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + (count ? ' (' + count + ' puzzles)' : '');
 		}
 
 		function drawTable() {
+			const cols = columns();
+			const head = document.querySelector('#results-table thead tr');
+			head.innerHTML = '<th scope="col">Model</th><th scope="col">All</th>' +
+				cols.map(([k, l]) => '<th scope="col" data-col="' + esc(k) + '">' + esc(l) + '</th>').join('') +
+				'<th scope="col" title="How the puzzles that were not solved failed">Not solved</th>' +
+				'<th scope="col" title="Mean output tokens per puzzle, reasoning included">Output tokens</th>';
 			const tb = document.querySelector('#results-table tbody');
 			tb.innerHTML = '';
 			const cell = (s) => (s ? pct(s.accuracy) + '<span class="ci-txt">' + s.correct + '/' + s.total + '</span>' : '–');
-			const has4 = !!data.split_counts['4'];
-			for (const th of document.querySelectorAll('.col-m4')) th.hidden = !has4;
-			const m4 = (e) => (has4 ? '<td>' + cell((e.by_n || {})['4']) + '</td>' : '');
-			for (const e of rows()) {
+			const list = rows();
+			if (!list.length) {
+				const tr = document.createElement('tr');
+				tr.innerHTML = '<td colspan="' + (cols.length + 4) + '" class="footnote">' +
+					(data.set_pending ? 'This set is not published yet.' : 'No runs on this set yet.') + '</td>';
+				tb.appendChild(tr);
+			}
+			for (const e of list) {
 				const tr = document.createElement('tr');
 				if (e.kind === 'baseline') tr.className = 'is-baseline';
 				if (e.pending) {
-					tr.innerHTML = '<td><span class="name">' + e.label + '</span><span class="cfg">baseline · not run yet</span></td>' +
-						'<td>–</td><td>–</td><td>–</td><td>–</td>' + (has4 ? '<td>–</td>' : '') + '<td>–</td><td>–</td>';
+					tr.innerHTML = '<td><span class="name">' + esc(e.label) + '</span><span class="cfg">baseline · not run yet</span></td>' +
+						'<td>–</td>'.repeat(cols.length + 3);
 					tb.appendChild(tr);
 					continue;
 				}
 				const o = e.overall;
 				tr.innerHTML =
-					'<td><span class="name">' + e.label + '</span><span class="cfg">' + (e.kind === 'baseline' ? 'baseline · ' : '') +
-					e.config + (e.date ? ' · ' + e.date : '') +
+					'<td><span class="name">' + esc(e.label) + '</span><span class="cfg">' + (e.kind === 'baseline' ? 'baseline · ' : '') +
+					esc(e.config) + (e.date ? ' · ' + e.date : '') +
 					(e.with_reminder && e.with_reminder.correct !== o.correct ? ' · ' + pct(e.with_reminder.accuracy) + ' with the old reminder' : '') +
 					'</span></td>' +
 					'<td>' + pct(o.accuracy) + '<span class="ci-txt">' + pct(o.ci95[0]) + '–' + pct(o.ci95[1]) + '</span></td>' +
-					'<td>' + cell((e.by_n || {})['1']) + '</td><td>' + cell((e.by_n || {})['2']) + '</td><td>' + cell((e.by_n || {})['3']) + '</td>' + m4(e) +
+					cols.map(([k]) => '<td>' + cell(cells(e)[k]) + '</td>').join('') +
 					'<td class="outcomes">' + outcomeText(e.status_counts).replace(/, /g, '<br>') + '</td>' +
 					'<td>' + (e.tokens && e.tokens.output_per_puzzle ? fmtInt(e.tokens.output_per_puzzle) + (e.tokens.estimated ? '*' : '') : '–') + '</td>';
 				tb.appendChild(tr);
@@ -537,15 +584,24 @@
 				: '';
 			const humanNote = data.entries.some((e) => e.id === 'humans' && !e.pending)
 				? 'Human experts: Robi Rahman (the game\'s developer) and Andy Voellmer (its creator) each played half of the set, ' +
-				  'without an engine; only the combined score is recorded, not a breakdown by mate length. '
+				  'without an engine' + (data.entries.some((e) => e.id === 'humans' && !Object.keys(cells(e)).length)
+					? '; only the combined score is recorded, not a breakdown by ' + (byCategory() ? 'category' : 'mate length') : '') + '. '
 				: '';
 			const columnsNote = data.columns === 'shortest_mate'
 				? 'Columns group puzzles by the shortest forced win proven for each (v2.1): ' + data.recategorized +
 				  ' puzzles stated as a longer mate have a proven faster one and are counted under it; for ' + data.unresolved +
 				  ' a still faster mate is not yet excluded, so their column is an upper bound. Each puzzle still states, and is graded against, its original N; a faster mate always counts as correct. '
-				: '';
-			const m4Note = data.split_counts['4']
-				? 'Mate-in-4 answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
+				: byCategory()
+					? 'Mate columns count each puzzle under its proven shortest forced win, which is also the N it states; a faster win would count as correct. ' +
+					  (cols.some(([k]) => k === 'win')
+						? 'Winning-turn answers are graded by lookup: correct when the position after the turn is in the answer key (every execution of the winning plan that keeps the win). '
+						: '')
+					: '';
+			// Mates of 4 or more turns: the grader's slower prover.
+			const longMates = cols.map(([k]) => (byCategory() ? (/^m(\d+)$/.exec(k) || [])[1] : k))
+				.filter((n) => n && parseInt(n, 10) >= 4 && (data.split_counts || {})[byCategory() ? 'm' + n : n]);
+			const m4Note = longMates.length
+				? 'Mate-in-' + longMates.join(' and mate-in-') + ' answers that are not a stored solution are proven by a weaker search than mate in 1–3; one it cannot prove counts as not solved (unproven). '
 				: '';
 			document.getElementById('table-note').textContent =
 				data.set_label + ': benchmark ' + data.benchmark.version + ', updated ' + data.generated + '. ' +
@@ -554,6 +610,14 @@
 					? 'Mate-in-3 answers the fast grader could not settle are left as unproven (not solved) in every run; the exhaustive resolver was not run on these. '
 					: '') +
 				(unapproved ? 'The accounts used for these dev-set runs are not yet on the approved no-training list.' : '');
+		}
+
+		// The filter row: "All puzzles" plus one button per column of the set.
+		function drawFilters() {
+			const cols = columns();
+			if (subset !== 'all' && !cols.some(([k]) => k === subset)) subset = 'all';
+			document.getElementById('filters').innerHTML = [['all', 'All puzzles']].concat(cols).map(([k, l]) =>
+				'<button type="button" data-n="' + esc(k) + '" aria-pressed="' + (k === subset) + '">' + esc(l) + '</button>').join('');
 		}
 
 		function render() { drawChart(); drawTable(); }
@@ -578,18 +642,16 @@
 			const done = (d) => {
 				if (wantSet !== id) return;
 				data = d;
-				const has4 = !!d.split_counts['4'];
-				const b4 = document.querySelector('#filters button[data-n="4"]');
-				b4.hidden = !has4;
-				if (!has4 && subset === '4') {
-					subset = 'all';
-					for (const x of document.querySelectorAll('#filters button')) x.setAttribute('aria-pressed', String(x.dataset.n === 'all'));
+				// Any set's document carries the published test-set hash once it exists.
+				if (d.test_set_sha256) {
+					document.getElementById('test-sha').innerHTML = 'Published SHA-256: <code>' + esc(d.test_set_sha256) + '</code>.';
 				}
+				drawFilters();
 				render();
 			};
 			if (cache[id]) return done(cache[id]);
 			fetch(DATA_URLS[id], { cache: 'no-cache' })
-				.then((r) => r.json())
+				.then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
 				.then((d) => { cache[id] = d; done(d); })
 				.catch(() => {
 					if (wantSet !== id) return;
@@ -600,7 +662,8 @@
 			const b = ev.target.closest('button[data-set]');
 			if (b) showSet(b.dataset.set);
 		});
-		showSet('dev_v1');
+		const asked = new URLSearchParams(location.search).get('set');
+		showSet(DATA_URLS[asked] ? asked : DEFAULT_SET);
 	})();
 	</script>
 	<script>

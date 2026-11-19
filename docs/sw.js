@@ -54,6 +54,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/data/position-winprob.json',
 	'./static/data/sigilbench/leaderboard.json',
 	'./static/data/sigilbench/leaderboard_dev_v2.json',
+	'./static/data/sigilbench/leaderboard_dev_v3.json',
 	'./static/data/sigilbench/devset.enc.json',
 	'./static/scripts/sigilbench-replay.js?v=1',
 	// spell.html's Try-it positions and game statistics.
