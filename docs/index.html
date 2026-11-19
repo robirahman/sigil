@@ -293,6 +293,7 @@
 		webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 	</script>
 	<script src="static/scripts/theme-manager.js"></script>
+	<script src="static/scripts/prefs.js"></script>
 	<script src="static/scripts/local-save-store.js"></script>
 </head>
 <body>
@@ -853,7 +854,7 @@
 					<h3 class="menu-group__title" id="menu-settings">Settings</h3>
 					<div>
 						<label class="theme-label" for="theme-select">Theme</label>
-						<select id="theme-select" class="theme-select" onchange="themeManager.apply(this.value)">
+						<select id="theme-select" class="theme-select" onchange="SigilSettings.set('theme', this.value)">
 						</select>
 					</div>
 					<script>
@@ -875,13 +876,20 @@
 					<small class="game-options__hint">Hide spell names and descriptions on the board circles.</small>
 					<script>
 						(function() {
+							// Through SigilSettings (prefs.js), so a signed-in account keeps them too.
 							var checkbox = document.getElementById('setting-art-only');
-							checkbox.checked = localStorage.getItem('sigilArtOnlySpellCircles') === 'true';
+							var sel = document.getElementById('theme-select');
+							checkbox.checked = SigilSettings.get('artOnly');
 							checkbox.addEventListener('change', function() {
-								localStorage.setItem('sigilArtOnlySpellCircles', checkbox.checked ? 'true' : 'false');
+								SigilSettings.set('artOnly', checkbox.checked);
+							});
+							window.addEventListener('sigil-settings', function(e) {
+								checkbox.checked = e.detail.artOnly;
+								sel.value = e.detail.theme;
 							});
 						})();
 					</script>
+					<a class="menu-link" href="preferences.html">Preferences<small>Board, sounds, clock, blind mode, emotes</small></a>
 					<a class="menu-link" href="account.html">Account<small>Sign in for ranked play and ratings</small></a>
 				</section>
 			</div>
@@ -904,6 +912,7 @@
 		});
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/engine/name-filter.js"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/offline-queue.js"></script>

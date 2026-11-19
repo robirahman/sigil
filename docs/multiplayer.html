@@ -329,6 +329,19 @@
 			cursor: pointer;
 		}
 		.emote-picker__toggle:hover:not(:disabled) { background: var(--color-surface-hover); }
+		.emote-toggle {
+			display: block;
+			margin: 2px auto 0;
+			padding: 0 6px;
+			background: none;
+			border: 1px solid transparent;
+			border-radius: 4px;
+			color: var(--color-text-muted);
+			font: inherit;
+			font-size: 0.7em;
+			cursor: pointer;
+		}
+		.emote-toggle:hover { border-color: var(--color-border); color: var(--color-text-warm); }
 		.emote-picker__toggle:disabled { opacity: 0.5; cursor: default; }
 		.emote-picker__menu {
 			position: absolute;
@@ -365,9 +378,10 @@
 		webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 	</script>
 	<script src="static/scripts/theme-manager.js"></script>
+	<script src="static/scripts/prefs.js"></script>
 	<script src="static/scripts/settings-panel.js?v=35"></script>
 </head>
-<body data-emotes>
+<body class="blind-page" data-emotes>
 	<header>
 		<div class="container">
 			<div class="header-container">
@@ -683,7 +697,7 @@
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })"
 				x-on:keydown.window="handleReviewKey($event)"
-				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly; setEmotesMuted($event.detail.muteEmotes)"
+				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly; setEmotePrefs($event.detail)"
 				x-bind:class="{ 'review-with-ai-active': reviewMode }">
 				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-on:sigil-settings.window="isMuted = $event.detail.muted" x-bind:aria-label="isMuted ? 'Unmute sound' : 'Mute sound'" x-bind:title="isMuted ? 'Unmute sound' : 'Mute sound'" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: soundManager.muted }"></button>
 				<button class="in-game-share" x-on:click="copyGameLink" x-text="linkCopied ? 'Copied!' : 'Share game link'"></button>
@@ -703,11 +717,11 @@
 							<div class="timer">
 								<div class="main">
 									<template x-if="timerType !== 'none'">
-										<span class="cb-mark cb-mark--red" x-text="formatTimer(redTimer)" style="color: #fa3f32;"></span>
+										<span class="cb-mark cb-mark--red" x-bind:class="{ 'timer--low': timerType === 'realtime' && clockIsLow(redTimer), 'timer--running': whoseTurn === 'red' && !winner }" x-text="formatTimer(redTimer)" style="color: #fa3f32;"></span>
 									</template>
 									<span>vs</span>
 									<template x-if="timerType !== 'none'">
-										<span class="cb-mark cb-mark--blue" x-text="formatTimer(blueTimer)" style="color: #295ccd;"></span>
+										<span class="cb-mark cb-mark--blue" x-bind:class="{ 'timer--low': timerType === 'realtime' && clockIsLow(blueTimer), 'timer--running': whoseTurn === 'blue' && !winner }" x-text="formatTimer(blueTimer)" style="color: #295ccd;"></span>
 									</template>
 								</div>
 								<template x-if="timerType !== 'none'">
@@ -725,7 +739,11 @@
 										<span aria-hidden="true" x-text="'\u{1F441} ' + spectatorCount"></span>
 									</span>
 								</div>
-								<!-- Preset emotes (seated players; muted in Settings). -->
+								<!-- Preset emotes: the picker (seated players; "Offer the emote
+								     picker" in Settings) and Hide / Show emotes for everyone. -->
+								<button type="button" class="emote-toggle" x-show="emoteToggleVisible" x-cloak x-on:click="toggleEmotesShown()"
+									x-bind:title="emotesShown ? 'Hide emotes (yours and your opponent\'s)' : 'Show emotes'"
+									x-text="emotesShown ? 'Hide emotes' : 'Show emotes'"></button>
 								<div class="emote-picker" x-show="canEmote" x-cloak
 									x-on:keydown.escape.stop="emoteMenuOpen = false" x-on:click.outside="emoteMenuOpen = false">
 									<button type="button" class="emote-picker__toggle" aria-controls="emote-menu"
@@ -915,7 +933,7 @@
 							<svg class="push-arrows" x-ref="pushArrows" aria-hidden="true"></svg>
 							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }" x-bind:style="scoreStyle()"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node], 'stone-node--engine-hint': liveAnalysisHint(node) }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
+								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node], 'stone-node--engine-hint': liveAnalysisHint(node) }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"><span class="stone-node__name" aria-hidden="true" x-text="node"></span></button>
 							</template>
 						</div>
 					</div>
@@ -2321,6 +2339,7 @@
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js?v=1"></script>
 	<script src="static/scripts/engine/game-review.js?v=42"></script>
+	<script src="static/scripts/engine/name-filter.js"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/engine/position-rating.js?v=36"></script>
@@ -2333,6 +2352,7 @@
 	<script src="static/scripts/board-marks.js?v=35"></script>
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js?v=35"></script>
+	<script src="static/scripts/blind-mode.js"></script>
 	<script src="static/scripts/live-analysis.js?v=1"></script>
 	<script src="static/scripts/game-board-multiplayer.js?v=43"></script>
 	<script src="static/scripts/rules-reference.js?v=36"></script>

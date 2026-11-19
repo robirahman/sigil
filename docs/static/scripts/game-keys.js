@@ -1,8 +1,8 @@
 /**
  * Keyboard and screen-reader helpers shared by the two game components,
  * game-board-local.js (game.html) and game-board-multiplayer.js
- * (multiplayer.html). The `?` overlay, Escape on dialogs and the settings
- * themselves are in settings-panel.js.
+ * (multiplayer.html). The `?` overlay and Escape on dialogs are in
+ * settings-panel.js, the settings themselves in prefs.js.
  */
 
 // Was the focused element focused by a pointer press? Chrome focuses a button
@@ -98,6 +98,23 @@ function confirmEndTurn(c) {
 	}
 	c.endTurnArmed = true;
 	c._endTurnTimer = setTimeout(() => { c.endTurnArmed = false; }, 5000);
+	return false;
+}
+
+/**
+ * Forfeit asks once more first ("Confirm forfeit?", decaying after 5 s)
+ * unless "Confirm before forfeiting" is off. Returns true when the player
+ * concedes now.
+ */
+function confirmForfeit(c) {
+	const wanted = typeof SigilSettings === 'undefined' || SigilSettings.get('confirmForfeit') !== false;
+	clearTimeout(c._forfeitTimer);
+	if (!wanted || c.forfeitArmed) {
+		c.forfeitArmed = false;
+		return true;
+	}
+	c.forfeitArmed = true;
+	c._forfeitTimer = setTimeout(() => { c.forfeitArmed = false; }, 5000);
 	return false;
 }
 

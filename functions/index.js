@@ -24,6 +24,10 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   filterNames, filterSeatNames, filterUsernames - the offensive-name
+ *                    filter (names.js): a refused display name written to a
+ *                    profile, a leaderboard or a room seat becomes 'Player',
+ *                    and a refused usernames/ claim is dropped.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -45,6 +49,7 @@ const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const names = require('./names');
 const crypto = require('crypto');
 
 initializeApp();
@@ -510,6 +515,44 @@ exports.settleAbort = onValueWritten({
 	await finishRoom(db, code, 'aborted',
 		{ winner: by === 'red' ? 'blue' : 'red', forfeitedBy: by, endReason: 'forfeit' });
 	logger.info('settleAbort', { code, by });
+});
+
+// The offensive-name filter (names.js). The pages check names before writing
+// them; these catch the rest within a second of the write.
+exports.filterNames = onValueWritten({
+	// users/, leaderboard/, storm_leaderboard/ and puzzle_leaderboard/.
+	ref: '/{list}/{uid}/displayName',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: true,
+}, async (event) => {
+	if (!names.NAME_LISTS.includes(event.params.list)) return;
+	if (await names.enforceName(event.data.after.ref, event.data.after.val())) {
+		logger.info('filterNames', { list: event.params.list, uid: event.params.uid });
+	}
+});
+
+exports.filterSeatNames = onValueWritten({
+	ref: '/rooms/{code}/{seat}/displayName',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: true,
+}, async (event) => {
+	if (event.params.seat !== 'red' && event.params.seat !== 'blue') return;
+	if (await names.enforceName(event.data.after.ref, event.data.after.val())) {
+		logger.info('filterSeatNames', { code: event.params.code, seat: event.params.seat });
+	}
+});
+
+exports.filterUsernames = onValueWritten({
+	ref: '/usernames/{key}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: true,
+}, async (event) => {
+	if (await names.enforceUsername(event.data.after.ref, event.params.key, event.data.after.val())) {
+		logger.info('filterUsernames', { key: event.params.key });
+	}
 });
 
 // The emulators have no FCM: there the push is only logged.

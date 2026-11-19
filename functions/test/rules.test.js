@@ -931,3 +931,29 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+
+test('prefs: the owner keeps display settings on the account, in a fixed shape', async () => {
+	await seed({ users: { alice: profile } });
+	const p = 'users/alice/prefs';
+	const prefs = { theme: 'forest', blind: true, colourblind: false, motion: 'system', clockTenths: 'low', clockLow: 20, showEmotes: false, sendEmotes: true };
+	await assertSucceeds(set(ref(db('alice'), p), prefs));
+	await assertSucceeds(set(ref(db('alice'), p + '/motion'), 'off'));
+	await assertSucceeds(set(ref(db('alice'), p + '/confirmForfeit'), false));
+	await assertFails(set(ref(db('alice'), p + '/motion'), 'fast'));
+	await assertFails(set(ref(db('alice'), p + '/clockLow'), 15));
+	await assertFails(set(ref(db('alice'), p + '/clockTenths'), 'sometimes'));
+	await assertFails(set(ref(db('alice'), p + '/blind'), 'yes'));
+	await assertFails(set(ref(db('alice'), p + '/theme'), 'Forest <b>'));
+	// Device-only settings (volume, mute, zen) and anything unknown are refused.
+	await assertFails(set(ref(db('alice'), p + '/volume'), 0.5));
+	await assertFails(set(ref(db('alice'), p + '/zen'), true));
+	await assertFails(set(ref(db('alice'), p + '/elo'), 3000));
+	// Only the owner, and only on an account that has a profile.
+	await assertFails(set(ref(db('bob'), p + '/blind'), false));
+	await assertFails(set(ref(db('bob'), 'users/bob/prefs'), { blind: true }));
+	await assertFails(set(ref(db('bob'), 'users/__ai_rust_easy__/prefs'), { blind: true }));
+	// Public like the rest of the profile.
+	const snap = await get(ref(db(null), p + '/clockLow'));
+	assert.strictEqual(snap.val(), 20);
+});

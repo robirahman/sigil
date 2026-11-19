@@ -103,7 +103,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 - [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
-- [ ] **Add a chat toggle** so players can hide chat (once chat exists).
+- [x] **Add a chat toggle** so players can hide chat (once chat exists). Done: "Hide emotes" / "Show emotes" beside the clocks for players and spectators, and two remembered settings, "Show emotes" and "Offer the emote picker" (the old "Mute emotes" carries over as both off).
 - [x] **Add zen mode** that hides everything but the board and clocks.
   Done: Z or the settings panel (stored in `sigil_settings`) on game.html and in multiplayer games; keeps the board, clocks and the buttons a turn needs, with an Exit zen button.
 - [x] ~~**Add board flip** and a choice of which side the board is drawn from.~~
@@ -179,14 +179,14 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add trophies, badges and verified titles.**
 - [x] **Add account closing** (Danger zone on the account page).
 - [ ] **Add two-factor authentication and an active-sessions list.**
-- [ ] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode.
+- [x] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode. Done: `preferences.html` and the in-game panel share one store (prefs.js): theme, art-only circles, colourblind markers, node names, last-move ring, legal-move glows, animations; mute, volume and four sound groups (stones, spells, game start/end, a low-time beep); clock tenths and a low-time mark; confirm End Turn / Forfeit; blind mode (blind-mode.js: no stones drawn, every change read out by node name, P describes the position); zen; emotes. Signed in, they follow the account (`users/{uid}/prefs`, rules-validated; volume, mute and zen stay per device); guests keep them on the device. The account-only AI options moved there from account.html.
 - [ ] **Translate the interface** into multiple languages.
 
 ### Fair play & moderation
 
 - [x] **Add reporting** of players and games, and a moderation panel to handle reports. Done: "Report" on profiles and the online game-over modal writes create-only `reports/`; `admin.html` (admins/{uid}) lists them, resolves them with a note and suspends players from rated play (`user_flags/{uid}/banUntil`). Turns are also sequenced by the rules now (`rooms/{id}/last`), closing the extra-turns cheat.
 - [ ] **Add engine-correlation cheat detection** (Lichess's Irwin).
-- [ ] **Add profanity filters** on chat and names.
+- [x] **Add profanity filters** on chat and names. Done: one word list (`engine/name-filter.js`: whole-word vs anywhere terms, look-alike spellings, checked for false positives against 478k words and names and 29M first+last pairs); sign-up, rename and Google names are checked on the page, room seats and leaderboards write 'Player' for a refused name, and the `filterNames` / `filterSeatNames` / `filterUsernames` functions reset any refused name written anyway. Chat is preset emotes only. Existing names: `tools/name-filter/audit-names.js` (dry run; `--apply` resets them).
 - [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process. Partly done: admins can suspend from rated play (shown with its reason on the account page) and `rateGame` counts upheld abandonments in `user_flags/{uid}/abandons`; no automatic bans, no appeals flow yet.
 
 ### Platform

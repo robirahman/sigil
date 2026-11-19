@@ -7,8 +7,10 @@
 //      text, for Blue and for the spectator; the spectator follows its
 //      system's reduced motion, so the bubble does not animate.
 //   3. A second emote within 3 s is refused by the rules (server time).
-//   4. Blue mutes emotes in the settings panel: the next one is not shown
-//      and Blue's picker goes; game.html has no such row.
+//   4. Blue hides emotes with the toggle beside the clocks: the next one is
+//      not shown, the setting is stored and the picker stays; "Offer the
+//      emote picker" off in the settings panel removes the picker; game.html
+//      has no emote rows.
 //   5. After the game ends only "Well played" and "Thanks" are offered, and
 //      they reach the opponent.
 //
@@ -179,13 +181,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 			try { await ref.update({ 'emotes/zzzz': { color: 'red', e: 'wow', at: ts }, 'lastEmote/red': { at: ts, key: 'zzzz' } }); return 'ok'; } catch (e) { return e.code || e.message; }
 		}, code);
 		check('an emote under a chosen key is accepted', zKey === 'ok', zKey);
-		// Blue mutes emotes in the settings panel.
+		// Blue hides emotes with the toggle beside the clocks.
+		check('everyone in the game has the Hide emotes toggle', await Promise.all([redP, blueP, pageC].map((p) => p.evaluate(() => {
+			const t = document.querySelector('.emote-toggle');
+			return !!t && t.offsetParent !== null && t.textContent === 'Hide emotes';
+		}))).then((a) => a.every(Boolean)));
+		await blueP.click('.emote-toggle');
+		await sleep(300);
+		const toggled = await blueP.evaluate(() => ({ label: document.querySelector('.emote-toggle').textContent,
+			stored: JSON.parse(localStorage.getItem('sigil_settings')).showEmotes }));
+		check('the toggle hides emotes and is remembered', toggled.label === 'Show emotes' && toggled.stored === false, toggled);
+		check('hidden: Blue can still send', (await view(blueP)).picker);
 		await blueP.evaluate(() => SigilDialog.openSettings());
-		await blueP.click('#settings-panel [data-setting="muteEmotes"]');
-		check('the mute setting is stored', await blueP.evaluate(() => JSON.parse(localStorage.getItem('sigil_settings')).muteEmotes === true));
+		await blueP.click('#settings-panel [data-setting="sendEmotes"]');
+		check('"Offer the emote picker" is stored', await blueP.evaluate(() => JSON.parse(localStorage.getItem('sigil_settings')).sendEmotes === false));
 		await blueP.evaluate(() => SigilDialog.closeTop());
 		await sleep(500);
-		check('muted: Blue\'s picker goes', !(await view(blueP)).picker);
+		check('picker off: Blue\'s picker goes', !(await view(blueP)).picker);
 		await sleep(3200);
 		const sent = await redP.evaluate(() => window._multiplayerState.sync.sendEmote('red', 'nice'));
 		check('after 3 s Red may send again', sent === true);
@@ -195,19 +207,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		}, { timeout: 15000, polling: 200 })
 			.then(() => check('the spectator sees the second emote', true), () => check('the spectator sees the second emote', false));
 		const vm = await view(blueP);
-		check('muted: Blue sees no bubble and hears nothing', !vm.red && !/Nice move/.test(vm.live || ''), vm);
+		check('hidden: Blue sees no bubble and hears nothing', !vm.red && !/Nice move/.test(vm.live || ''), vm);
 		const emotes = (await roomOf()).emotes || {};
 		check('the room holds the three emotes', Object.values(emotes).map((e) => e.e).sort().join() === 'glhf,nice,wow', emotes);
 
-		// game.html (no online emotes) has no mute row.
+		// game.html (no online emotes) has no emote rows.
 		await pageG.goto(`${BASE}/game.html`, { waitUntil: 'load', timeout: 90000 });
 		await pageG.waitForSelector('#settings-panel', { timeout: 30000 });
-		check('game.html has no mute-emotes row', !(await pageG.$('#settings-panel [data-setting="muteEmotes"]')));
+		check('game.html has no emote rows', !(await pageG.$('#settings-panel [data-setting="showEmotes"]')) && !(await pageG.$('#settings-panel [data-setting="sendEmotes"]')));
 
-		// Red resigns; Blue unmutes and says "Well played".
+		// Red resigns; Blue turns emotes back on and says "Well played".
 		await redP.evaluate(() => { const b = Alpine.$data(document.querySelector('[x-data^="gameBoard"]')); b.handleForfeit(); b.handleForfeit(); });
 		await blueP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).winner === 'blue', { timeout: 30000, polling: 500 });
-		await blueP.evaluate(() => SigilSettings.set('muteEmotes', false));
+		await blueP.evaluate(() => { SigilSettings.set('showEmotes', true); SigilSettings.set('sendEmotes', true); });
 		await blueP.waitForSelector('.emote-picker__toggle', { visible: true, timeout: 10000 });
 		await blueP.click('.emote-picker__toggle');
 		const offered = await blueP.$$eval('.emote-picker__item', (els) => els.filter((e) => e.offsetParent !== null).map((e) => e.dataset.emote).sort().join());

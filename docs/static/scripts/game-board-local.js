@@ -471,6 +471,16 @@ document.addEventListener('alpine:init', () => {
 				return `${min}:${sec.toString().padStart(2, '0')}`;
 			},
 
+			// The running clocks, as the Clock settings say (prefs.js); the
+			// fallbacks keep a page without prefs.js on whole seconds.
+			clockText(ms) {
+				if (typeof SigilSettings !== 'undefined') return SigilSettings.clockText(ms);
+				return this.formatTimer(Math.ceil(Math.max(ms, 0) / 1000));
+			},
+			clockIsLow(ms) {
+				return typeof SigilSettings !== 'undefined' ? SigilSettings.clockLow(ms) : ms < 10000;
+			},
+
 			closeSpellTooltip() {
 				this.activeSpell = '';
 				if (this.spellTooltip.destroy) {
@@ -860,18 +870,12 @@ document.addEventListener('alpine:init', () => {
 			// Two-click forfeit: the first click arms the button (it relabels to
 			// ask for confirmation), the second concedes. Arming decays on its
 			// own so a stray first click can't leave a live one-click forfeit
-			// sitting under the cursor.
+			// sitting under the cursor. "Confirm before forfeiting" off makes it
+			// one click (confirmForfeit, game-keys.js).
 			forfeitArmed: false,
 			_forfeitTimer: null,
 			handleForfeit() {
-				if (!this.forfeitArmed) {
-					this.forfeitArmed = true;
-					clearTimeout(this._forfeitTimer);
-					this._forfeitTimer = setTimeout(() => { this.forfeitArmed = false; }, 5000);
-					return;
-				}
-				clearTimeout(this._forfeitTimer);
-				this.forfeitArmed = false;
+				if (!confirmForfeit(this)) return;
 				this.sendEvent('forfeit');
 			},
 
@@ -1023,6 +1027,8 @@ document.addEventListener('alpine:init', () => {
 
 				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
 				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
+				// Blind mode reads the board out (blind-mode.js; pages with body.blind-page).
+				if (typeof SigilBlind !== 'undefined') SigilBlind.attach(_this);
 
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => {
@@ -2091,6 +2097,11 @@ document.addEventListener('alpine:init', () => {
 						_this.blueClockMs = rest.blue;
 						_this.clockActive = rest.active || '';
 						if (rest.label) _this.clockLabel = rest.label;
+						// The low-time beep, for a human side's running clock.
+						if ((rest.active === 'red' || rest.active === 'blue') && (!_this.isAiGame || rest.active === _this.myColor)
+							&& typeof SigilSettings !== 'undefined') {
+							SigilSettings.lowTimeWarn(_this, rest.active, rest[rest.active]);
+						}
 						return;
 					}
 
@@ -3107,7 +3118,7 @@ document.addEventListener('alpine:init', () => {
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
-						const humanName = isGuest ? 'Guest' : (aiLabel || _aiAuthManager.displayName || 'You');
+						const humanName = isGuest ? 'Guest' : (aiLabel || _aiAuthManager.publicName || 'You');
 						const aiName = difficulty ? _aiNameFor(difficulty) : humanName;
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param

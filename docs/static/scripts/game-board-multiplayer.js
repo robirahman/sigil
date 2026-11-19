@@ -297,9 +297,12 @@ document.addEventListener('alpine:init', () => {
 			// Preset emotes (SIGIL_EMOTES in firebase-sync.js): a picker beside
 			// the clocks for the seated players, a bubble under the sender's
 			// name for SIGIL_EMOTE_BUBBLE_MS, and a polite live-region line.
-			// "Mute emotes" (settings panel) hides them all, picker included.
+			// Two settings (prefs.js): "Show emotes" (off hides every bubble
+			// and line; the Hide / Show emotes button beside the clocks flips
+			// it) and "Offer the emote picker" (off removes the picker).
 			emoteList: typeof SIGIL_EMOTES !== 'undefined' ? SIGIL_EMOTES : [],
-			emotesMuted: typeof SigilSettings !== 'undefined' && !!SigilSettings.get('muteEmotes'),
+			emotesShown: typeof SigilSettings === 'undefined' || SigilSettings.get('showEmotes') !== false,
+			emoteSendOn: typeof SigilSettings === 'undefined' || SigilSettings.get('sendEmotes') !== false,
 			emoteMenuOpen: false,
 			emoteCooling: false,
 			emoteBubble: { red: '', blue: '' },
@@ -311,7 +314,7 @@ document.addEventListener('alpine:init', () => {
 			// data, so a getter reading it would not update).
 			emoteReady: false,
 			get canEmote() {
-				if (this.isSpectator || this.emotesMuted || this.reviewMode || this.gameAborted || !this.emoteReady) return false;
+				if (this.isSpectator || !this.emoteSendOn || this.reviewMode || this.gameAborted || !this.emoteReady) return false;
 				if (this.myColor !== 'red' && this.myColor !== 'blue') return false;
 				return !this.winner || this.emoteAfterOpen;
 			},
@@ -330,7 +333,7 @@ document.addEventListener('alpine:init', () => {
 				await sync.sendEmote(this.myColor, id);
 			},
 			_showEmote(v) {
-				if (this.emotesMuted || !v || (v.color !== 'red' && v.color !== 'blue')) return;
+				if (!this.emotesShown || !v || (v.color !== 'red' && v.color !== 'blue')) return;
 				const em = this.emoteList.find((x) => x.id === v.e);
 				if (!em) return;
 				this.emoteBubble[v.color] = em.text;
@@ -341,7 +344,7 @@ document.addEventListener('alpine:init', () => {
 				// still a change and is read out again.
 				const line = who + ': ' + em.text;
 				this.emoteAnnounce = '';
-				setTimeout(() => { if (!this.emotesMuted) this.emoteAnnounce = line; }, 100);
+				setTimeout(() => { if (this.emotesShown) this.emoteAnnounce = line; }, 100);
 				clearTimeout(this._emoteTimers[v.color]);
 				this._emoteTimers[v.color] = setTimeout(() => {
 					this.emoteBubble[v.color] = '';
@@ -366,10 +369,20 @@ document.addEventListener('alpine:init', () => {
 				clearTimeout(this._emoteAfterTimer);
 				this._emoteAfterTimer = setTimeout(() => { this.emoteAfterOpen = false; this.emoteMenuOpen = false; }, left);
 			},
-			setEmotesMuted(on) {
-				this.emotesMuted = !!on;
-				if (!on) return;
-				this.emoteMenuOpen = false;
+			// The emote toggle shows in a live game screen, for players and spectators.
+			get emoteToggleVisible() {
+				return this.emoteReady && !this.reviewMode && !this.gameAborted;
+			},
+			toggleEmotesShown() {
+				if (typeof SigilSettings !== 'undefined') SigilSettings.set('showEmotes', !this.emotesShown);
+				else this.setEmotePrefs({ showEmotes: !this.emotesShown, sendEmotes: this.emoteSendOn });
+			},
+			// From the 'sigil-settings' event (settings panel, the toggle, another tab or device).
+			setEmotePrefs(s) {
+				this.emotesShown = s.showEmotes !== false;
+				this.emoteSendOn = s.sendEmotes !== false;
+				if (!this.emoteSendOn) this.emoteMenuOpen = false;
+				if (this.emotesShown) return;
 				this.emoteBubble.red = '';
 				this.emoteBubble.blue = '';
 				this.emoteAnnounce = '';
@@ -809,11 +822,15 @@ document.addEventListener('alpine:init', () => {
 					const d = new Date(ms);
 					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 				}
-				// Real-time: show M:SS
+				// Real-time: M:SS, with tenths as the Clock settings say (prefs.js).
+				if (typeof SigilSettings !== 'undefined') return SigilSettings.clockText(ms);
 				const totalSec = Math.max(0, Math.ceil(ms / 1000));
 				const min = Math.floor(totalSec / 60);
 				const sec = totalSec % 60;
 				return min + ':' + String(sec).padStart(2, '0');
+			},
+			clockIsLow(ms) {
+				return typeof SigilSettings !== 'undefined' ? SigilSettings.clockLow(ms) : ms < 10000;
 			},
 
 			closeSpellTooltip() { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); },
@@ -845,18 +862,12 @@ document.addEventListener('alpine:init', () => {
 			// Two-click forfeit, mirroring game-board-local.js: first click arms
 			// (relabels to confirm), second concedes; arming decays on its own so
 			// a stray click can't leave a live one-click forfeit sitting around.
+			// One click when "Confirm before forfeiting" is off (game-keys.js).
 			forfeitArmed: false,
 			_forfeitTimer: null,
 			handleForfeit() {
 				if (this.isSpectator) return;
-				if (!this.forfeitArmed) {
-					this.forfeitArmed = true;
-					clearTimeout(this._forfeitTimer);
-					this._forfeitTimer = setTimeout(() => { this.forfeitArmed = false; }, 5000);
-					return;
-				}
-				clearTimeout(this._forfeitTimer);
-				this.forfeitArmed = false;
+				if (!confirmForfeit(this)) return;
 				this.sendEvent('forfeit');
 			},
 			handleCharmClick(spell) {
@@ -940,6 +951,8 @@ document.addEventListener('alpine:init', () => {
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
 				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
 				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
+				// Blind mode reads the board out (blind-mode.js; pages with body.blind-page).
+				if (typeof SigilBlind !== 'undefined') SigilBlind.attach(_this);
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => { if (_this.$refs.messageHistory) _this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight; });
 				});
@@ -1202,6 +1215,11 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'pushingoptions') { const { sourceNode, ...targets } = rest; _this.pushSourceNode = sourceNode || ''; _this.validMoves = targets; }
 					else if (type === 'timer_tick') {
 						_this.redTimer = rest.red; _this.blueTimer = rest.blue;
+						// The low-time beep, for my own running clock in a live game.
+						if (!_this.isSpectator && _this.timerType === 'realtime' && !_this.winner && _this.whoseTurn === _this.myColor
+							&& (_this.myColor === 'red' || _this.myColor === 'blue') && typeof SigilSettings !== 'undefined') {
+							SigilSettings.lowTimeWarn(_this, _this.myColor, rest[_this.myColor]);
+						}
 						if (typeof rest.giftsLeft === 'number') _this.giftsLeft = rest.giftsLeft;
 						_this.claimingFlag = !!rest.claiming;
 						const p = rest.paused || {};

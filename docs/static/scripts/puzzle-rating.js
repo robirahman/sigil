@@ -139,7 +139,9 @@ async function recordPuzzleResult(user, puzzle, solved, current) {
 		const mine = { rating: typeof me.rating === 'number' ? me.rating : PUZZLE_RATING_START, plays: me.plays || 0 };
 		const pz = await loadPuzzleCurrentRating(puzzle);
 		const up = puzzleRatingUpdate(mine, pz, solved);
-		const name = (await db.ref(base + '/displayName').once('value')).val() || u.displayName || 'Player';
+		let name = (await db.ref(base + '/displayName').once('value')).val() || u.displayName || 'Player';
+		// A name the offensive-name filter refuses shows as 'Player' (the rules refuse it).
+		if (typeof SigilNameFilter !== 'undefined') name = SigilNameFilter.safe(String(name).slice(0, 30));
 		const write = {};
 		write[base + '/puzzle'] = Object.assign({ last: puzzle.id }, up.user);
 		write[base + '/puzzleAttempts/' + puzzle.id] = { solved: !!solved, at: firebase.database.ServerValue.TIMESTAMP, delta: up.delta };
