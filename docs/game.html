@@ -462,7 +462,9 @@
 
 						<!-- Practice game vs the AI (?practice=1): unrated, with hints
 						     (game-board-local.js, practiceGameHref / _practiceHint). -->
-						<div class="practice-bar" x-show="practiceMode" x-cloak>
+						<!-- typeof: a stale cached game-board-local.js has no practice mode. -->
+						<template x-if="typeof practiceMode !== 'undefined' && practiceMode">
+						<div class="practice-bar">
 							<div class="practice-bar__head">
 								<span class="practice-bar__label">Practice game &middot; unrated</span>
 								<button type="button" class="action-button practice-bar__hint-btn"
@@ -482,6 +484,7 @@
 								<div class="practice-bar__note" x-show="practiceHint.status === 'ready' && showReset">The hint is for the start of your turn: Reset Turn to follow it.</div>
 							</div>
 						</div>
+						</template>
 
 						<div
 							class="actions"
@@ -567,10 +570,12 @@
 								<option value="rust_very_hard">vs AI: Very Hard</option>
 								<option value="online">Online (new room)</option>
 							</select>
-							<label class="import-form__practice" x-show="importOpponent && importOpponent !== 'online'">
-								<input type="checkbox" x-model="importPractice" />
-								Practice: unrated, with hints
-							</label>
+							<template x-if="typeof importPractice !== 'undefined'">
+								<label class="import-form__practice" x-show="importOpponent && importOpponent !== 'online'">
+									<input type="checkbox" x-model="importPractice" />
+									Practice: unrated, with hints
+								</label>
+							</template>
 							<button
 								class="action-button"
 								x-on:click="importPosition()"
@@ -784,7 +789,7 @@
 												'stone-node--last-play': lastPlay === node && !validMoves[node],
 												'stone-node--refill': nodesToRefill[node],
 												'stone-node--destroyed': nodes[node] === 'X',
-												'stone-node--engine-hint': (liveAnaOn && !!liveAnaHintNodes[node]) || !!practiceHintNodes[node],
+												'stone-node--engine-hint': (liveAnaOn && !!liveAnaHintNodes[node]) || (typeof practiceHintNodes === 'object' && !!practiceHintNodes[node]),
 											}"
 										x-bind:id="`stone-node--${node}`"
 										x-bind:style="nodeStyle(node)"
@@ -906,7 +911,7 @@
 						x-on:click="rematchFromPosition"
 						x-bind:disabled="reviewReplaying"
 						title="Start a new game from this position">Rematch from here</button>
-					<button class="review-bar__btn review-bar__btn--text" x-show="canRematchFromPosition"
+					<button class="review-bar__btn review-bar__btn--text" x-show="canRematchFromPosition && typeof practiceFromPosition === 'function'"
 						x-on:click="practiceFromPosition"
 						x-bind:disabled="reviewReplaying"
 						title="Practise this position against the AI, with hints (unrated)">Practise from here</button>
