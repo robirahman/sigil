@@ -6,7 +6,8 @@
 spec.json:
     {"name": "wm7", "job": "winmine_v3", "branch": "sigil-bench-v3", "max_hours": 8,
      "slots": [{"zone": "us-central1-a", "machine": "c2d-highcpu-112", "count": 8}, ...],
-     "shards": [{"key": "r6d3-0", "shard": "0/62", "args": "v3/corpus/r6d3/ 20000 6 10000 all 1"}, ...],
+     "shards": [{"key": "r6d3-0", "shard": "0/62", "args": "v3/corpus/r6d3/ 20000 6 10000 all 1",
+                 "inputs": [optional static INPUTS, bucket object paths]}, ...],
      "resume_files": ["tables", "prefilter", "playouts"]}
 
 Each shard runs bench/gcp/runner_v3.sh through bench/gcp/launch_v3.sh as a Spot VM
@@ -139,7 +140,7 @@ def main():
                 key = todo.pop(0)
                 st = state['shards'][key]
                 s = by_key[key]
-                inputs = []
+                inputs = list(s.get('inputs') or [])      # static inputs (bucket object paths)
                 safe = s['shard'].replace('/', 'of')
                 newest = {}
                 for run in st['runs']:
