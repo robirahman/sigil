@@ -928,6 +928,9 @@ document.addEventListener('alpine:init', () => {
 				else if (this.awaiting === 'action' && (this.actionList.includes('move') || this.actionList.includes('providence'))) this.sendEvent(node);
 			},
 
+			// Image / GIF export and embed codes (board-image.js).
+			...(typeof boardExportMixin === 'function' ? boardExportMixin() : {}),
+
 			// Spread the shared AI-review behaviour (game-review.js), then
 			// override the uid hook to point at this page's auth manager.
 			...aiReviewMixin(),

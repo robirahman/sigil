@@ -2160,9 +2160,10 @@ document.addEventListener('alpine:init', () => {
 					_this.puzzleStatus = 'solved';
 					_this.puzzleMessage = msg || 'Solved!';
 					// A mistake from the player's own game (puzzles.html?learn=) is
-					// not one of the puzzle set's, and Puzzle Storm runs are
-					// unrated practice: both leave the solved list alone.
-					if (!puzzle.learn && !puzzle.bench && !window.SIGIL_PUZZLE_STORM) try {
+					// not one of the puzzle set's, and Puzzle Storm runs and
+					// embedded puzzles are unrated practice: all leave the solved
+					// list alone.
+					if (!puzzle.learn && !puzzle.bench && !puzzle.embed && !window.SIGIL_PUZZLE_STORM) try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
@@ -2786,6 +2787,11 @@ document.addEventListener('alpine:init', () => {
 					_this.actionList = payload.actionlist || [];
 					_this.awaiting = payload.awaiting;
 					_this.message = payload.message;
+					// The prompt a typed turn answers (typed-turn.js).
+					if (payload.awaiting) {
+						_this._lastPrompt = payload;
+						_this._promptSeq = (_this._promptSeq || 0) + 1;
+					}
 
 					if (payload.moveoptions) {
 						handleValidMovesEvent(payload.moveoptions);
@@ -3305,6 +3311,11 @@ document.addEventListener('alpine:init', () => {
 				}
 
 			},
+
+			// Image / GIF export and embed codes (board-image.js) and typed
+			// turns (typed-turn.js), on the pages that load them.
+			...(typeof boardExportMixin === 'function' ? boardExportMixin() : {}),
+			...(typeof typedTurnMixin === 'function' ? typedTurnMixin() : {}),
 
 			// Analysis board state and methods (analysis-board.js), spread
 			// last so its handleNodeClick (the editor) overrides the game's.

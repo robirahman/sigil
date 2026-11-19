@@ -1081,6 +1081,79 @@ html[data-theme="volcanic"].webp {
 	background: var(--color-btn-dash);
 }
 
+/* Type a turn in the game's notation (typed-turn.js), under the action buttons. */
+.typed-turn {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	color: var(--color-text);
+	font-size: 13px;
+	padding: 6px 8px;
+	width: 200px;
+}
+
+.typed-turn--panel {
+	margin: 8px 0;
+	width: auto;
+}
+
+.typed-turn__label {
+	display: block;
+	font-weight: bold;
+	margin-bottom: 4px;
+}
+
+.typed-turn__row {
+	display: flex;
+	gap: 4px;
+}
+
+.typed-turn__input {
+	background: var(--color-bg-dark);
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	color: var(--color-text);
+	flex: 1;
+	font: inherit;
+	min-width: 0;
+	padding: 4px 6px;
+}
+
+.typed-turn__go {
+	background: var(--color-btn-end-turn, #2a4a28);
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	color: #fff;
+	cursor: pointer;
+	font: inherit;
+	padding: 4px 8px;
+}
+
+.typed-turn__go:disabled,
+.typed-turn__input:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+.typed-turn__hint,
+.typed-turn__error {
+	margin: 4px 0 0;
+	overflow-wrap: anywhere;
+}
+
+.typed-turn__hint {
+	color: var(--color-text-muted);
+}
+
+.typed-turn__error {
+	color: var(--color-error, #dd6666);
+}
+
+.review-bar__error {
+	color: var(--color-error, #dd6666);
+	font-size: 0.85em;
+}
+
 .action-button--dash:focus,
 .action-button--dash:hover {
 	background: var(--color-btn-dash-hover);
