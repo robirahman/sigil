@@ -931,3 +931,56 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+// ---- BOT accounts and the HTTP API's records (functions/bot-api.js, api-tokens.js) ----
+
+test('a BOT account writes no room, lobby entry, challenge, leaderboard row or game record', async () => {
+	const botProfile = Object.assign({}, profile, { displayName: 'Robo', isBot: true });
+	await seed({
+		users: { alice: profile, robo: botProfile },
+		bots: { robo: { since: 1 } },
+		bot_leaderboard: { robo: { displayName: 'Robo', elo: 1000, gamesPlayed: 0 } },
+		// A game the bot API seated it in (the admin writes it).
+		rooms: { BOT1: Object.assign({}, waiting, { status: 'playing', ranked: false, seq: true,
+			blue: { uid: 'robo', displayName: 'Robo', connected: true, seq: true, bot: true } }) },
+		user_api_tokens: { robo: { t1: { name: 'engine', scopes: { bot: true }, created: 1 } } },
+	});
+	const bot = db('robo');
+	// Its own room, a seat in a human's, a move in its own game, a resignation.
+	await assertFails(set(ref(bot, 'rooms/BOT2'), Object.assign({}, waiting, { red: { uid: 'robo', displayName: 'Robo', connected: true } })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/HUM1'), waiting));
+	await assertFails(update(ref(bot, 'rooms/HUM1'), { blue: { uid: 'robo', displayName: 'Robo', connected: true, seq: true }, status: 'playing', ranked: false }));
+	await assertFails(update(ref(bot, 'rooms/BOT1'), { 'turns/t1': { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() }, last: { key: 't1', color: 'blue' } }));
+	await assertFails(set(ref(bot, 'rooms/BOT1/forfeitedBy'), 'blue'));
+	await assertFails(set(ref(bot, 'rooms/BOT1/currentSfn'), 'x'));
+	await assertFails(set(ref(bot, 'rooms/BOT1/blue/connected'), false));
+	await assertFails(set(ref(bot, 'live_rooms/BOT1'), true));
+	await assertFails(set(ref(bot, 'user_active_games/robo/BOT1'), { roomCode: 'BOT1' }));
+	await assertFails(set(ref(bot, 'challenges/alice/HUM1'), { from: 'robo', at: serverTimestamp() }));
+	await assertFails(set(ref(bot, 'leaderboard/robo'), { displayName: 'Robo', elo: 1000, gamesPlayed: 0 }));
+	await assertFails(set(ref(bot, 'completed_games/g1'), { winner: 'blue', timestamp: 1, redUid: '__ai_rust_hard__', blueUid: 'robo', ranked: true }));
+	// Its profile settings and name stay its own; the mark does not.
+	await assertSucceeds(set(ref(bot, 'users/robo/annotationMode'), true));
+	await assertFails(set(ref(bot, 'users/robo/isBot'), false));
+	await assertFails(remove(ref(bot, 'users/robo/isBot')));
+	await assertFails(set(ref(db('alice'), 'users/alice/isBot'), true));
+	await assertFails(set(ref(db('carol'), 'users/carol'), Object.assign({}, profile, { isBot: true })));
+	// Server-written: the marks, the bots' board, the token records.
+	await assertFails(set(ref(bot, 'bots/robo'), null));
+	await assertFails(set(ref(db('alice'), 'bots/alice'), { since: 1 }));
+	await assertFails(set(ref(db('alice'), 'bot_leaderboard/robo/elo'), 3000));
+	await assertFails(set(ref(db('alice'), 'api_tokens/abc'), { uid: 'alice', scopes: { bot: true } }));
+	await assertFails(set(ref(db('alice'), 'user_api_tokens/alice/t'), { name: 'x' }));
+	await assertFails(get(ref(db('alice'), 'api_tokens')));
+	await assertFails(get(ref(db('alice'), 'api_rate')));
+	await assertFails(get(ref(db('alice'), 'user_api_tokens/robo')));
+	await assertSucceeds(get(ref(bot, 'user_api_tokens/robo')));
+	await assertSucceeds(get(ref(db(null), 'bots/robo')));
+	await assertSucceeds(get(ref(db(null), 'bot_leaderboard')));
+	// A human's own writes are as before; rateBot (the opt-in) is set at creation only.
+	await assertSucceeds(set(ref(db('alice'), 'rooms/HUM2'), Object.assign({}, waiting, { invite: 'robo', rateBot: true, creatorColor: 'red' })));
+	await assertFails(set(ref(db('alice'), 'rooms/HUM3'), Object.assign({}, waiting, { invite: 'robo', rateBot: 'yes' })));
+	await assertFails(set(ref(db('alice'), 'rooms/HUM1/rateBot'), true));
+	await assertSucceeds(set(ref(db('alice'), 'challenges/robo/HUM2'), { from: 'alice', at: serverTimestamp() }));
+	await assertSucceeds(set(ref(db('alice'), 'leaderboard/alice'), { displayName: 'Alice', elo: 1000, gamesPlayed: 0 }));
+});

@@ -174,11 +174,13 @@
 				<a href="leaderboard.html" x-bind:class="{ 'is-active': tab === 'games' }">Games</a>
 				<a href="leaderboard.html?tab=puzzles" x-bind:class="{ 'is-active': tab === 'puzzles' }">Puzzles</a>
 				<a href="leaderboard.html?tab=storm" x-bind:class="{ 'is-active': tab === 'storm' }">Puzzle Storm</a>
+				<a href="leaderboard.html?tab=bots" x-bind:class="{ 'is-active': tab === 'bots' }">Bots</a>
 			</p>
+			<p class="empty-msg" x-show="tab === 'bots'" x-cloak style="margin-top: 0;">Engines playing through the <a href="api.html#bots" style="color: inherit;">bot API</a>. Bots are never on the players' board.</p>
 
 			<p class="loading-msg" x-show="loading && !isOffline" x-cloak>Loading rankings...</p>
 			<p class="empty-msg" x-show="isOffline" x-cloak>Leaderboard rankings are unavailable while offline. <a href="./" style="color: inherit;">Back to menu</a> to play local games.</p>
-			<p class="empty-msg" x-show="!loading && !isOffline && allPlayers.length === 0" x-cloak x-text="tab === 'storm' ? 'No Puzzle Storm runs yet.' : (tab === 'puzzles' ? 'No rated puzzle attempts yet.' : 'No ranked games played yet.')"></p>
+			<p class="empty-msg" x-show="!loading && !isOffline && allPlayers.length === 0" x-cloak x-text="tab === 'storm' ? 'No Puzzle Storm runs yet.' : (tab === 'puzzles' ? 'No rated puzzle attempts yet.' : (tab === 'bots' ? 'No bot has played a rated game yet.' : 'No ranked games played yet.'))"></p>
 
 			<div class="leaderboard-tools" x-show="!loading && allPlayers.length > 0" x-cloak>
 				<input class="leaderboard-search" type="search" x-model="query" x-on:input="page = 0" placeholder="Search players" aria-label="Search players by name" />
@@ -202,6 +204,7 @@
 							<td class="name" x-bind:class="{ 'name--ai': player.isAI, 'name--dev': player.isDeveloper }">
 								<a x-bind:href="'profile.html?uid=' + player.uid" x-bind:class="{ 'name--ai': player.isAI, 'name--dev': player.isDeveloper }" style="color: inherit; text-decoration: none;" x-text="player.displayName"></a>
 								<template x-if="player.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
+								<template x-if="player.isBot"><span class="bot-tag">BOT</span></template>
 							</td>
 							<td class="elo"><span x-text="player.elo"></span><template x-if="tab !== 'storm' && player.gamesPlayed < provisionalGames"><span class="provisional" x-bind:title="'Provisional: fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')" x-bind:aria-label="'provisional, fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')">?</span></template></td>
 							<td x-text="player.gamesPlayed"></td>
@@ -254,8 +257,9 @@
 				allPlayers: [],
 				loading: true,
 				// ?tab=puzzles: puzzle ratings (puzzle_leaderboard/, puzzle-rating.js);
-				// ?tab=storm: best Puzzle Storm scores (storm_leaderboard/, puzzle-progress.js).
-				tab: ['puzzles', 'storm'].includes(new URLSearchParams(location.search).get('tab')) ? new URLSearchParams(location.search).get('tab') : 'games',
+				// ?tab=storm: best Puzzle Storm scores (storm_leaderboard/, puzzle-progress.js);
+				// ?tab=bots: BOT accounts (bot_leaderboard/, written by the rating function only).
+				tab: ['puzzles', 'storm', 'bots'].includes(new URLSearchParams(location.search).get('tab')) ? new URLSearchParams(location.search).get('tab') : 'games',
 				isOffline: !navigator.onLine,
 				page: 0,
 				perPage: 100,
@@ -384,6 +388,25 @@
 							this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
 						} catch (e) {
 							console.error('Failed to load the puzzle leaderboard:', e);
+						}
+						this.loading = false;
+						return;
+					}
+
+					if (this.tab === 'bots') {
+						try {
+							const snap = await db.ref('bot_leaderboard').orderByChild('elo').limitToLast(this.limit).once('value');
+							const results = [];
+							snap.forEach((child) => {
+								const d = child.val() || {};
+								if (!(d.gamesPlayed > 0)) return;
+								results.push({ uid: child.key, displayName: d.displayName || 'Unknown',
+									elo: d.elo ?? 1000, gamesPlayed: d.gamesPlayed, isAI: false, isDeveloper: false, isBot: true });
+							});
+							this.allPlayers = results.reverse();
+							this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
+						} catch (e) {
+							console.error('Failed to load the bot leaderboard:', e);
 						}
 						this.loading = false;
 						return;

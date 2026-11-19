@@ -201,6 +201,18 @@
 			text-align: left;
 			font-family: 'Overlock', sans-serif;
 		}
+		.settings-card__title { font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px; }
+		.settings-card a { color: inherit; }
+		.api-token { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--color-border); font-family: 'Overlock', sans-serif; }
+		.api-token__what { flex: 1; min-width: 0; color: var(--color-text-warm); overflow-wrap: anywhere; }
+		.api-token__scopes { color: var(--color-text-dim); font-size: 0.85em; margin-left: 6px; }
+		.api-token__when { color: var(--color-text-dim); font-size: 0.8em; }
+		.account-button.api-token__revoke { width: auto; margin: 0; padding: 6px 12px; font-size: 0.85em; }
+		.api-token__none { color: var(--color-text-dim); font-family: 'Overlock', sans-serif; font-size: 0.9em; }
+		.api-token__new { margin: 10px 0; padding: 10px; border: 1px solid var(--color-success); border-radius: 6px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); }
+		.api-token__new code { display: block; margin: 6px 0; padding: 6px; background: var(--color-surface-raised); border-radius: 4px; font-size: 0.85em; overflow-wrap: anywhere; user-select: all; }
+		.api-token__form label, .bot-account label { display: block; font-family: 'Overlock', sans-serif; color: var(--color-border-hover); margin: 10px 0 4px; font-size: 0.9em; }
+		.api-token__form input[type="text"], .bot-account input[type="text"] { display: block; width: 100%; padding: 10px 12px; border-radius: 6px; border: 2px solid var(--color-border); background: var(--color-surface-raised); color: var(--color-text-warm); font-family: 'Overlock', sans-serif; font-size: 1em; box-sizing: border-box; }
 		.danger-zone__title {
 			font-family: 'Arvo', serif;
 			color: var(--color-error);
@@ -313,7 +325,7 @@
 			<p x-show="isAdmin" x-cloak><a class="admin-link" href="admin.html">Admin panel: reports and suspensions</a></p>
 
 			<div class="profile-card">
-				<div class="profile-card__name" x-text="profile?.displayName || user?.displayName || 'Player'"></div>
+				<div class="profile-card__name"><span x-text="profile?.displayName || user?.displayName || 'Player'"></span><template x-if="isBot"><span class="bot-tag">BOT</span></template></div>
 				<div class="profile-card__stats">
 					<div class="profile-card__stat">
 						<div class="profile-card__stat-label">Rating</div>
@@ -440,6 +452,67 @@
 			</div>
 			-->
 
+			<!-- API tokens (functions/api-tokens.js): personal tokens for the
+			     public API and, on a BOT account, the bot API (api.html). The
+			     server keeps only a hash: a new token is shown once. -->
+			<div class="settings-card api-tokens" id="api-tokens">
+				<div class="settings-card__title">API tokens</div>
+				<div class="settings-card__hint" style="margin-bottom: 10px;">
+					For your own programs: the <a href="api.html">Sigil API</a> reads public data (profiles, games, the daily puzzle, leaderboards), at a higher rate with a token. A bot token plays a BOT account's games. A token is shown once, when you make it: keep it secret, and revoke it here if it leaks.
+				</div>
+				<template x-for="t in apiTokens" x-bind:key="t.id">
+					<div class="api-token" x-bind:data-token-id="t.id">
+						<div class="api-token__what">
+							<strong x-text="t.name"></strong>
+							<span class="api-token__scopes" x-text="t.scopes.join(', ')"></span>
+							<div class="api-token__when" x-text="tokenWhen(t)"></div>
+						</div>
+						<button class="account-button api-token__revoke" x-on:click="revokeToken(t)" x-bind:disabled="tokenBusy">Revoke</button>
+					</div>
+				</template>
+				<p class="api-token__none" x-show="!apiTokens.length" x-cloak>No tokens yet.</p>
+				<div class="api-token__new" x-show="newToken" x-cloak>
+					<div>Your new token (shown only now):</div>
+					<code id="api-token-value" x-text="newToken"></code>
+					<button class="account-button" x-on:click="copyToken" x-text="tokenCopied ? 'Copied' : 'Copy'"></button>
+				</div>
+				<div class="api-token__form">
+					<label for="api-token-name">Name</label>
+					<input id="api-token-name" type="text" maxlength="40" placeholder="e.g. my engine" x-model="tokenName" x-on:keydown.enter="createToken" x-bind:disabled="tokenBusy" />
+					<label class="settings-card__row" x-show="isBot" x-cloak>
+						<input type="checkbox" x-model="tokenBot" x-bind:disabled="tokenBusy" />
+						<span>Bot play (the bot API)</span>
+					</label>
+					<button class="account-button" id="api-token-create" x-on:click="createToken" x-bind:disabled="tokenBusy || !tokenName.trim() || apiTokens.length >= 10">Create token</button>
+				</div>
+				<p class="error-msg" x-text="tokenError"></p>
+			</div>
+
+			<!-- BOT account (functions/bot-api.js upgradeToBot): for good. -->
+			<div class="settings-card bot-account" id="bot-account">
+				<div class="settings-card__title">BOT account</div>
+				<template x-if="isBot">
+					<div class="settings-card__hint">
+						This is a BOT account. It plays through the <a href="api.html#bots">bot API</a> with a bot token, not from the game pages; it carries a BOT tag everywhere, is ranked on the <a href="leaderboard.html?tab=bots">bots' leaderboard</a>, and plays a human for rating only when the human chooses a rated challenge.
+					</div>
+				</template>
+				<template x-if="!isBot">
+					<div>
+						<div class="settings-card__hint" style="margin-bottom: 10px;">
+							To connect an engine, turn an account into a BOT account. Use a new account: only one that has never played a game can become a bot. It cannot be undone, and the account can then play only through the bot API, never from these pages.
+						</div>
+						<button class="account-button" id="bot-open" x-show="!botOpen" x-on:click="botOpen = true; botError = ''">Make this a BOT account&hellip;</button>
+						<div x-show="botOpen" x-cloak>
+							<label for="bot-confirm">Type <strong>BOT</strong> to confirm</label>
+							<input id="bot-confirm" type="text" autocomplete="off" x-model="botConfirm" x-bind:disabled="botBusy" />
+							<button class="account-button" id="bot-submit" x-on:click="upgradeBot" x-bind:disabled="botBusy || botConfirm.trim() !== 'BOT'">Make this a BOT account for good</button>
+							<button class="account-button" x-on:click="botOpen = false; botConfirm = ''" x-bind:disabled="botBusy">Cancel</button>
+						</div>
+						<p class="error-msg" x-text="botError"></p>
+					</div>
+				</template>
+			</div>
+
 			<p class="success-msg" x-text="successMsg"></p>
 			<p class="error-msg" x-text="error"></p>
 
@@ -556,6 +629,21 @@
 					void this._vacationTick;
 					return vacationMaxDays(this.vacation, Date.now());
 				},
+				// API tokens (user_api_tokens/{uid}: the owner reads them; the
+				// createApiToken / revokeApiToken callables write them).
+				apiTokens: [],
+				tokenName: '',
+				tokenBot: false,
+				tokenBusy: false,
+				tokenError: '',
+				newToken: '',
+				tokenCopied: false,
+				// A BOT account (bots/{uid}, upgradeToBot).
+				isBot: false,
+				botOpen: false,
+				botConfirm: '',
+				botBusy: false,
+				botError: '',
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -630,7 +718,10 @@
 							}
 						}
 						this.profile = this._authManager.userProfile;
+						this.isBot = !!(this.profile && this.profile.isBot === true);
+						this.tokenBot = this.isBot;
 						this._loadFlags(this.user.uid);
+						this._loadApiTokens();
 						this.annotationMode = !!(this.profile && this.profile.annotationMode);
 						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
 						this.showAiEval = !!(this.profile && this.profile.showAiEval);
@@ -640,6 +731,9 @@
 						this._loadVacation();
 					} else {
 						this.profile = null;
+						this.isBot = false;
+						this.apiTokens = [];
+						this.newToken = '';
 						this.flags = null;
 						this.isAdmin = false;
 						this.annotationMode = false;
@@ -687,6 +781,88 @@
 					}
 					await this._loadVacation();
 					this.vacationBusy = false;
+				},
+
+				async _loadApiTokens() {
+					if (!this.user || this.isOffline) return;
+					try {
+						const v = (await firebase.database().ref('user_api_tokens/' + this.user.uid).once('value')).val() || {};
+						this.apiTokens = Object.keys(v).map((id) => ({
+							id,
+							name: v[id].name || 'token',
+							scopes: Object.keys(v[id].scopes || {}),
+							created: v[id].created || 0,
+							lastUsed: v[id].lastUsed || 0,
+						})).sort((a, b) => b.created - a.created);
+					} catch (e) {
+						this.apiTokens = [];
+					}
+				},
+
+				tokenWhen(t) {
+					const d = (ms) => new Date(ms).toLocaleDateString();
+					return 'Made ' + d(t.created) + (t.lastUsed ? ' \u00b7 last used ' + d(t.lastUsed) : ' \u00b7 never used');
+				},
+
+				async createToken() {
+					const name = this.tokenName.trim();
+					if (!name || this.tokenBusy) return;
+					this.tokenError = '';
+					this.newToken = '';
+					this.tokenCopied = false;
+					this.tokenBusy = true;
+					try {
+						const scopes = this.isBot && this.tokenBot ? ['read', 'bot'] : ['read'];
+						const res = await firebase.functions().httpsCallable('createApiToken')({ name, scopes });
+						this.newToken = res.data.token;
+						this.tokenName = '';
+					} catch (e) {
+						this.tokenError = 'The token could not be made (' + ((e && (e.message || e.code)) || 'unknown error') + ').';
+					}
+					await this._loadApiTokens();
+					this.tokenBusy = false;
+				},
+
+				async copyToken() {
+					try {
+						await navigator.clipboard.writeText(this.newToken);
+						this.tokenCopied = true;
+					} catch (e) {
+						const el = document.getElementById('api-token-value');
+						if (el && window.getSelection) { const r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+					}
+				},
+
+				async revokeToken(t) {
+					if (this.tokenBusy || !confirm('Revoke the token "' + t.name + '"? Programs using it stop working.')) return;
+					this.tokenError = '';
+					this.tokenBusy = true;
+					try {
+						await firebase.functions().httpsCallable('revokeApiToken')({ id: t.id });
+					} catch (e) {
+						this.tokenError = 'The token could not be revoked (' + ((e && (e.message || e.code)) || 'unknown error') + ').';
+					}
+					await this._loadApiTokens();
+					this.tokenBusy = false;
+				},
+
+				async upgradeBot() {
+					if (this.botBusy || this.botConfirm.trim() !== 'BOT') return;
+					this.botError = '';
+					this.botBusy = true;
+					try {
+						await firebase.functions().httpsCallable('upgradeToBot')({ confirm: 'BOT' });
+						await this._authManager.loadProfile(firebase.database());
+						this.profile = this._authManager.userProfile;
+						this.isBot = true;
+						this.tokenBot = true;
+						this.botOpen = false;
+						this.botConfirm = '';
+						this.successMsg = 'This is now a BOT account. Make a bot token below to connect your engine.';
+					} catch (e) {
+						this.botError = (e && e.message) || 'The account could not be changed.';
+					}
+					this.botBusy = false;
 				},
 
 				startVacation() { return this._callVacation(Number(this.vacationDays) || 1); },

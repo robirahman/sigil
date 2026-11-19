@@ -463,6 +463,9 @@ class AuthManager {
 			}
 		}
 
+		// A BOT account (users/{uid}/isBot, server-written) has no row on the
+		// players' leaderboard, and the rules refuse it one.
+		if (this.userProfile.isBot === true) return;
 		const lbRef = db.ref('leaderboard/' + uid);
 		const lbSnap = await lbRef.once('value');
 		if (!lbSnap.exists() && this.userProfile.displayName) {

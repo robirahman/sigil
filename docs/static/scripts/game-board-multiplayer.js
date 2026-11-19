@@ -51,6 +51,9 @@ document.addEventListener('alpine:init', () => {
 			blueName: '',
 			redUid: '',
 			blueUid: '',
+			// BOT accounts (bot-tag.js) are tagged next to their names.
+			redIsBot: false,
+			blueIsBot: false,
 			redTimer: 0,
 			blueTimer: 0,
 			timerType: 'none',
@@ -965,6 +968,10 @@ document.addEventListener('alpine:init', () => {
 					_this.blueName = blueDisplayName || '';
 					_this.redUid = redUid || '';
 					_this.blueUid = blueUid || '';
+					if (window.SigilBots) {
+						SigilBots.isBot(_this.redUid).then((v) => { _this.redIsBot = v; });
+						SigilBots.isBot(_this.blueUid).then((v) => { _this.blueIsBot = v; });
+					}
 					_this.timerType = (timeControl && timeControl.type) || 'none';
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';

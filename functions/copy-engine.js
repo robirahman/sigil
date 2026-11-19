@@ -15,4 +15,10 @@ for (const [sub, f] of [['wasm', 'sigil_engine.js'], ['wasm', 'sigil_engine_bg.w
 	fs.mkdirSync(path.join(__dirname, sub), { recursive: true });
 	fs.copyFileSync(path.join(stat, sub, f), path.join(__dirname, sub, f));
 }
-console.log('copied the engine, shared files, wasm build and position calibration into ' + __dirname);
+// public-api.js: the puzzle set the daily puzzle is drawn from, without
+// the engine's answer keys.
+const { slimPuzzles } = require('./public-api');
+const puzzles = JSON.parse(fs.readFileSync(path.join(stat, 'puzzles', 'mate_puzzles.json'), 'utf8')).puzzles || [];
+fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'data', 'daily-puzzles.json'), JSON.stringify(slimPuzzles(puzzles)));
+console.log('copied the engine, shared files, wasm build, position calibration and puzzle set into ' + __dirname);

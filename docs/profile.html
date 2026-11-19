@@ -47,6 +47,8 @@
 		}
 		.profile__name { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.4em; }
 		.profile__name--ai { color: var(--color-accent); }
+		.profile__bot-note { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.9em; margin: 6px 0 0; }
+		.profile__bot-note a { color: inherit; }
 		.profile__name--dev { color: #c8a8ff; }
 		.profile__name-dev-badge {
 			margin-left: 0.4em;
@@ -274,6 +276,7 @@
 							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI, 'profile__name--dev': user.isDeveloper }">
 								<span x-text="user.displayName"></span>
 								<template x-if="user.isDeveloper"><span class="profile__name-dev-badge">[dev]</span></template>
+								<template x-if="user.isBot"><span class="bot-tag" title="A bot: an engine playing through the Sigil bot API">BOT</span></template>
 								<span class="profile__online" x-show="online" x-cloak title="Online now"></span>
 							</div>
 							<div class="profile__stat-line">
@@ -284,6 +287,7 @@
 									<span> &middot; <span x-text="winRatePercent + '% win rate'"></span></span>
 								</template>
 							</div>
+							<p class="profile__bot-note" x-show="user.isBot" x-cloak>A bot account: an engine that plays through the <a href="api.html#bots">bot API</a>. It is ranked on the <a href="leaderboard.html?tab=bots">bots' leaderboard</a>, and a game against it is rated only if you choose a rated challenge.</p>
 							<button class="report-link" type="button" data-testid="report-player" x-show="!user.isAI && viewerUid !== user.uid"
 								x-on:click="SigilReport.open({ target: user.uid, name: user.displayName })">Report this player</button>
 						</div>
@@ -380,7 +384,7 @@
 												<td x-text="g.color === 'red' ? 'Red' : 'Blue'"></td>
 												<td>
 													<template x-if="g.opponentUid">
-														<a x-bind:href="'profile.html?uid=' + g.opponentUid" x-bind:class="{ 'name--ai': g.opponentIsAI }" x-text="g.opponent" x-on:click.stop=""></a>
+														<span><a x-bind:href="'profile.html?uid=' + g.opponentUid" x-bind:class="{ 'name--ai': g.opponentIsAI }" x-text="g.opponent" x-on:click.stop=""></a><template x-if="g.opponentIsBot"><span class="bot-tag">BOT</span></template></span>
 													</template>
 													<template x-if="!g.opponentUid">
 														<span x-text="g.opponent"></span>
@@ -779,6 +783,8 @@
 							losses: userData.losses || 0,
 							isAI: !!userData.isAI,
 							isDeveloper: !!userData.isDeveloper,
+							// A BOT account (bot-tag.js): server-written, with bots/{uid}.
+							isBot: userData.isBot === true,
 						};
 						const games = [];
 						this._raw = {};
@@ -793,6 +799,7 @@
 								opponent: v.opponent || 'Unknown',
 								opponentUid: v.opponentUid || null,
 								opponentIsAI: !!v.opponentIsAI,
+								opponentIsBot: v.opponentIsBot === true,
 								color: v.color || 'red',
 								result: v.result || 'loss',
 								// Older entries predate `rated`: every one of them was rated.

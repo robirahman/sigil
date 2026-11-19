@@ -3093,3 +3093,20 @@ html[data-zen] body.zen-page .zen-exit {
 	font-size: 0.85rem;
 	cursor: pointer;
 }
+
+/* BOT accounts (bot-tag.js): the tag next to a bot's name, everywhere. */
+.bot-tag {
+	display: inline-block;
+	margin-left: 0.35em;
+	padding: 0 0.35em;
+	border-radius: 3px;
+	background: #6d5bd0;
+	color: #fff;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.7em;
+	font-weight: bold;
+	letter-spacing: 0.05em;
+	line-height: 1.5;
+	vertical-align: middle;
+	text-decoration: none;
+}

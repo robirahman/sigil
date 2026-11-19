@@ -178,8 +178,11 @@ class FirebaseSync {
 	 *   creator's seat, resolved here; default red), public (listed in the
 	 *   lobby's open games), casual (never rated: the joiner writes
 	 *   ranked:false and the rules hold it there), invite (a challenge: the
-	 *   one uid the rules let take the open seat; never public) }. All are
-	 *   fixed at creation. A fromPosition.creatorColor is still honoured.
+	 *   one uid the rules let take the open seat; never public), rateBot (with
+	 *   an invite to a BOT account: the creator opts in to a rated game
+	 *   against it; functions/rating.js rates a bot's game against a human
+	 *   only with it) }. All are fixed at creation. A
+	 *   fromPosition.creatorColor is still honoured.
 	 */
 	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition, opts) {
 		const code = _generateRoomCode();
@@ -222,6 +225,7 @@ class FirebaseSync {
 		if (this.isPublic) roomData.public = true;
 		if (this.casual) roomData.casual = true;
 		if (this.invite) roomData.invite = this.invite;
+		if (this.invite && opts && opts.rateBot === true && !this.casual) roomData.rateBot = true;
 		if (this.startSfn) {
 			roomData.startSfn = this.startSfn;
 			if (this.startPos) roomData.startPos = this.startPos;
