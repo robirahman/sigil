@@ -141,6 +141,57 @@
 			.ana-tree__label--red { color: #e0604a; }
 			.ana-tree__label--blue { color: #5aa0e6; }
 			.ana-tree__won { color: var(--color-success, #6e6); margin-left: 6px; }
+			.ana-tree__glyph { font-weight: bold; margin-left: 2px; }
+			.ana-tree__glyph--good { color: var(--color-success, #6e6); }
+			.ana-tree__glyph--bad { color: var(--color-error, #e66); }
+			.ana-tree__glyph--odd { color: #f0d77a; }
+			.ana-tree__note { margin-left: 6px; opacity: 0.8; }
+			.ana-tree__row--local { font-style: italic; }
+			.ana-glyphs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+			.ana-glyph { min-width: 2.4em; font-weight: bold; }
+			.ana-glyph[aria-pressed="true"] { border-color: var(--color-accent, #8af); background: var(--color-surface-hover, #3a3a6e); }
+			/* Studies (study.js) */
+			.study-box {
+				border: 1px solid var(--color-border, #555);
+				border-radius: 6px;
+				padding: 8px 10px;
+				margin: 8px 0;
+				background: var(--color-surface, #1a1a2e);
+			}
+			.study-box h3 { font-family: 'Arvo', serif; font-size: 1em; margin: 0 0 6px; color: var(--color-text-bright, #f0e0c0); }
+			.study-meta { color: var(--color-text-muted, #999); font-size: 0.88em; }
+			.study-badge {
+				display: inline-block;
+				border: 1px solid var(--color-border, #555);
+				border-radius: 999px;
+				padding: 0 8px;
+				font-size: 0.8em;
+				margin-right: 4px;
+				color: var(--color-text-light, #f0f0f0);
+			}
+			.study-chapters { list-style: none; margin: 4px 0; padding: 0; max-height: 220px; overflow-y: auto; }
+			.study-chapters button {
+				display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+				color: var(--color-text, #ddd); font-family: 'Overlock', sans-serif; font-size: 0.95em; padding: 3px 6px; border-radius: 4px;
+			}
+			.study-chapters button:hover { background: var(--color-surface-raised, #2a2a4e); }
+			.study-chapters button[aria-current="true"] { background: var(--color-surface-hover, #3a3a6e); outline: 1px solid var(--color-accent, #8af); }
+			.study-people { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; }
+			.study-person {
+				appearance: none; border: 1px solid var(--color-border, #555); border-radius: 999px; padding: 1px 8px;
+				background: var(--color-surface-raised, #2a2a4e); color: var(--color-text-light, #f0f0f0); font-size: 0.82em; cursor: pointer;
+				font-family: 'Overlock', sans-serif;
+			}
+			.study-person--me { cursor: default; opacity: 0.75; }
+			.study-notes { list-style: none; margin: 4px 0; padding: 0; }
+			.study-note { border-left: 3px solid var(--color-accent, #8af); padding: 2px 8px; margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+			.study-note__by { color: var(--color-text-muted, #999); font-size: 0.82em; }
+			.study-error { color: var(--color-error, #e66); font-size: 0.92em; margin: 6px 0; }
+			.study-box details { margin: 6px 0; }
+			.study-box summary { cursor: pointer; color: var(--color-text-bright, #f0e0c0); }
+			.study-members { list-style: none; margin: 4px 0; padding: 0; font-size: 0.92em; }
+			.study-members li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 3px 0; }
+			.study-link { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 11px; }
 			.back-link { color: var(--color-accent); }
 
 			/* The game page floats its log, dice and turn buttons over the
@@ -188,12 +239,12 @@
 				<div class="container">
 					<div class="container__inner">
 						<div class="ana-panel">
-							<h2 class="ana-panel__title">Analysis Board</h2>
+							<h2 class="ana-panel__title" x-text="studyId ? ((studyMeta && studyMeta.title) || 'Study') : 'Analysis Board'">Analysis Board</h2>
 							<div class="ana-tabs" role="tablist">
 								<button class="ana-tab" role="tab" x-bind:aria-selected="anaMode === 'analyse'"
 									x-bind:class="{ 'ana-tab--active': anaMode === 'analyse' }"
-									x-on:click="anaMode === 'edit' ? edAnalyse() : null"
-									x-bind:disabled="anaMode === 'edit' && edErrors.length > 0">Analyse</button>
+									x-on:click="anaMode === 'edit' ? anaLeaveEditor() : null"
+									x-bind:disabled="anaMode === 'edit' && edErrors.length > 0 && !studyId">Analyse</button>
 								<button class="ana-tab" role="tab" x-bind:aria-selected="anaMode === 'edit'"
 									x-bind:class="{ 'ana-tab--active': anaMode === 'edit' }"
 									x-on:click="anaMode === 'analyse' ? anaEdit() : null">Edit position</button>
@@ -558,8 +609,74 @@
 				<div class="ana-layout__side">
 					<div class="container">
 						<div class="container__inner ana-panel ana-panel--side">
+							<!-- ============ A study (study.js): status, chapters, people ============ -->
+							<div class="study-head" x-show="studyId" x-cloak>
+								<p class="ana-hint" x-show="studyStatus === 'loading'">Loading the study&hellip;</p>
+								<p class="study-error study-missing" x-show="studyStatus === 'missing'">This study does not exist (it may have been deleted). <a href="studies.html">All studies</a></p>
+								<p class="study-error study-denied" x-show="studyStatus === 'denied'">This study is private. Ask its owner for an invite link. <a href="studies.html">All studies</a></p>
+								<p class="study-error" x-show="studyError" role="alert"><span x-text="studyError"></span> <button class="ana-btn" x-on:click="studyError = ''">Dismiss</button></p>
+								<div class="study-box" x-show="studyStatus === 'ready'">
+									<div class="study-meta">
+										<span class="study-badge study-role" x-text="studyRoleLabel()"></span>
+										<span class="study-badge study-visibility" x-text="studyVisibilityLabel()"></span>
+										by <span x-text="studyMeta && studyMeta.ownerName"></span>
+									</div>
+									<p class="ana-hint study-desc" x-show="studyMeta && studyMeta.desc" x-text="studyMeta && studyMeta.desc"></p>
+									<p class="ana-hint" x-show="!studyCanEdit()">You are following this study: it updates live. Turns you play stay on your screen only (in italics).</p>
+									<div class="ana-row">
+										<button class="ana-btn study-copy-link" x-on:click="studyCopy(studyShareUrl(true), 'link')" x-text="studyLinkCopied === 'link' ? 'Copied!' : 'Copy link to this turn'"></button>
+										<button class="ana-btn study-bookmark" x-show="studyRole === 'viewer' && !studyIsMember() && studyUid" x-on:click="studyBookmark()" x-text="studyLinkCopied === 'bookmark' ? 'Added to your studies' : 'Add to my studies'"></button>
+										<a class="ana-btn" href="studies.html">All studies</a>
+									</div>
+									<div class="study-people" aria-label="Here now">
+										<template x-for="p in studyPresence" x-bind:key="p.uid">
+											<button class="study-person" x-bind:class="{ 'study-person--me': p.me }" x-text="studyPresenceText(p)"
+												x-bind:title="p.me ? 'You' : 'Go to where ' + p.name + ' is'" x-on:click="studyGoToPerson(p)"></button>
+										</template>
+									</div>
+								</div>
+								<div class="study-box study-chapter-box" x-show="studyStatus === 'ready'">
+									<h3>Chapters</h3>
+									<ul class="study-chapters" aria-label="Chapters">
+										<template x-for="(c, i) in studyChapters" x-bind:key="c.id">
+											<li><button x-bind:aria-current="c.id === studyChapter ? 'true' : 'false'" x-bind:data-chapter="c.id"
+												x-on:click="c.id === studyChapter || studyOpenChapter(c.id, '')" x-text="(i + 1) + '. ' + c.title"></button></li>
+										</template>
+									</ul>
+									<div class="ana-row" x-show="studyCanEdit()">
+										<button class="ana-btn study-new-chapter" x-on:click="studyNewChapter.open ? (studyNewChapter.open = false) : studyOpenNewChapter()">New chapter</button>
+										<button class="ana-btn" x-on:click="studyStartRename()">Rename</button>
+										<button class="ana-btn" x-on:click="studyMoveChapter(-1)" title="Move this chapter up" aria-label="Move this chapter up">&uarr;</button>
+										<button class="ana-btn" x-on:click="studyMoveChapter(1)" title="Move this chapter down" aria-label="Move this chapter down">&darr;</button>
+										<button class="ana-btn study-delete-chapter" x-on:click="studyDeleteChapter()" x-bind:disabled="studyChapters.length <= 1">Delete chapter</button>
+									</div>
+									<div x-show="studyRename.open && studyCanEdit()">
+										<label class="ana-field">Chapter title
+											<input type="text" maxlength="80" x-model="studyRename.title" x-on:keydown.enter="studySaveRename()" />
+										</label>
+										<div class="ana-row"><button class="ana-btn ana-btn--primary" x-on:click="studySaveRename()">Save</button>
+											<button class="ana-btn" x-on:click="studyRename.open = false">Cancel</button></div>
+									</div>
+									<div class="study-new-chapter-form" x-show="studyNewChapter.open && studyCanEdit()">
+										<label class="ana-field">Title
+											<input type="text" maxlength="80" class="study-new-title" x-model="studyNewChapter.title" />
+										</label>
+										<div class="ana-field">Starts from
+											<label class="ana-inline"><input type="radio" value="here" x-model="studyNewChapter.from" /> the selected position</label>
+											<label class="ana-inline"><input type="radio" value="start" x-model="studyNewChapter.from" /> a new game (random core spells)</label>
+											<label class="ana-inline"><input type="radio" value="sfn" x-model="studyNewChapter.from" /> a position (SFN)</label>
+										</div>
+										<textarea class="ana-sfn" x-show="studyNewChapter.from === 'sfn'" x-model="studyNewChapter.sfn" placeholder="Paste an SFN string"></textarea>
+										<p class="ana-hint">To set up a position by hand, use Edit position and then "Start a new chapter here".</p>
+										<p class="study-error" x-show="studyNewChapter.error" x-text="studyNewChapter.error"></p>
+										<div class="ana-row"><button class="ana-btn ana-btn--primary study-create-chapter" x-on:click="studyCreateChapter()">Add chapter</button>
+											<button class="ana-btn" x-on:click="studyNewChapter.open = false">Cancel</button></div>
+									</div>
+								</div>
+							</div>
+
 							<!-- ============ Analysis mode ============ -->
-							<div class="ana-analyse" x-show="anaMode === 'analyse'" x-cloak>
+							<div class="ana-analyse" x-show="anaMode === 'analyse' && (!studyId || studyStatus === 'ready')" x-cloak>
 								<p class="ana-hint">Play turns on the board for either side. A different turn from an earlier position starts a variation.
 									Keys: &larr; / &rarr; back and forward, &uarr; / &darr; switch variation, Home / End.</p>
 
@@ -585,14 +702,23 @@
 									<button class="ana-btn" x-on:click="anaBack()" title="Back (left arrow)" aria-label="Back one turn">&#x25C0;</button>
 									<button class="ana-btn" x-on:click="anaForward()" title="Forward (right arrow)" aria-label="Forward one turn">&#x25B6;</button>
 									<button class="ana-btn" x-on:click="anaEnd()" title="End of line (End)" aria-label="Go to the end of the line">&raquo;</button>
-									<button class="ana-btn" x-on:click="anaDelete()" x-bind:disabled="anaCur === 0" title="Delete this turn and everything after it">Delete turn</button>
+									<button class="ana-btn ana-delete" x-on:click="anaDelete()" x-bind:disabled="!anaCanDelete()" title="Delete this turn and everything after it">Delete turn</button>
+								</div>
+								<div class="ana-glyphs" role="group" aria-label="Annotate this turn">
+									<template x-for="gl in anaGlyphs()" x-bind:key="gl.g">
+										<button class="ana-btn ana-glyph" x-bind:data-glyph="gl.g" x-text="gl.g" x-bind:title="gl.label" x-bind:aria-label="gl.label"
+											x-bind:aria-pressed="anaCurGlyph() === gl.g ? 'true' : 'false'"
+											x-bind:disabled="anaCur === 0 || !anaCanDelete()"
+											x-on:click="anaSetGlyph(gl.g)"></button>
+									</template>
 								</div>
 
 								<ul class="ana-tree" aria-label="Move tree">
 									<template x-for="row in anaRows()" x-bind:key="row.id">
 										<li>
 											<button class="ana-tree__row"
-												x-bind:class="{ 'ana-tree__row--cur': row.cur, 'ana-tree__row--alt': row.alt }"
+												x-bind:class="{ 'ana-tree__row--cur': row.cur, 'ana-tree__row--alt': row.alt, 'ana-tree__row--local': row.local }"
+												x-bind:title="row.local ? 'Only on your screen: viewers cannot change the study' : null"
 												x-bind:style="'padding-left:' + (8 + row.indent * 16) + 'px'"
 												x-bind:data-node="row.id"
 												x-on:click="anaGoto(row.id)">
@@ -600,11 +726,85 @@
 													x-bind:class="{ 'ana-tree__label--red': row.color === 'red', 'ana-tree__label--blue': row.color === 'blue' }"
 													x-text="(row.alt ? '↳ ' : '') + row.label"></span>
 												<span x-text="row.text"></span>
+												<span class="ana-tree__glyph" x-show="row.glyph" x-text="row.glyph"
+													x-bind:class="{ 'ana-tree__glyph--good': row.glyph === '!' || row.glyph === '!!', 'ana-tree__glyph--bad': row.glyph === '?' || row.glyph === '??', 'ana-tree__glyph--odd': row.glyph === '!?' || row.glyph === '?!' }"></span>
+												<span class="ana-tree__note" x-show="row.notes" x-bind:title="row.notes + (row.notes === 1 ? ' comment' : ' comments')" aria-label="has comments">&#x1F4AC;</span>
 												<span class="ana-tree__won" x-text="row.winner ? (row.winner === 'red' ? 'Red wins' : 'Blue wins') : ''"></span>
 											</button>
 										</li>
 									</template>
 								</ul>
+
+								<!-- A study's comments on the selected turn, one per author. -->
+								<div class="study-box study-comments" x-show="studyId">
+									<h3>Comments</h3>
+									<ul class="study-notes">
+										<template x-for="n in studyNodeNotes()" x-bind:key="n.uid">
+											<li class="study-note">
+												<div class="study-note__by"><span x-text="n.name"></span> &middot; <span x-text="studyNoteWhen(n.at)"></span>
+													<button class="ana-btn" style="padding:0 6px;font-size:0.8em" x-show="n.uid === studyUid || studyRole === 'owner'" x-on:click="studyDeleteNote(n.uid)">Delete</button></div>
+												<div x-text="n.text"></div>
+											</li>
+										</template>
+									</ul>
+									<p class="ana-hint" x-show="!studyNodeNotes().length">No comments on this turn.</p>
+									<div x-show="studyCanComment()">
+										<label class="ana-field"><span x-text="studyMyNote() ? 'Your comment' : 'Add a comment'"></span>
+											<textarea class="ana-sfn study-note-input" maxlength="2000" x-model="studyNoteDraft" x-on:input="studyNoteEditing = true"
+												placeholder="What is going on here?"></textarea>
+										</label>
+										<div class="ana-row"><button class="ana-btn ana-btn--primary study-save-note" x-on:click="studySaveNote()" x-bind:disabled="!studyNoteEditing">Save comment</button></div>
+									</div>
+								</div>
+
+								<!-- The owner's settings: title, visibility, people and invite links. -->
+								<div class="study-box study-settings" x-show="studyId && studyRole === 'owner'">
+									<details>
+										<summary>Study settings</summary>
+										<label class="ana-field">Title <input type="text" maxlength="80" x-model="studySettings.title" class="study-title-input" /></label>
+										<label class="ana-field">Description <textarea class="ana-sfn" maxlength="1000" x-model="studySettings.desc"></textarea></label>
+										<div class="ana-field">Who can see it
+											<template x-for="v in studyVisibilities()" x-bind:key="v.v">
+												<label class="ana-inline"><input type="radio" name="study-vis" x-bind:value="v.v" x-model="studySettings.visibility" /> <span x-text="v.label + ': ' + v.hint"></span></label>
+											</template>
+										</div>
+										<div class="ana-row"><button class="ana-btn ana-btn--primary study-save-settings" x-on:click="studySaveSettings()" x-bind:disabled="studySettings.saving">Save settings</button>
+											<span class="ana-hint" x-text="studySettings.msg"></span></div>
+									</details>
+									<details x-on:toggle="$event.target.open && !studyLinks.editor && studyLoadLinks(false)">
+										<summary>People and invite links</summary>
+										<ul class="study-members">
+											<template x-for="m in studyMembers" x-bind:key="m.uid">
+												<li><strong x-text="m.name"></strong>
+													<select x-bind:value="m.role" x-on:change="studySetMemberRole(m.uid, $event.target.value)" x-bind:aria-label="'Role of ' + m.name">
+														<option value="editor" x-bind:selected="m.role === 'editor'">Editor</option>
+														<option value="viewer" x-bind:selected="m.role === 'viewer'">Viewer</option>
+													</select>
+													<button class="ana-btn" style="padding:0 6px" x-on:click="studyRemoveMember(m.uid)">Remove</button></li>
+											</template>
+										</ul>
+										<p class="ana-hint" x-show="!studyMembers.length">Nobody else yet.</p>
+										<div class="ana-row">
+											<input type="text" maxlength="20" placeholder="Player name" x-model="studyInvite.name" class="study-invite-name" aria-label="Player name" x-on:keydown.enter="studyInviteByName()" />
+											<select x-model="studyInvite.role" aria-label="Role"><option value="editor">Editor</option><option value="viewer">Viewer</option></select>
+											<button class="ana-btn study-invite" x-on:click="studyInviteByName()" x-bind:disabled="studyInvite.busy">Invite</button>
+										</div>
+										<p class="ana-hint study-invite-msg" x-text="studyInvite.msg"></p>
+										<p class="ana-hint">Or send a link: whoever opens it joins with that role.</p>
+										<label class="ana-field">Editor link <input class="study-link study-link-editor" readonly x-bind:value="studyLinks.editor" /></label>
+										<button class="ana-btn" x-on:click="studyCopy(studyLinks.editor, 'editor')" x-text="studyLinkCopied === 'editor' ? 'Copied!' : 'Copy editor link'"></button>
+										<label class="ana-field">Viewer link <input class="study-link study-link-viewer" readonly x-bind:value="studyLinks.viewer" /></label>
+										<button class="ana-btn" x-on:click="studyCopy(studyLinks.viewer, 'viewer')" x-text="studyLinkCopied === 'viewer' ? 'Copied!' : 'Copy viewer link'"></button>
+										<div class="ana-row"><button class="ana-btn" x-on:click="studyLoadLinks(true)" title="The old links stop working; members keep their roles">New links</button></div>
+									</details>
+									<details>
+										<summary>Delete study</summary>
+										<button class="ana-btn study-delete" x-on:click="studyDelete()">Delete this study for everyone</button>
+									</details>
+								</div>
+								<div class="ana-row" x-show="studyId && studyRole !== 'owner' && studyIsMember()">
+									<button class="ana-btn study-leave" x-on:click="studyLeave()">Leave this study</button>
+								</div>
 							</div>
 
 							<!-- ============ Editor mode ============ -->
@@ -706,7 +906,7 @@
 								</ul>
 
 								<div class="ana-row">
-									<button class="ana-btn ana-btn--primary ed-analyse" x-on:click="edAnalyse()" x-bind:disabled="!edSfn || edErrors.length > 0">Analyse this position</button>
+									<button class="ana-btn ana-btn--primary ed-analyse" x-on:click="edAnalyse()" x-bind:disabled="!edSfn || edErrors.length > 0" x-text="studyId ? 'Start a new chapter here' : 'Analyse this position'">Analyse this position</button>
 								</div>
 
 								<label class="ana-field">Load a position (SFN)
@@ -739,6 +939,39 @@
 								<a class="ana-btn ana-play-local" x-bind:href="anaPlayHref('local')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play a friend on this device</a>
 							</div>
 							<p class="ana-hint ana-play-note" x-show="anaPlayNote()" x-text="anaPlayNote()"></p>
+							<!-- The plain board's tree into a study (study.js). -->
+							<div class="study-box study-save" x-show="!studyId && anaMode === 'analyse'">
+								<div class="ana-row">
+									<button class="ana-btn study-save-open" x-on:click="studySaveOpen()" x-text="studySave.open ? 'Close' : 'Save to a study'"></button>
+									<a class="ana-btn" href="studies.html">Studies</a>
+								</div>
+								<div x-show="studySave.open">
+									<p class="ana-hint">Saves the whole tree, from its start, as a chapter. Studies are shared boards: invite others to edit them with you.</p>
+									<label class="ana-field">Study
+										<select x-model="studySave.target" class="study-save-target">
+											<template x-for="o in studySave.list" x-bind:key="o.sid">
+												<option x-bind:value="o.sid" x-text="o.title" x-bind:selected="o.sid === studySave.target"></option>
+											</template>
+											<option value="new" x-bind:selected="studySave.target === 'new'">New study&hellip;</option>
+										</select>
+									</label>
+									<template x-if="studySave.target === 'new'">
+										<div>
+											<label class="ana-field">Study title <input type="text" maxlength="80" x-model="studySave.title" class="study-save-title" /></label>
+											<label class="ana-field">Who can see it
+												<select x-model="studySave.visibility">
+													<option value="unlisted">Unlisted: anyone with the link</option>
+													<option value="public">Public: listed on the Studies page</option>
+													<option value="private">Private: only people you invite</option>
+												</select>
+											</label>
+										</div>
+									</template>
+									<label class="ana-field">Chapter title <input type="text" maxlength="80" x-model="studySave.chapterTitle" class="study-save-chapter" /></label>
+									<div class="ana-row"><button class="ana-btn ana-btn--primary study-save-go" x-on:click="studySaveTree()" x-bind:disabled="studySave.busy">Save</button></div>
+									<p class="study-error" x-show="studySave.msg" x-text="studySave.msg"></p>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -843,6 +1076,8 @@
 		<script src="static/scripts/board-geometry.js"></script>
 		<!-- The analysis board (spread into gameBoard when created with { analysis: true }). -->
 		<script src="static/scripts/analysis-board.js?v=36"></script>
+		<!-- Studies: shared chapter boards (spread into gameBoard after the analysis board). -->
+		<script src="static/scripts/study.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
 		<script src="static/scripts/game-board-local.js?v=44"></script>

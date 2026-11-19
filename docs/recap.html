@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Year in Sigil - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.recap { max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 24px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); }
+		.recap h2 { font-family: 'Arvo', serif; text-align: center; margin: 0 0 4px; overflow-wrap: anywhere; }
+		.recap h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 24px 0 8px; }
+		.recap__sub { text-align: center; color: var(--color-text-dim); margin: 0 0 16px; }
+		.recap__years { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 16px; }
+		.recap__years a { padding: 2px 10px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-warm); text-decoration: none; font-size: 0.9em; }
+		.recap__years a[aria-current="true"] { border-color: var(--color-accent); background: var(--color-surface-raised); }
+		.hero { text-align: center; margin: 8px 0 18px; }
+		.hero__num { font-family: 'Arvo', serif; font-size: 3.2em; line-height: 1; color: var(--color-text-bright); }
+		.hero__label { color: var(--color-text-dim); }
+		.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+		.tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 10px 14px; min-width: 0; }
+		.tile__label { color: var(--color-text-dim); font-size: 0.85em; }
+		.tile__value { font-family: 'Arvo', serif; font-size: 1.5em; color: var(--color-text-bright); overflow-wrap: anywhere; }
+		.tile__sub { color: var(--color-text-dim); font-size: 0.85em; overflow-wrap: anywhere; }
+		.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; margin: 8px 0; }
+		.chart-wrap { position: relative; overflow: hidden; }
+		.recap-chart { display: block; max-width: 100%; height: auto; }
+		.recap-line { fill: none; stroke: var(--color-accent); stroke-width: 2; stroke-linejoin: round; }
+		.recap-end { fill: var(--color-accent); stroke: var(--color-surface); stroke-width: 2; }
+		.recap-grid { stroke: var(--color-text-dim); stroke-width: 1; opacity: 0.35; }
+		.recap-tick { fill: var(--color-text-dim); font-family: 'Overlock', sans-serif; font-size: 11px; }
+		.recap-cross { stroke: var(--color-text-dim); stroke-width: 1; opacity: 0.6; }
+		.recap-dot { fill: var(--color-accent); stroke: var(--color-surface); stroke-width: 2; }
+		.chart-tip {
+			position: absolute; pointer-events: none; background: var(--color-surface-raised); border: 1px solid var(--color-border);
+			border-radius: 4px; padding: 3px 8px; font-size: 0.85em; color: var(--color-text-warm); white-space: nowrap;
+		}
+		.list { list-style: none; margin: 0; padding: 0; }
+		.list li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
+		.list li:last-child { border-bottom: none; }
+		.muted { color: var(--color-text-dim); font-size: 0.9em; }
+		.share { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 20px 0 0; }
+		.btn {
+			appearance: none; padding: 8px 16px; background: var(--color-surface-raised); border: 2px solid var(--color-border);
+			border-radius: 6px; color: var(--color-text-warm); font-family: 'Arvo', serif; font-size: 0.95em; cursor: pointer; text-decoration: none;
+		}
+		.btn:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.share-text { width: 100%; box-sizing: border-box; min-height: 120px; font-family: 'Overlock', sans-serif; font-size: 0.95em;
+			background: var(--color-surface); color: var(--color-text-warm); border: 1px solid var(--color-border); border-radius: 6px; padding: 8px; }
+		a { color: var(--color-accent); }
+		.back-link { display: inline-block; margin-top: 20px; text-decoration: none; }
+		@media (max-width: 480px) { .recap { padding: 16px; } .hero__num { font-size: 2.6em; } }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="recapPage()">
+		<div class="recap">
+			<h2 x-text="title()">Year in Sigil</h2>
+			<p class="recap__sub" x-show="status === 'loading'">Gathering the year&hellip;</p>
+			<p class="recap__sub" x-show="status === 'nouser'"><a href="account.html">Sign in</a> to see your year in Sigil, or open a player's recap from their profile.</p>
+			<p class="recap__sub" x-show="status === 'missing'">No such player.</p>
+			<p class="recap__sub" x-show="status === 'error'" x-text="error"></p>
+
+			<template x-if="status === 'ready'">
+				<div>
+					<nav class="recap__years" aria-label="Years" x-show="years.length > 1">
+						<template x-for="y in years" x-bind:key="y">
+							<a x-bind:href="yearHref(y)" x-bind:aria-current="y === year ? 'true' : 'false'" x-text="y"></a>
+						</template>
+					</nav>
+
+					<div class="hero">
+						<div class="hero__num recap-games" x-text="r.games"></div>
+						<div class="hero__label" x-text="r.games === 1 ? 'game played' : 'games played'"></div>
+					</div>
+					<p class="recap__sub" x-show="!r.games">No games in <span x-text="year"></span>.</p>
+
+					<div class="tiles" x-show="r.games">
+						<div class="tile"><div class="tile__label">Won</div><div class="tile__value recap-wins" x-text="r.wins"></div>
+							<div class="tile__sub" x-text="r.winRate + '% of games'"></div></div>
+						<div class="tile" x-show="r.rating"><div class="tile__label">Rating</div>
+							<div class="tile__value" x-text="r.rating ? r.rating.end : ''"></div>
+							<div class="tile__sub" x-text="r.rating ? ((r.rating.end - r.rating.start >= 0 ? '+' : '') + (r.rating.end - r.rating.start) + ' this year, peak ' + r.rating.peak) : ''"></div></div>
+						<div class="tile"><div class="tile__label">Longest winning streak</div><div class="tile__value" x-text="r.longestWinStreak"></div></div>
+						<div class="tile"><div class="tile__label">Opponents</div><div class="tile__value" x-text="r.opponents"></div>
+							<div class="tile__sub" x-text="r.vsPlayers + ' games vs players, ' + r.vsAI + ' vs AI'"></div></div>
+						<div class="tile" x-show="r.busiestMonth"><div class="tile__label">Busiest month</div>
+							<div class="tile__value" x-text="r.busiestMonth ? r.busiestMonth.name : ''"></div>
+							<div class="tile__sub" x-text="r.busiestMonth ? r.busiestMonth.games + ' games' : ''"></div></div>
+						<div class="tile" x-show="r.topOpponent"><div class="tile__label">Most played</div>
+							<div class="tile__value" x-text="r.topOpponent ? r.topOpponent.name : ''"></div>
+							<div class="tile__sub" x-text="r.topOpponent ? r.topOpponent.games + ' games, ' + r.topOpponent.wins + ' won' : ''"></div></div>
+					</div>
+
+					<template x-if="r.ratingPoints.length > 1">
+						<div>
+							<h3>Rating through the year</h3>
+							<div class="card chart-wrap" x-ref="chart" x-on:mousemove="chartHover($event)" x-on:mouseleave="tip.show = false">
+								<div x-html="chartSvg"></div>
+								<div class="chart-tip" x-show="tip.show" x-bind:style="'left:' + tip.x + 'px;top:' + tip.y + 'px'" x-text="tip.text"></div>
+							</div>
+						</div>
+					</template>
+
+					<template x-if="r.bestWin">
+						<div>
+							<h3>Best win</h3>
+							<div class="card recap-best-win">
+								Against <strong x-text="r.bestWin.opponent"></strong>, rated <span x-text="r.bestWin.oppElo"></span>,
+								on <span x-text="new Date(r.bestWin.at).toLocaleDateString()"></span>.
+								<a x-show="r.bestWin.roomCode" x-bind:href="'multiplayer.html?id=' + encodeURIComponent(r.bestWin.roomCode || '')">Replay it</a>
+							</div>
+						</div>
+					</template>
+
+					<div x-show="r.spellGames">
+						<h3>Spells</h3>
+						<div class="tiles">
+							<div class="tile" x-show="r.mostCast.length"><div class="tile__label">Cast most</div>
+								<ul class="list recap-most-cast">
+									<template x-for="s in r.mostCast" x-bind:key="s.name"><li><span x-text="s.name"></span><span class="muted" x-text="s.casts + '×'"></span></li></template>
+								</ul>
+								<div class="tile__sub" x-text="'in your last ' + r.castGames + ' games of the year'"></div></div>
+							<div class="tile" x-show="r.bestSpell"><div class="tile__label">Best spell on the board</div>
+								<div class="tile__value" x-text="r.bestSpell ? r.bestSpell.name : ''"></div>
+								<div class="tile__sub" x-text="r.bestSpell ? r.bestSpell.rate + '% won in ' + r.bestSpell.games + ' games' : ''"></div></div>
+						</div>
+					</div>
+
+					<div x-show="r.puzzles.solved || r.puzzles.tried || r.puzzles.rated || r.puzzles.stormBest !== null">
+						<h3>Puzzles</h3>
+						<div class="tiles">
+							<div class="tile"><div class="tile__label">Solved</div><div class="tile__value recap-puzzles" x-text="r.puzzles.solved"></div>
+								<div class="tile__sub" x-show="r.puzzles.tried" x-text="r.puzzles.firstTry + ' of ' + r.puzzles.tried + ' new ones at the first try'"></div></div>
+							<div class="tile" x-show="r.puzzles.ratingEnd !== null"><div class="tile__label">Puzzle rating</div>
+								<div class="tile__value" x-text="r.puzzles.ratingEnd"></div>
+								<div class="tile__sub" x-text="'from ' + r.puzzles.ratingStart + ', ' + r.puzzles.rated + ' rated puzzles'"></div></div>
+							<div class="tile" x-show="r.puzzles.stormBest !== null"><div class="tile__label">Puzzle Storm best</div>
+								<div class="tile__value" x-text="r.puzzles.stormBest"></div></div>
+						</div>
+					</div>
+
+					<p class="muted" x-show="metaLoading">Reading the spells of the year's games&hellip;</p>
+
+					<div class="share">
+						<button class="btn recap-share" x-on:click="share()" x-text="shared ? 'Copied!' : (canShare ? 'Share' : 'Copy summary')"></button>
+						<a class="btn" x-bind:href="'profile.html?uid=' + encodeURIComponent(uid)">Profile</a>
+					</div>
+					<p class="muted" style="text-align:center">The summary is text with a link to this page.</p>
+					<textarea class="share-text" readonly x-show="showText" x-text="shareText()" aria-label="Summary"></textarea>
+				</div>
+			</template>
+
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/engine/position-rating.js?v=36"></script>
+	<script src="static/scripts/profile-stats.js?v=35"></script>
+	<script src="static/scripts/recap.js"></script>
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script>
+		// Rooms read per year: the spells of up to this many games, and the
+		// transcripts (casts) of the most recent RECAP_CAST_GAMES of them.
+		const RECAP_ROOM_CAP = 400;
+		const RECAP_CAST_GAMES = 120;
+		const RECAP_BATCH = 20;
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('recapPage', () => ({
+				status: 'loading',
+				error: '',
+				uid: '',
+				name: '',
+				year: new Date().getFullYear(),
+				years: [],
+				r: null,
+				metaLoading: false,
+				chartSvg: '',
+				tip: { show: false, x: 0, y: 0, text: '' },
+				canShare: typeof navigator.share === 'function',
+				shared: false,
+				showText: false,
+				_games: [],
+				_puzzle: null,
+
+				async init() {
+					const params = new URLSearchParams(location.search);
+					const y = parseInt(params.get('year'), 10);
+					if (y >= 2020 && y <= 2100) this.year = y;
+					let uid = params.get('uid');
+					if (!uid) {
+						const user = await firebaseAuthSettled();
+						if (!user || user.isAnonymous) { this.status = 'nouser'; return; }
+						uid = user.uid;
+					}
+					this.uid = uid;
+					const db = firebase.database();
+					try {
+						const [u, gamesSnap, attempts, progress, storm] = await Promise.all([
+							db.ref('users/' + uid + '/displayName').once('value'),
+							db.ref('user_games/' + uid).orderByChild('timestamp').once('value'),
+							db.ref('users/' + uid + '/puzzleAttempts').once('value').catch(() => null),
+							db.ref('users/' + uid + '/puzzleProgress').once('value').catch(() => null),
+							db.ref('users/' + uid + '/puzzleStorm').once('value').catch(() => null),
+						]);
+						if (!u.exists()) { this.status = 'missing'; return; }
+						this.name = u.val();
+						const rating = (await db.ref('users/' + uid + '/puzzle/rating').once('value').catch(() => null));
+						const games = [];
+						gamesSnap.forEach((c) => {
+							const v = c.val() || {};
+							games.push({
+								id: c.key, timestamp: v.timestamp || 0, roomCode: v.roomCode || null,
+								opponent: v.opponent || 'Unknown', opponentUid: v.opponentUid || null, opponentIsAI: !!v.opponentIsAI,
+								color: v.color || 'red', result: v.result || 'loss', rated: v.rated !== false,
+								eloBefore: typeof v.eloBefore === 'number' ? v.eloBefore : null,
+								eloAfter: typeof v.eloAfter === 'number' ? v.eloAfter : null,
+								eloChange: v.eloChange || 0,
+								opponentEloBefore: typeof v.opponentEloBefore === 'number' ? v.opponentEloBefore : null,
+							});
+						});
+						this._games = games;
+						this._puzzle = {
+							rating: rating && typeof rating.val() === 'number' ? rating.val() : null,
+							attempts: (attempts && attempts.val()) || {},
+							progress: (progress && progress.val()) || {},
+							storm: (storm && storm.val()) || null,
+						};
+						const ys = SigilRecap.yearsWithGames(games);
+						if (!ys.includes(this.year)) ys.unshift(this.year);
+						this.years = Array.from(new Set(ys)).sort((a, b) => b - a);
+						this.r = SigilRecap.summarize(games, this.year, {}, this._puzzle);
+						this.status = 'ready';
+						this.$nextTick(() => this.drawChart());
+						this.loadRooms(db);
+					} catch (e) {
+						this.status = 'error';
+						this.error = 'Could not load the year: ' + ((e && e.message) || e);
+					}
+				},
+
+				/** Spells on the board (and the casts, for recent games) from the rooms. */
+				async loadRooms(db) {
+					const games = this._games.filter((g) => g.roomCode && SigilRecap.inYear(g.timestamp, this.year))
+						.sort((a, b) => b.timestamp - a.timestamp).slice(0, RECAP_ROOM_CAP);
+					if (!games.length) return;
+					this.metaLoading = true;
+					const rooms = {};
+					const one = async (g, withCasts) => {
+						const spells = await db.ref('rooms/' + g.roomCode + '/spellNames').once('value').then((s) => s.val()).catch(() => null);
+						if (!Array.isArray(spells)) return;
+						const room = { spellNames: spells };
+						if (withCasts) {
+							const [turns, log, startSfn] = await Promise.all(['turns', 'gameLog', 'startSfn'].map((f) =>
+								db.ref('rooms/' + g.roomCode + '/' + f).once('value').then((s) => s.val()).catch(() => null)));
+							const transcript = ProfileStats.roomTranscript({ turns, gameLog: log, startSfn });
+							if (transcript.length) room.casts = SigilRecap.countCasts(transcript, g.color, spells);
+						}
+						rooms[g.roomCode] = room;
+					};
+					for (let i = 0; i < games.length; i += RECAP_BATCH) {
+						await Promise.all(games.slice(i, i + RECAP_BATCH).map((g, k) => one(g, i + k < RECAP_CAST_GAMES)));
+						this.r = SigilRecap.summarize(this._games, this.year, rooms, this._puzzle);
+					}
+					this.metaLoading = false;
+					this.$nextTick(() => this.drawChart());
+				},
+
+				title() {
+					if (this.status !== 'ready') return 'Year in Sigil';
+					return (this.name || 'Player') + '\'s ' + this.year + ' in Sigil';
+				},
+
+				yearHref(y) {
+					return 'recap.html?uid=' + encodeURIComponent(this.uid) + '&year=' + y;
+				},
+
+				pageUrl() {
+					return new URL(this.yearHref(this.year), location.href).toString();
+				},
+
+				drawChart() {
+					const el = this.$refs.chart;
+					if (!this.r || this.r.ratingPoints.length < 2 || !el) return;
+					this.chartSvg = SigilRecap.ratingSvg(this.r.ratingPoints, this.year, el.clientWidth - 32);
+				},
+
+				/** Crosshair and tooltip at the rated game nearest the pointer. */
+				chartHover(e) {
+					const wrap = this.$refs.chart;
+					const svg = wrap && wrap.querySelector('svg');
+					if (!svg) return;
+					const box = svg.getBoundingClientRect();
+					const vb = svg.viewBox.baseVal;
+					const scale = vb.width / box.width;
+					const x = (e.clientX - box.left) * scale;
+					let best = null;
+					for (const c of svg.querySelectorAll('.recap-pts circle')) {
+						const d = Math.abs(Number(c.getAttribute('cx')) - x);
+						if (!best || d < best.d) best = { d, c };
+					}
+					svg.querySelectorAll('.recap-cross, .recap-dot').forEach((n) => n.remove());
+					if (!best) return;
+					const cx = Number(best.c.getAttribute('cx')), cy = Number(best.c.getAttribute('cy'));
+					const NS = 'http://www.w3.org/2000/svg';
+					const line = document.createElementNS(NS, 'line');
+					line.setAttribute('class', 'recap-cross');
+					line.setAttribute('x1', cx); line.setAttribute('x2', cx);
+					line.setAttribute('y1', 10); line.setAttribute('y2', vb.height - 24);
+					const dot = document.createElementNS(NS, 'circle');
+					dot.setAttribute('class', 'recap-dot');
+					dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('r', 5);
+					svg.appendChild(line);
+					svg.appendChild(dot);
+					const wb = wrap.getBoundingClientRect();
+					const px = box.left - wb.left + cx / scale, py = box.top - wb.top + cy / scale;
+					this.tip = {
+						show: true,
+						x: Math.max(4, Math.min(wb.width - 150, px + 10)),
+						y: Math.max(4, py - 30),
+						text: new Date(Number(best.c.dataset.at)).toLocaleDateString() + ': ' + best.c.dataset.elo,
+					};
+				},
+
+				shareText() {
+					return this.r ? SigilRecap.shareText(this.r, this.name, this.pageUrl()) : '';
+				},
+
+				async share() {
+					const text = this.shareText();
+					if (this.canShare) {
+						try { await navigator.share({ title: this.title(), text }); return; } catch (e) { /* cancelled: copy instead */ }
+					}
+					this.showText = true;
+					if (navigator.clipboard) {
+						navigator.clipboard.writeText(text).then(() => {
+							this.shared = true;
+							setTimeout(() => { this.shared = false; }, 2000);
+						}).catch(() => {});
+					}
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

@@ -41,6 +41,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./sigilbench.html',
 	'./tutorial.html',
 	'./analysis.html',
+	'./studies.html',
+	'./classes.html',
+	'./recap.html',
 	'./annotate.html',
 	'./spells.html',
 	'./spell.html',
@@ -196,6 +199,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
+	// Studies, classes and the year recap.
+	'./static/scripts/study.js',
+	'./static/scripts/classes.js',
+	'./static/scripts/recap.js',
 	// Spell art is added by spellArtUrls() below.
 ];
 

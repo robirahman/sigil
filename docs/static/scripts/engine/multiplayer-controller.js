@@ -598,6 +598,8 @@ class MultiplayerController {
 						: 'Opponent is placing their first stone...',
 					awaiting: 'node',
 					moveoptions: isMyTurn ? moveoptions : {},
+					// The turn's placement prompt (pre-moves, game-board-multiplayer.js).
+					placement: isMyTurn,
 				});
 				if (moveoptions[resp] || !isMyTurn) break;
 				for (const buf of [this._turnBuffer, this._currentTurnActions]) {
@@ -682,6 +684,7 @@ class MultiplayerController {
 			awaiting: isMyTurn ? 'action' : 'action',
 			actionlist: isMyTurn ? actions : [],
 			moveoptions: isMyTurn ? moveoptions : {},
+			placement: isMyTurn && canmove,
 		});
 
 		const nodeNames = Object.keys(board.stones);

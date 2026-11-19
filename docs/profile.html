@@ -418,6 +418,7 @@
 
 						<div class="export-row" x-show="games.length > 0">
 							<button class="profile-btn" id="export-games" x-on:click="exportGames()" x-bind:disabled="exporting">Download all games (JSON lines)</button>
+							<a class="profile-btn" x-bind:href="'recap.html?uid=' + encodeURIComponent(user.uid)" style="text-decoration:none">Year in Sigil</a>
 							<span class="meta-note" x-show="exportStatus" x-text="exportStatus"></span>
 						</div>
 					</section>

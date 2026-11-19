@@ -18,7 +18,9 @@
  * confirmEndTurn, muteEmotes (online games: hide preset emotes and the
  * picker; its row shows only on pages with body[data-emotes]) and zen
  * (html[data-zen]; only pages with <body class="zen-page"> offer it, and Z
- * toggles it there).
+ * toggles it there) and premoves (online games: a click during the
+ * opponent's turn queues the next placement; its row shows only on pages
+ * with body[data-premoves]).
  *
  * Every change dispatches a 'sigil-settings' window event whose detail is
  * SigilSettings.snapshot(); the game components listen for artOnly (and
@@ -27,7 +29,7 @@
 const SIGIL_SETTINGS_KEY = 'sigil_settings';
 
 const SigilSettings = {
-	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false, muteEmotes: false, zen: false },
+	_defaults: { volume: 1, motion: null, colourblind: false, confirmEndTurn: false, muteEmotes: false, zen: false, premoves: true },
 
 	_load() {
 		let saved = null;
@@ -92,6 +94,7 @@ const SigilSettings = {
 			confirmEndTurn: !!s.confirmEndTurn,
 			muteEmotes: !!s.muteEmotes,
 			zen: !!s.zen,
+			premoves: s.premoves !== false,
 		};
 	},
 
@@ -216,6 +219,8 @@ function _sigilBuildDialogs() {
 	const muteEmotes = h('input', { type: 'checkbox', 'data-setting': 'muteEmotes' });
 	const hasEmotes = document.body.hasAttribute('data-emotes');
 	const zen = h('input', { type: 'checkbox', 'data-setting': 'zen' });
+	const premoves = h('input', { type: 'checkbox', 'data-setting': 'premoves' });
+	const hasPremoves = document.body.hasAttribute('data-premoves');
 	const shortcutsBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Keyboard shortcuts (?)' });
 	const closeBtn = h('button', { type: 'button', class: 'settings-panel__btn', text: 'Close' });
 
@@ -238,6 +243,8 @@ function _sigilBuildDialogs() {
 			zenRow,
 		].concat(hasEmotes ? [
 			row('Mute emotes', muteEmotes, 'Hide the preset emotes in online games.'),
+		] : [], hasPremoves ? [
+			row('Pre-moves', premoves, 'Click a node during your opponent\'s turn to queue your next placement.'),
 		] : [], [
 			h('div', { class: 'settings-panel__actions' }, [shortcutsBtn, closeBtn]),
 		])),
@@ -273,6 +280,7 @@ function _sigilBuildDialogs() {
 		confirmEnd.checked = s.confirmEndTurn;
 		muteEmotes.checked = s.muteEmotes;
 		zen.checked = s.zen;
+		premoves.checked = s.premoves;
 	};
 
 	theme.addEventListener('change', () => SigilSettings.set('theme', theme.value));
@@ -291,6 +299,7 @@ function _sigilBuildDialogs() {
 	confirmEnd.addEventListener('change', () => SigilSettings.set('confirmEndTurn', confirmEnd.checked));
 	muteEmotes.addEventListener('change', () => SigilSettings.set('muteEmotes', muteEmotes.checked));
 	zen.addEventListener('change', () => SigilSettings.set('zen', zen.checked));
+	premoves.addEventListener('change', () => SigilSettings.set('premoves', premoves.checked));
 
 	// Zen hides the header; this is the way back that stays on screen.
 	const zenExit = h('button', { type: 'button', class: 'zen-exit', text: 'Exit zen (Z)' });

@@ -470,6 +470,388 @@
         ".validate": "data.exists() && newData.hasChildren(['rating', 'plays']) && newData.child('rating').isNumber() && newData.child('rating').val() - data.child('rating').val() <= 32 && data.child('rating').val() - newData.child('rating').val() <= 32 && newData.child('plays').val() === data.child('plays').val() + 1 && newData.parent().parent().child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists() && !root.child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists()"
       }
     },
+    "studies": {
+      "$sid": {
+        ".read": "data.child('meta/visibility').val() !== 'private' || (auth !== null && (data.child('meta/owner').val() === auth.uid || data.child('members/' + auth.uid).exists()))",
+        ".write": "auth !== null && !newData.exists() && data.child('meta/owner').val() === auth.uid",
+        "meta": {
+          ".write": "auth !== null && (data.exists() ? data.child('owner').val() === auth.uid : (newData.child('owner').val() === auth.uid && auth.provider !== 'anonymous'))",
+          ".validate": "newData.hasChildren(['title', 'owner', 'visibility', 'created', 'updated']) && (!data.exists() || (newData.child('owner').val() === data.child('owner').val() && newData.child('created').val() === data.child('created').val()))",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+          },
+          "desc": {
+            ".validate": "newData.isString() && newData.val().length <= 1000"
+          },
+          "owner": {
+            ".validate": "newData.isString()"
+          },
+          "ownerName": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+          },
+          "visibility": {
+            ".validate": "(newData.val() === 'public' || newData.val() === 'unlisted' || newData.val() === 'private') && (newData.val() === 'public' || !newData.parent().parent().parent().parent().child('study_index/' + $sid).exists())"
+          },
+          "created": {
+            ".validate": "newData.isNumber() && (data.exists() || newData.val() === now)"
+          },
+          "updated": {
+            ".write": "auth !== null && root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "members": {
+          "$uid": {
+            ".write": "auth !== null && (newData.parent().parent().child('meta/owner').val() === auth.uid || (auth.uid === $uid && (!newData.exists() || (root.child('study_secrets/' + $sid + '/' + newData.child('role').val()).exists() && newData.parent().parent().parent().parent().child('study_joins/' + $sid + '/' + $uid).val() === root.child('study_secrets/' + $sid + '/' + newData.child('role').val()).val()))))",
+            ".validate": "newData.hasChildren(['role', 'name', 'at']) && $uid !== root.child('studies/' + $sid + '/meta/owner').val() && root.child('studies/' + $sid + '/meta').exists()",
+            "role": {
+              ".validate": "newData.val() === 'editor' || newData.val() === 'viewer'"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+            },
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() <= now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "chapterList": {
+          "$ch": {
+            ".write": "auth !== null && (newData.parent().parent().child('meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor')",
+            ".validate": "$ch.length <= 40 && newData.hasChildren(['title', 'order', 'by'])",
+            "title": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+            },
+            "order": {
+              ".validate": "newData.isNumber()"
+            },
+            "by": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            "created": {
+              ".validate": "newData.isNumber() && newData.val() <= now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "chapters": {
+          "$ch": {
+            ".write": "auth !== null && (newData.parent().parent().child('meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor')",
+            "nodes": {
+              "$node": {
+                ".validate": "$node.length <= 40 && newData.hasChildren(['sfn', 'by', 'at']) && (data.exists() ? (newData.child('sfn').val() === data.child('sfn').val() && newData.child('p').val() === data.child('p').val()) : ($node === 'root' ? !newData.child('p').exists() : (newData.child('p').isString() && newData.parent().child(newData.child('p').val()).exists())))",
+                "p": {
+                  ".validate": "newData.isString() && newData.val().length <= 40"
+                },
+                "sfn": {
+                  ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 400"
+                },
+                "t": {
+                  ".validate": "newData.isString() && newData.val().length <= 6000"
+                },
+                "s": {
+                  ".validate": "newData.val() === 'red' || newData.val() === 'blue' || newData.val() === 'both'"
+                },
+                "w": {
+                  ".validate": "newData.val() === 'red' || newData.val() === 'blue'"
+                },
+                "g": {
+                  ".validate": "newData.val() === '!' || newData.val() === '?' || newData.val() === '!!' || newData.val() === '??' || newData.val() === '!?' || newData.val() === '?!'"
+                },
+                "m": {
+                  "$mark": {
+                    ".validate": "$mark.matches(/^[a-z][0-9]{1,2}-[a-z][0-9]{1,2}$/) && (newData.val() === 'green' || newData.val() === 'red' || newData.val() === 'blue' || newData.val() === 'yellow')"
+                  }
+                },
+                "by": {
+                  ".validate": "newData.isString() && (data.exists() ? newData.val() === data.val() : newData.val() === auth.uid)"
+                },
+                "at": {
+                  ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() : newData.val() <= now)"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "notes": {
+          "$ch": {
+            ".write": "!newData.exists() && auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor') && !newData.parent().parent().child('chapterList/' + $ch).exists()",
+            "$node": {
+              ".write": "!newData.exists() && auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor') && !newData.parent().parent().parent().child('chapters/' + $ch + '/nodes/' + $node).exists()",
+              "$uid": {
+                ".write": "auth !== null && ((auth.uid === $uid && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid + '/role').val() === 'editor')) || (!newData.exists() && root.child('studies/' + $sid + '/meta/owner').val() === auth.uid))",
+                ".validate": "newData.hasChildren(['text', 'name', 'at']) && root.child('studies/' + $sid + '/chapters/' + $ch + '/nodes/' + $node).exists()",
+                "text": {
+                  ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 2000"
+                },
+                "name": {
+                  ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+                },
+                "at": {
+                  ".validate": "newData.isNumber() && newData.val() <= now"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "study_secrets": {
+      "$sid": {
+        ".read": "auth !== null && root.child('studies/' + $sid + '/meta/owner').val() === auth.uid",
+        ".write": "auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || newData.parent().parent().child('studies/' + $sid + '/meta/owner').val() === auth.uid)",
+        "editor": {
+          ".validate": "newData.isString() && newData.val().length >= 16 && newData.val().length <= 64"
+        },
+        "viewer": {
+          ".validate": "newData.isString() && newData.val().length >= 16 && newData.val().length <= 64"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "study_joins": {
+      "$sid": {
+        ".write": "auth !== null && !newData.exists() && root.child('studies/' + $sid + '/meta/owner').val() === auth.uid",
+        "$uid": {
+          ".write": "auth !== null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length <= 64"
+        }
+      }
+    },
+    "study_index": {
+      ".read": true,
+      ".indexOn": [
+        "updated"
+      ],
+      "$sid": {
+        ".write": "auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || newData.parent().parent().child('studies/' + $sid + '/meta/owner').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['title', 'ownerName', 'owner', 'updated']) && newData.parent().parent().child('studies/' + $sid + '/meta/visibility').val() === 'public' && newData.child('owner').val() === newData.parent().parent().child('studies/' + $sid + '/meta/owner').val()",
+        "title": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "ownerName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "owner": {
+          ".validate": "newData.isString()"
+        },
+        "updated": {
+          ".validate": "newData.isNumber() && newData.val() <= now"
+        },
+        "chapters": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 64"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "user_studies": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "$sid": {
+          ".write": "auth !== null && (auth.uid === $uid || root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || newData.parent().parent().parent().child('studies/' + $sid + '/meta/owner').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['title', 'role', 'at']) && (newData.child('role').val() !== 'owner' || newData.parent().parent().parent().child('studies/' + $sid + '/meta/owner').val() === $uid)",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+          },
+          "role": {
+            ".validate": "newData.val() === 'owner' || newData.val() === 'editor' || newData.val() === 'viewer'"
+          },
+          "at": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "study_presence": {
+      "$sid": {
+        ".read": "(root.child('studies/' + $sid + '/meta/visibility').val() !== 'private' || (auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid).exists())))",
+        "$uid": {
+          ".write": "auth !== null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['name', 'at']) && root.child('studies/' + $sid + '/meta').exists() && (root.child('studies/' + $sid + '/meta/visibility').val() !== 'private' || (auth !== null && (root.child('studies/' + $sid + '/meta/owner').val() === auth.uid || root.child('studies/' + $sid + '/members/' + auth.uid).exists())))",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+          },
+          "ch": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "node": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "at": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "classes": {
+      "$cid": {
+        ".write": "auth !== null && !newData.exists() && data.child('info/teacher').val() === auth.uid",
+        "info": {
+          ".read": "auth !== null && (data.child('teacher').val() === auth.uid || root.child('classes/' + $cid + '/members/' + auth.uid).exists())",
+          ".write": "auth !== null && auth.provider !== 'anonymous' && (data.exists() ? data.child('teacher').val() === auth.uid : newData.child('teacher').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['name', 'teacher', 'teacherName', 'created']) && (!data.exists() || (newData.child('teacher').val() === data.child('teacher').val() && newData.child('created').val() === data.child('created').val()))",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+          },
+          "teacher": {
+            ".validate": "newData.isString()"
+          },
+          "teacherName": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+          },
+          "created": {
+            ".validate": "newData.isNumber() && (data.exists() || newData.val() === now)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "code": {
+          ".read": "auth !== null && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid",
+          ".write": "auth !== null && (root.child('classes/' + $cid + '/info/teacher').val() === auth.uid || newData.parent().child('info/teacher').val() === auth.uid)",
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{6,8}$/) && newData.parent().parent().parent().child('class_codes/' + newData.val() + '/cid').val() === $cid"
+        },
+        "members": {
+          ".read": "auth !== null && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid",
+          "$uid": {
+            ".read": "auth !== null && auth.uid === $uid",
+            ".write": "auth !== null && ((auth.uid === $uid && (!newData.exists() || (!data.exists() && auth.provider !== 'anonymous' && root.child('class_codes/' + newData.child('code').val() + '/cid').val() === $cid))) || (!newData.exists() && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid))",
+            ".validate": "newData.hasChildren(['name', 'joined', 'code']) && $uid !== root.child('classes/' + $cid + '/info/teacher').val()",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+            },
+            "joined": {
+              ".validate": "newData.isNumber() && newData.val() === now"
+            },
+            "code": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{6,8}$/)"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "assignments": {
+          ".read": "auth !== null && (root.child('classes/' + $cid + '/info/teacher').val() === auth.uid || root.child('classes/' + $cid + '/members/' + auth.uid).exists())",
+          "$aid": {
+            ".write": "auth !== null && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid",
+            ".validate": "$aid.length <= 40 && newData.hasChildren(['kind', 'title', 'created']) && (newData.child('kind').val() !== 'puzzles' || newData.child('puzzles').hasChildren()) && (newData.child('kind').val() !== 'study' || newData.child('study').exists()) && (newData.child('kind').val() !== 'link' || newData.child('url').exists())",
+            "kind": {
+              ".validate": "newData.val() === 'puzzles' || newData.val() === 'study' || newData.val() === 'link'"
+            },
+            "title": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+            },
+            "note": {
+              ".validate": "newData.isString() && newData.val().length <= 500"
+            },
+            "puzzles": {
+              "$pid": {
+                ".validate": "$pid.length <= 64 && newData.isNumber() && newData.val() >= 0 && newData.val() < 100"
+              }
+            },
+            "study": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "url": {
+              ".validate": "newData.isString() && newData.val().length <= 300 && newData.val().matches(/^[a-z0-9_-]+\\.html([?#][-a-zA-Z0-9_=&%.,:;+~!*()\\/?#]*)?$/)"
+            },
+            "due": {
+              ".validate": "newData.isNumber()"
+            },
+            "created": {
+              ".validate": "newData.isNumber() && newData.val() <= now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "done": {
+          "$aid": {
+            ".read": "auth !== null && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid",
+            "$uid": {
+              ".read": "auth !== null && auth.uid === $uid",
+              ".write": "auth !== null && ((auth.uid === $uid && root.child('classes/' + $cid + '/members/' + auth.uid).exists()) || (!newData.exists() && root.child('classes/' + $cid + '/info/teacher').val() === auth.uid))",
+              ".validate": "newData.isNumber() && newData.val() <= now && root.child('classes/' + $cid + '/assignments/' + $aid).exists()"
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "class_codes": {
+      "$code": {
+        ".read": "auth !== null",
+        ".write": "auth !== null && (data.exists() ? root.child('classes/' + data.child('cid').val() + '/info/teacher').val() === auth.uid : newData.parent().parent().child('classes/' + newData.child('cid').val() + '/info/teacher').val() === auth.uid)",
+        ".validate": "$code.matches(/^[A-Z0-9]{6,8}$/) && newData.hasChildren(['cid', 'name', 'teacherName']) && (!data.exists() || newData.child('cid').val() === data.child('cid').val())",
+        "cid": {
+          ".validate": "newData.isString() && newData.val().length <= 40"
+        },
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+        },
+        "teacherName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "user_classes": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "$cid": {
+          ".write": "auth !== null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['name', 'role', 'at']) && (newData.child('role').val() === 'teacher' ? newData.parent().parent().parent().child('classes/' + $cid + '/info/teacher').val() === $uid : newData.parent().parent().parent().child('classes/' + $cid + '/members/' + $uid).exists())",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+          },
+          "role": {
+            ".validate": "newData.val() === 'teacher' || newData.val() === 'student'"
+          },
+          "at": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
     "admins": {
       "$uid": {
         ".read": "auth !== null && auth.uid === $uid"

@@ -358,6 +358,14 @@
 			cursor: pointer;
 		}
 		.emote-picker__item:hover, .emote-picker__item:focus-visible { background: var(--color-surface-hover); }
+		/* A queued pre-move: a dotted ring in the player's colour (an outline,
+		   so it stacks with the last-play ring and the stone art). */
+		.stone-node--premove { outline: 3px dotted #fff; outline-offset: 3px; }
+		.stone-node--premove-red { outline-color: #e0604a; }
+		.stone-node--premove-blue { outline-color: #5aa0e6; }
+		.premove-line { font-family: 'Overlock', sans-serif; font-size: 0.9em; color: var(--color-text-muted, #999); margin: 4px 0; text-align: center; }
+		.premove-line strong { color: var(--color-text-warm); }
+		.premove-line .action-button { font-size: 0.85em; padding: 2px 8px; margin-left: 6px; }
 	</style>
 	<script>
 		var webpDetector = new Image();
@@ -367,7 +375,7 @@
 	<script src="static/scripts/theme-manager.js"></script>
 	<script src="static/scripts/settings-panel.js?v=35"></script>
 </head>
-<body data-emotes>
+<body data-emotes data-premoves>
 	<header>
 		<div class="container">
 			<div class="header-container">
@@ -683,7 +691,8 @@
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })"
 				x-on:keydown.window="handleReviewKey($event)"
-				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly; setEmotesMuted($event.detail.muteEmotes)"
+				x-on:keydown.escape.window="cancelPremove()"
+				x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly; setEmotesMuted($event.detail.muteEmotes); if ($event.detail.premoves === false) cancelPremove()"
 				x-bind:class="{ 'review-with-ai-active': reviewMode }">
 				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-on:sigil-settings.window="isMuted = $event.detail.muted" x-bind:aria-label="isMuted ? 'Unmute sound' : 'Mute sound'" x-bind:title="isMuted ? 'Unmute sound' : 'Mute sound'" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: soundManager.muted }"></button>
 				<button class="in-game-share" x-on:click="copyGameLink" x-text="linkCopied ? 'Copied!' : 'Share game link'"></button>
@@ -867,6 +876,13 @@
 						<div x-show="syncBanner" class="connection-banner__line connection-banner__line--self" x-text="syncBanner"></div>
 						<div x-show="opponentAwayText" class="connection-banner__line" x-text="opponentAwayText"></div>
 					</div>
+					<!-- Pre-move: the placement queued during the opponent's turn. -->
+					<div class="premove-line" role="status" aria-live="polite" x-show="premove || premoveNote || (canPremove && turnsPlayed() < 2)" x-cloak>
+						<span x-show="premove">Pre-move: <strong x-text="premoveLabel()"></strong>, placed when your turn comes if it is still legal.
+							<button class="action-button premove-cancel" x-on:click="cancelPremove()">Cancel</button></span>
+						<span x-show="!premove && premoveNote" x-text="premoveNote"></span>
+						<span x-show="!premove && !premoveNote">While your opponent moves, click a node to queue your next placement.</span>
+					</div>
 					<!-- A player on vacation: their correspondence clock is stopped. -->
 					<div class="connection-banner vacation-banner" role="status" aria-live="polite" x-show="vacationText" x-cloak>
 						<div class="connection-banner__line" x-text="vacationText"></div>
@@ -915,7 +931,7 @@
 							<svg class="push-arrows" x-ref="pushArrows" aria-hidden="true"></svg>
 							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }" x-bind:style="scoreStyle()"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node], 'stone-node--engine-hint': liveAnalysisHint(node) }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
+								<button class="stone-node" x-bind:aria-label="nodeLabel(node)" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node], 'stone-node--engine-hint': liveAnalysisHint(node), 'stone-node--premove': premove === node, [`stone-node--premove-${myColor}`]: premove === node }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
 							</template>
 						</div>
 					</div>

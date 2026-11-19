@@ -129,3 +129,23 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Studies, classes, recap and pre-moves (emulators)
+
+```sh
+(cd docs && python3 -m http.server 8810) &
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/studies-emulator-test.js http://localhost:8810 &&
+   node ../tools/browser/classes-recap-emulator-test.js http://localhost:8810 &&
+   node ../tools/browser/premove-emulator-test.js http://localhost:8810'
+```
+
+`studies-emulator-test.js`: an owner, an invited editor, a guest viewer (by link) and a stranger on one
+study: turns, symbols, an arrow and a comment reach the others live, a viewer's turn stays local, deletes
+and new chapters propagate, a private study is closed to the stranger, the plain board saves its tree as a
+chapter, studies.html lists it. `classes-recap-emulator-test.js`: a class with three kinds of assignment,
+two students joining by code, what each may read, the teacher's progress table, a removal; then the
+recap of a seeded year. `premove-emulator-test.js`: a pre-move queued during the opponent's turn is
+placed on arrival through the click path (and sent only with the turn), an illegal one is dropped,
+Escape and the setting turn it off. The rules themselves: `functions/test/studies-classes-rules.test.js`
+(`npm run test:rules`).

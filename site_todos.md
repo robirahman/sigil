@@ -102,7 +102,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### During a game
 
 - [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
-- [ ] **Add pre-moves** (queue a move during the opponent's turn).
+- [x] **Add pre-moves** (queue a move during the opponent's turn).
+  Done: online games; a click during the opponent's turn queues the regular placement (dotted ring, "Pre-move: …" line, Cancel / Escape / click again), played through handleNodeClick when the turn's placement prompt arrives if still legal, else dropped with a note; never dashes or casts; skipped if the game ended, the flag fell or anything else came first. A Pre-moves switch in the settings panel.
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
 - [x] **Add zen mode** that hides everything but the board and clocks.
   Done: Z or the settings panel (stored in `sigil_settings`) on game.html and in multiplayer games; keeps the board, clocks and the buttons a turn needs, with an Exit zen button.
@@ -123,7 +124,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add live engine analysis to game reviews and spectating.**
   Done: live-analysis.js, a "Live analysis" switch on game.html and multiplayer.html: eval, win odds, depth, best turn (ringed on the board), expected reply and how the assessment changed, deepening for ~2 minutes per position ("Go deeper" for more). Anyone in the review of a finished game; while a game is in progress only developer accounts spectating it, never its players.
   A spectator who joins mid-game replays the room's turns so far, so its repetition counts and the engine's history match a spectator who watched from the start.
-- [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
+- [x] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
+  Done: analysis.html?study=<id> (study.js) and studies.html. Chapters, the move tree, !, ?, !!, ??, !?, ?!, arrows and circles and one comment per author per turn, live over the RTDB; owner + editors edit, viewers follow (their own turns stay local); public / unlisted / private, invites by name or editor/viewer links; presence; "Save to a study" from the plain board. Rules enforce the roles.
 - [x] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
   Done: `analyzeGame` task queue (functions/analysis.js), enqueued by `rateGame`, writes `game_evals/{room}` at the Quick preset.
 - [x] **Add an evaluation cache** so already-analysed positions load instantly.
@@ -144,7 +146,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 - [ ] **Add guided practice drills** (dashing, cast timing, pushes).
 - [ ] **Add a node-naming trainer** for the board coordinates.
-- [ ] **Add classes** where teachers manage students and track their progress.
+- [x] **Add classes** where teachers manage students and track their progress.
+  Done: classes.html. Join by code after a consent page; assignments (puzzles, a study, a site page such as a lesson or drill); the teacher's table shows rating, games, puzzle rating, solves and assignment status from the students' own (public) records; rules keep students from seeing each other.
 - [ ] **Add a coach directory and a video library.**
 - [x] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
 
@@ -168,7 +171,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add private notes on players** and bookmarking games.
 - [ ] **Add a streamer listing.**
 - [ ] **Add Sigil TV** showing the top-rated live game.
-- [ ] **Add an end-of-year recap** of each player's games.
+- [x] **Add an end-of-year recap** of each player's games.
+  Done: recap.html ("Year in Sigil", recap.js), computed in the browser from user_games, the rooms' spells and transcripts and the puzzle records; shared as text with a link (no image export on main yet). Linked from the menu and profiles.
 - [ ] **Add supporter patrons** with a badge.
 
 ### Profile & account
