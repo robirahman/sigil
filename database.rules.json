@@ -614,6 +614,616 @@
         ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
         ".validate": "newData.val() === now && (!data.exists() || data.val() <= now - 60000)"
       }
+    },
+    "community_config": {
+      ".read": true,
+      "push": {
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "community_prefs": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid",
+        "dm": {
+          ".validate": "newData.val() === 'all' || newData.val() === 'follows' || newData.val() === 'none'"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "notify_prefs": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid",
+        "$type": {
+          ".validate": "$type.matches(/^(message|follow|challenge|forum|blog|team|game)$/) && newData.isBoolean()"
+        }
+      }
+    },
+    "community_mutes": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['until', 'by', 'at'])",
+        "until": {
+          ".validate": "newData.isNumber()"
+        },
+        "reason": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 500"
+        },
+        "by": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "at": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "forum_mods": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.val() === true"
+      }
+    },
+    "rate_limits": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "dm": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 1000) && ((!data.exists() || data.child('since').val() <= now - 3600000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 200))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "dmnew": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 10000) && ((!data.exists() || data.child('since').val() <= now - 86400000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 30))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "forum": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 10000) && ((!data.exists() || data.child('since').val() <= now - 3600000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 30))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "blog": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 30000) && ((!data.exists() || data.child('since').val() <= now - 86400000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 10))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "comment": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 5000) && ((!data.exists() || data.child('since').val() <= now - 3600000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 60))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "team": {
+          ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+          ".validate": "newData.hasChildren(['at', 'n', 'since']) && newData.child('at').val() === now && (!data.exists() || data.child('at').val() <= now - 3000) && ((!data.exists() || data.child('since').val() <= now - 86400000) ? (newData.child('since').val() === now && newData.child('n').val() === 1) : (newData.child('since').val() === data.child('since').val() && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= 30))",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "n": {
+            ".validate": "newData.isNumber()"
+          },
+          "since": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && auth.uid === $uid && !newData.exists()",
+        ".indexOn": [
+          "at"
+        ],
+        "$nid": {
+          ".write": "auth !== null && auth.uid === $uid && !newData.exists()",
+          "read": {
+            ".write": "auth !== null && auth.uid === $uid && data.parent().exists() && newData.exists()",
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
+    },
+    "dm_convos": {
+      "$cid": {
+        ".read": "auth !== null && (data.child('a').val() === auth.uid || data.child('b').val() === auth.uid || (root.child('admins/' + auth.uid).val() === true && root.child('dm_flags/' + $cid).exists()))",
+        ".write": "auth !== null && auth.provider !== 'anonymous' && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['a', 'b', 'at']) && newData.child('a').val() < newData.child('b').val() && $cid === newData.child('a').val() + '_' + newData.child('b').val() && (newData.child('a').val() === auth.uid || newData.child('b').val() === auth.uid) && newData.child('at').val() === now && newData.parent().parent().child('rate_limits/' + auth.uid + '/dmnew/at').val() === now",
+        "a": {
+          ".validate": "newData.isString() && newData.val().length <= 128 && !newData.val().contains('_') && root.child('users/' + newData.val() + '/displayName').exists() && !root.child('deleted_users/' + newData.val()).exists()"
+        },
+        "b": {
+          ".validate": "newData.isString() && newData.val().length <= 128 && !newData.val().contains('_') && root.child('users/' + newData.val() + '/displayName').exists() && !root.child('deleted_users/' + newData.val()).exists()"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "dm_messages": {
+      "$cid": {
+        ".read": "auth !== null && ((root.child('dm_convos/' + $cid + '/a').val() === auth.uid || root.child('dm_convos/' + $cid + '/b').val() === auth.uid) || (root.child('admins/' + auth.uid).val() === true && root.child('dm_flags/' + $cid).exists()))",
+        "$mid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && !data.exists() && newData.exists()",
+          ".validate": "$mid.length <= 40 && newData.hasChildren(['from', 'to', 'text', 'at']) && newData.child('from').val() === auth.uid && newData.child('at').val() === now && ((newData.parent().parent().parent().child('dm_convos/' + $cid + '/a').val() === auth.uid && newData.parent().parent().parent().child('dm_convos/' + $cid + '/b').val() === newData.child('to').val()) || (newData.parent().parent().parent().child('dm_convos/' + $cid + '/b').val() === auth.uid && newData.parent().parent().parent().child('dm_convos/' + $cid + '/a').val() === newData.child('to').val())) && !root.child('blocks/' + newData.child('to').val() + '/' + auth.uid).exists() && !root.child('blocks/' + auth.uid + '/' + newData.child('to').val()).exists() && !root.child('deleted_users/' + newData.child('to').val()).exists() && root.child('community_prefs/' + newData.child('to').val() + '/dm').val() !== 'none' && (root.child('community_prefs/' + newData.child('to').val() + '/dm').val() !== 'follows' || root.child('follows/' + newData.child('to').val() + '/' + auth.uid).val() === true || root.child('dm_convos/' + $cid).exists()) && newData.parent().parent().parent().child('rate_limits/' + auth.uid + '/dm/at').val() === now && newData.parent().parent().parent().child('dm_index/' + auth.uid + '/' + $cid + '/lastMsg').val() === $mid && newData.parent().parent().parent().child('dm_index/' + newData.child('to').val() + '/' + $cid + '/lastMsg').val() === $mid",
+          "from": {
+            ".validate": "newData.isString()"
+          },
+          "to": {
+            ".validate": "newData.isString()"
+          },
+          "text": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 2000"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "dm_index": {
+      "$owner": {
+        ".read": "auth !== null && auth.uid === $owner",
+        ".indexOn": [
+          "last"
+        ],
+        "$cid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && (auth.uid === $owner || (newData.exists() && (newData.parent().parent().parent().child('dm_convos/' + $cid + '/a').val() === auth.uid || newData.parent().parent().parent().child('dm_convos/' + $cid + '/b').val() === auth.uid)))",
+          ".validate": "newData.hasChildren(['with', 'last', 'lastFrom', 'lastMsg']) && ($cid === $owner + '_' + newData.child('with').val() || $cid === newData.child('with').val() + '_' + $owner) && ((data.exists() && newData.child('lastMsg').val() === data.child('lastMsg').val()) ? (newData.child('last').val() === data.child('last').val() && newData.child('lastFrom').val() === data.child('lastFrom').val() && newData.child('with').val() === data.child('with').val() && auth.uid === $owner) : (newData.child('last').val() === now && newData.child('lastFrom').val() === auth.uid && !root.child('dm_messages/' + $cid + '/' + newData.child('lastMsg').val()).exists() && newData.parent().parent().parent().child('dm_messages/' + $cid + '/' + newData.child('lastMsg').val() + '/from').val() === auth.uid))",
+          "with": {
+            ".validate": "newData.isString()"
+          },
+          "last": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastFrom": {
+            ".validate": "newData.isString()"
+          },
+          "lastMsg": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+          },
+          "read": {
+            ".validate": "newData.isNumber() && (newData.val() === data.val() || (auth.uid === $owner && newData.val() === now))"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "dm_flags": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+      "$cid": {
+        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true && !newData.exists()",
+        "$mid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && !data.exists() && newData.exists() && (root.child('dm_convos/' + $cid + '/a').val() === auth.uid || root.child('dm_convos/' + $cid + '/b').val() === auth.uid) && root.child('dm_messages/' + $cid + '/' + $mid + '/to').val() === auth.uid",
+          ".validate": "newData.val() === now && newData.parent().parent().parent().child('report_limits/' + auth.uid).val() === now"
+        }
+      }
+    },
+    "content_reports": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+      ".indexOn": [
+        "at",
+        "resolved",
+        "target"
+      ],
+      "$rid": {
+        ".write": "auth !== null && newData.exists() && ((!data.exists() && auth.provider !== 'anonymous') || (data.exists() && root.child('admins/' + auth.uid).val() === true))",
+        ".validate": "newData.hasChildren(['by', 'kind', 'target', 'reason', 'at']) && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('target').val() === data.child('target').val() && newData.child('reason').val() === data.child('reason').val() && newData.child('note').val() === data.child('note').val() && newData.child('at').val() === data.child('at').val() && newData.child('conv').val() === data.child('conv').val() && newData.child('msg').val() === data.child('msg').val() && newData.child('cat').val() === data.child('cat').val() && newData.child('thread').val() === data.child('thread').val() && newData.child('post').val() === data.child('post').val() && newData.child('comment').val() === data.child('comment').val() && newData.child('team').val() === data.child('team').val()) : (newData.child('by').val() === auth.uid && newData.child('target').val() !== auth.uid && newData.child('at').val() === now && newData.parent().parent().child('report_limits/' + auth.uid).val() === now && !newData.hasChild('resolved') && !newData.hasChild('adminNote') && ((newData.child('kind').val() === 'dm' && newData.hasChildren(['conv', 'msg']) && root.child('dm_messages/' + newData.child('conv').val() + '/' + newData.child('msg').val() + '/from').val() === newData.child('target').val() && root.child('dm_messages/' + newData.child('conv').val() + '/' + newData.child('msg').val() + '/to').val() === auth.uid && newData.parent().parent().child('dm_flags/' + newData.child('conv').val() + '/' + newData.child('msg').val()).val() === now) || (newData.child('kind').val() === 'forum' && newData.hasChildren(['cat', 'thread', 'post']) && root.child('forum_posts/' + newData.child('cat').val() + '/' + newData.child('thread').val() + '/' + newData.child('post').val() + '/by').val() === newData.child('target').val()) || (newData.child('kind').val() === 'blog' && newData.hasChildren(['post']) && root.child('blog_posts/' + newData.child('post').val() + '/by').val() === newData.child('target').val()) || (newData.child('kind').val() === 'comment' && newData.hasChildren(['post', 'comment']) && root.child('blog_comments/' + newData.child('post').val() + '/' + newData.child('comment').val() + '/by').val() === newData.child('target').val()) || (newData.child('kind').val() === 'team' && newData.hasChildren(['team']) && root.child('teams/' + newData.child('team').val() + '/leader').val() === newData.child('target').val()))))",
+        "by": {
+          ".validate": "newData.isString()"
+        },
+        "kind": {
+          ".validate": "newData.val() === 'dm' || newData.val() === 'forum' || newData.val() === 'blog' || newData.val() === 'comment' || newData.val() === 'team'"
+        },
+        "target": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "reason": {
+          ".validate": "newData.val() === 'spam' || newData.val() === 'abuse' || newData.val() === 'offensive' || newData.val() === 'other'"
+        },
+        "note": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 500"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "conv": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "msg": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "cat": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "thread": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "post": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "comment": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "team": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "resolved": {
+          ".validate": "newData.isBoolean()"
+        },
+        "adminNote": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 1000"
+        },
+        "action": {
+          ".validate": "newData.val() === 'removed' || newData.val() === 'muted' || newData.val() === 'none'"
+        },
+        "resolvedBy": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "resolvedAt": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "forum_threads": {
+      "$cat": {
+        ".read": true,
+        ".indexOn": [
+          "lastAt",
+          "pinned"
+        ],
+        "$tid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && ($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || $cat === 'announcements' || ($cat.beginsWith('team:') && root.child('teams/' + $cat.replace('team:', '')).exists())) && ((!data.exists() && newData.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && ($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || ($cat === 'announcements' && ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod')))) || ($cat.beginsWith('team:') && root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid).exists()))) || (data.exists() && newData.exists() && ((!root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && ($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || $cat === 'announcements' || ($cat.beginsWith('team:') && root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid).exists()))) || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))) || (data.exists() && !newData.exists() && ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))) && !newData.parent().parent().parent().child('forum_posts/' + $cat + '/' + $tid).exists()))",
+          ".validate": "$tid.length <= 40 && newData.hasChildren(['title', 'by', 'at', 'lastAt', 'lastBy', 'lastPost']) && newData.child('replies').val() === data.child('replies').val() && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('at').val() === data.child('at').val()) : (newData.child('by').val() === auth.uid && newData.child('at').val() === now)) && ((data.exists() && newData.child('lastPost').val() === data.child('lastPost').val()) ? (newData.child('lastAt').val() === data.child('lastAt').val() && newData.child('lastBy').val() === data.child('lastBy').val()) : (newData.child('lastAt').val() === now && newData.child('lastBy').val() === auth.uid && !root.child('forum_posts/' + $cat + '/' + $tid + '/' + newData.child('lastPost').val()).exists() && newData.parent().parent().parent().child('forum_posts/' + $cat + '/' + $tid + '/' + newData.child('lastPost').val() + '/by').val() === auth.uid))",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 120 && (!data.exists() || newData.val() === data.val() || data.parent().child('by').val() === auth.uid || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))"
+          },
+          "by": {
+            ".validate": "newData.isString()"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastBy": {
+            ".validate": "newData.isString()"
+          },
+          "lastPost": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+          },
+          "replies": {
+            ".validate": "newData.val() === data.val()"
+          },
+          "pinned": {
+            ".validate": "newData.isBoolean() && (newData.val() === data.val() || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))"
+          },
+          "locked": {
+            ".validate": "newData.isBoolean() && (newData.val() === data.val() || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "forum_posts": {
+      "$cat": {
+        "$tid": {
+          ".read": true,
+          ".write": "auth !== null && auth.provider !== 'anonymous' && !newData.exists() && ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))) && !newData.parent().parent().parent().child('forum_threads/' + $cat + '/' + $tid).exists()",
+          "$pid": {
+            ".write": "auth !== null && auth.provider !== 'anonymous' && ($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || $cat === 'announcements' || ($cat.beginsWith('team:') && root.child('teams/' + $cat.replace('team:', '')).exists())) && newData.exists() && ((!data.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && (root.child('forum_threads/' + $cat + '/' + $tid).exists() ? (($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || $cat === 'announcements' || ($cat.beginsWith('team:') && root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid).exists())) && (root.child('forum_threads/' + $cat + '/' + $tid + '/locked').val() !== true || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))) : ($cat.matches(/^(general|strategy|spells|variants|puzzles|feedback|offtopic)$/) || ($cat === 'announcements' && ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod')))) || ($cat.beginsWith('team:') && root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid).exists())))) || (data.exists() && ((data.child('by').val() === auth.uid && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now)) || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))))",
+            ".validate": "$pid.length <= 40 && newData.hasChildren(['by', 'at']) && (newData.hasChild('text') ? !newData.hasChild('removed') : newData.hasChild('removed')) && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('at').val() === data.child('at').val() && !data.hasChild('removed') && (newData.hasChild('removed') || (data.child('by').val() === auth.uid && newData.child('editedAt').val() === now && (root.child('forum_threads/' + $cat + '/' + $tid + '/locked').val() !== true || ((root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true) || ($cat.beginsWith('team:') && (root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $cat.replace('team:', '') + '/' + auth.uid + '/role').val() === 'mod'))))))) : (newData.child('by').val() === auth.uid && newData.child('at').val() === now && !newData.hasChild('removed') && !newData.hasChild('editedAt') && newData.parent().parent().parent().parent().child('rate_limits/' + auth.uid + '/forum/at').val() === now && newData.parent().parent().parent().parent().child('forum_threads/' + $cat + '/' + $tid + '/lastPost').val() === $pid))",
+            "by": {
+              ".validate": "newData.isString()"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 10000"
+            },
+            "editedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "removed": {
+              ".validate": "newData.hasChildren(['by', 'at']) && newData.child('by').val() === auth.uid && newData.child('at').val() === now",
+              "by": {
+                ".validate": "newData.isString()"
+              },
+              "at": {
+                ".validate": "newData.isNumber()"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    },
+    "blog_posts": {
+      ".read": true,
+      ".indexOn": [
+        "by",
+        "at",
+        "site"
+      ],
+      "$pid": {
+        ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now)) || (data.exists() && newData.exists() && data.child('by').val() === auth.uid && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now)) || (data.exists() && !newData.exists() && (data.child('by').val() === auth.uid || (root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true)) && !newData.parent().parent().child('blog_comments/' + $pid).exists()))",
+        ".validate": "$pid.length <= 40 && newData.hasChildren(['by', 'title', 'body', 'at']) && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('at').val() === data.child('at').val() && newData.child('site').val() === data.child('site').val() && newData.child('editedAt').val() === now) : (newData.child('by').val() === auth.uid && newData.child('at').val() === now && !newData.hasChild('editedAt') && newData.parent().parent().child('rate_limits/' + auth.uid + '/blog/at').val() === now))",
+        "by": {
+          ".validate": "newData.isString()"
+        },
+        "title": {
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 140"
+        },
+        "body": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40000"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "editedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "site": {
+          ".validate": "newData.isBoolean() && (newData.val() === false || root.child('admins/' + auth.uid).val() === true)"
+        },
+        "comments": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "blog_comments": {
+      "$pid": {
+        ".read": true,
+        ".write": "auth !== null && auth.provider !== 'anonymous' && !newData.exists() && (root.child('blog_posts/' + $pid + '/by').val() === auth.uid || (root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true)) && !newData.parent().parent().child('blog_posts/' + $pid).exists()",
+        "$cid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && root.child('blog_posts/' + $pid).exists() && root.child('blog_posts/' + $pid + '/comments').val() !== false && !root.child('blocks/' + root.child('blog_posts/' + $pid + '/by').val() + '/' + auth.uid).exists()) || (data.exists() && !newData.exists() && (data.child('by').val() === auth.uid || root.child('blog_posts/' + $pid + '/by').val() === auth.uid || (root.child('admins/' + auth.uid).val() === true || root.child('forum_mods/' + auth.uid).val() === true))))",
+          ".validate": "$cid.length <= 40 && !data.exists() && newData.hasChildren(['by', 'text', 'at']) && newData.child('by').val() === auth.uid && newData.child('at').val() === now && newData.parent().parent().parent().child('rate_limits/' + auth.uid + '/comment/at').val() === now",
+          "by": {
+            ".validate": "newData.isString()"
+          },
+          "text": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 2000"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "teams": {
+      ".read": true,
+      ".indexOn": [
+        "memberCount",
+        "created"
+      ],
+      "$tid": {
+        ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now)) || (data.exists() && newData.exists() && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod')))",
+        ".validate": "$tid.matches(/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/) && newData.hasChildren(['name', 'leader', 'created', 'open']) && newData.child('memberCount').val() === data.child('memberCount').val() && (data.exists() ? (newData.child('created').val() === data.child('created').val() && (newData.child('leader').val() === data.child('leader').val() || (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' && newData.parent().parent().child('team_members/' + $tid + '/' + newData.child('leader').val() + '/role').val() === 'leader'))) : (newData.child('leader').val() === auth.uid && newData.child('created').val() === now && newData.parent().parent().child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' && newData.parent().parent().child('rate_limits/' + auth.uid + '/team/at').val() === now))",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 40"
+        },
+        "description": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 4000"
+        },
+        "open": {
+          ".validate": "newData.isBoolean()"
+        },
+        "leader": {
+          ".validate": "newData.isString()"
+        },
+        "created": {
+          ".validate": "newData.isNumber()"
+        },
+        "memberCount": {
+          ".validate": "newData.val() === data.val()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "team_members": {
+      "$tid": {
+        ".read": true,
+        "$uid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && auth.uid === $uid && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && !root.child('team_bans/' + $tid + '/' + $uid).exists() && (root.child('teams/' + $tid + '/open').val() === true || (!root.child('teams/' + $tid).exists() && newData.parent().parent().parent().child('teams/' + $tid + '/leader').val() === auth.uid))) || (!data.exists() && newData.exists() && auth.uid !== $uid && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod') && root.child('team_requests/' + $tid + '/' + $uid).exists() && root.child('users/' + $uid + '/displayName').exists()) || (data.exists() && !newData.exists() && auth.uid === $uid && data.child('role').val() !== 'leader') || (data.exists() && !newData.exists() && auth.uid !== $uid && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod' && data.child('role').val() === 'member'))) || (data.exists() && newData.exists() && root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader')) && (newData.exists() ? newData.parent().parent().parent().child('user_teams/' + $uid + '/' + $tid).val() === true : !newData.parent().parent().parent().child('user_teams/' + $uid + '/' + $tid).exists())",
+          ".validate": "newData.hasChildren(['role', 'joined']) && (data.exists() ? (newData.child('joined').val() === data.child('joined').val() && newData.child('by').val() === data.child('by').val()) : (newData.child('joined').val() === now && newData.child('by').val() === auth.uid && (newData.child('role').val() === 'member' || newData.child('role').val() === 'leader')))",
+          "role": {
+            ".validate": "(newData.val() === 'member' || newData.val() === 'mod' || newData.val() === 'leader') && ((newData.val() === 'leader') === (newData.parent().parent().parent().parent().child('teams/' + $tid + '/leader').val() === $uid))"
+          },
+          "joined": {
+            ".validate": "newData.isNumber()"
+          },
+          "by": {
+            ".validate": "newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "user_teams": {
+      "$uid": {
+        ".read": true,
+        "$tid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && (auth.uid === $uid || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod') && (newData.exists() ? newData.parent().parent().parent().child('team_members/' + $tid + '/' + $uid).exists() : !newData.parent().parent().parent().child('team_members/' + $tid + '/' + $uid).exists())",
+          ".validate": "newData.val() === true"
+        }
+      }
+    },
+    "team_requests": {
+      "$tid": {
+        ".read": "auth !== null && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod')",
+        "$uid": {
+          ".read": "auth !== null && auth.uid === $uid",
+          ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && auth.uid === $uid && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now) && root.child('teams/' + $tid).exists() && root.child('teams/' + $tid + '/open').val() !== true && !root.child('team_members/' + $tid + '/' + $uid).exists() && !root.child('team_bans/' + $tid + '/' + $uid).exists()) || (data.exists() && !newData.exists() && (auth.uid === $uid || (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod'))))",
+          ".validate": "newData.hasChildren(['at']) && newData.child('at').val() === now && newData.parent().parent().parent().child('rate_limits/' + auth.uid + '/team/at').val() === now",
+          "message": {
+            ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 300"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "team_bans": {
+      "$tid": {
+        ".read": "auth !== null && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod')",
+        "$uid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'mod') && auth.uid !== $uid && root.child('team_members/' + $tid + '/' + $uid + '/role').val() !== 'leader' && (root.child('team_members/' + $tid + '/' + auth.uid + '/role').val() === 'leader' || root.child('team_members/' + $tid + '/' + $uid + '/role').val() !== 'mod')",
+          ".validate": "newData.val() === now"
+        }
+      }
+    },
+    "team_battles": {
+      ".read": true,
+      ".indexOn": [
+        "end",
+        "start"
+      ],
+      "$bid": {
+        ".write": "auth !== null && auth.provider !== 'anonymous' && ((!data.exists() && newData.exists() && !root.child('deleted_users/' + auth.uid).exists() && root.child('users/' + auth.uid + '/displayName').exists() && (!root.child('community_mutes/' + auth.uid + '/until').exists() || root.child('community_mutes/' + auth.uid + '/until').val() <= now)) || (data.exists() && !newData.exists() && data.child('start').val() > now && (root.child('team_members/' + data.child('host').val() + '/' + auth.uid + '/role').val() === 'leader' || root.child('admins/' + auth.uid).val() === true)))",
+        ".validate": "$bid.length <= 40 && newData.hasChildren(['name', 'host', 'by', 'created', 'start', 'end', 'topN', 'teams']) && (data.exists() ? (newData.child('name').val() === data.child('name').val() && newData.child('host').val() === data.child('host').val() && newData.child('by').val() === data.child('by').val() && newData.child('created').val() === data.child('created').val() && newData.child('start').val() === data.child('start').val() && newData.child('end').val() === data.child('end').val() && newData.child('topN').val() === data.child('topN').val() && newData.child('description').val() === data.child('description').val()) : (newData.child('by').val() === auth.uid && newData.child('created').val() === now && root.child('team_members/' + newData.child('host').val() + '/' + auth.uid + '/role').val() === 'leader' && newData.child('teams/' + newData.child('host').val()).val() === 'accepted' && newData.child('start').val() >= now - 60000 && newData.child('start').val() <= now + 2592000000 && newData.child('end').val() >= newData.child('start').val() + 3600000 && newData.child('end').val() <= newData.child('start').val() + 1209600000 && newData.parent().parent().child('rate_limits/' + auth.uid + '/team/at').val() === now))",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 80"
+        },
+        "description": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 1000"
+        },
+        "host": {
+          ".validate": "newData.isString()"
+        },
+        "by": {
+          ".validate": "newData.isString()"
+        },
+        "created": {
+          ".validate": "newData.isNumber()"
+        },
+        "start": {
+          ".validate": "newData.isNumber()"
+        },
+        "end": {
+          ".validate": "newData.isNumber()"
+        },
+        "topN": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20 && newData.val() % 1 === 0"
+        },
+        "teams": {
+          "$team": {
+            ".write": "auth !== null && auth.provider !== 'anonymous' && data.exists() && newData.exists() && $team !== root.child('team_battles/' + $bid + '/host').val() && root.child('team_members/' + $team + '/' + auth.uid + '/role').val() === 'leader' && root.child('team_battles/' + $bid + '/start').val() > now",
+            ".validate": "root.child('teams/' + $team).exists() && (newData.val() === 'invited' || newData.val() === 'accepted' || newData.val() === 'declined') && (data.exists() ? newData.val() !== 'invited' : (($team === newData.parent().parent().child('host').val() && newData.val() === 'accepted') || ($team !== newData.parent().parent().child('host').val() && newData.val() === 'invited')))"
+          }
+        },
+        "finished": {
+          ".validate": false
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "team_battle_scores": {
+      ".read": true
     }
   }
 }
