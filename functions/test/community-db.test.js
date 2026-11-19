@@ -192,6 +192,17 @@ test('team battles: scored games, the start, the result', async () => {
 	// Dave scores for the blues (joined first), against Carol of the reds.
 	assert.deepStrictEqual(await community.scoreGame(db, 'dave', 'g6', game('carol', 'win')), [{ battle: 'tb1', team: 'blues', win: true }]);
 	await community.scoreGame(db, 'dave', 'g7', game('alice', 'win'));
+	// The roster was fixed by the first game.
+	assert.deepStrictEqual(await get('team_battle_scores/tb1/roster/dave'), { team: 'blues', since: 3 });
+	// Erin joins the reds mid-battle: on the roster from then on; a game she
+	// finished before joining does not count.
+	await db.ref().update({ 'users/erin': profile('Erin'), 'team_members/reds/erin': { role: 'member', joined: now + 10, by: 'erin' }, 'user_teams/erin/reds': true });
+	await community.onTeamMember(db, 'reds', 'erin', null, { role: 'member', joined: now + 10, by: 'erin' }, now + 10);
+	assert.deepStrictEqual(await get('team_battle_scores/tb1/roster/erin'), { team: 'reds', since: now + 10 });
+	assert.deepStrictEqual(await community.scoreGame(db, 'erin', 'g9', game('bob', 'win', { timestamp: now + 5 })), []);
+	// Carol leaves the reds before her game is rated: it still counts for them.
+	await db.ref().update({ 'team_members/reds/carol': null, 'user_teams/carol/reds': null });
+	assert.deepStrictEqual(await community.scoreGame(db, 'carol', 'g10', game('bob', 'loss', { timestamp: now + 20 })), [{ battle: 'tb1', team: 'reds', win: false }]);
 	// The start is announced once, to both teams' members (and the old
 	// battle, never closed, is closed).
 	const tick = await community.battleTick(db, now, null);
@@ -205,8 +216,11 @@ test('team battles: scored games, the start, the result', async () => {
 	assert.deepStrictEqual(result.standings.map((s) => [s.team, s.score]), [['blues', 2], ['reds', 1]]);
 	const n = await get('notifications/alice/battle-tb1');
 	assert.deepStrictEqual([n.event, n.winner, n.winnerName], ['battle-end', 'blues', 'Blues']);
-	// No game counts after the battle closed.
-	assert.deepStrictEqual(await community.scoreGame(db, 'bob', 'g8', game('alice', 'win')), []);
+	// A game that ended in time but was rated after the close still counts,
+	// and the result is rewritten.
+	assert.deepStrictEqual(await community.scoreGame(db, 'bob', 'g8', game('alice', 'win'), now + 3 * HOUR), [{ battle: 'tb1', team: 'blues', win: true }]);
+	const late = await get('team_battles/tb1/result');
+	assert.deepStrictEqual(late.standings.map((s) => [s.team, s.score, s.points]), [['blues', 2, 3], ['reds', 1, 1]]);
 });
 
 test('a correspondence result goes to the inbox; a realtime one does not', async () => {
@@ -253,6 +267,11 @@ test('disbanding a team, and deleting an account', async () => {
 		'dm_messages/alice_bob/m1': { from: 'alice', to: 'bob', text: 'hi', at: 1 },
 		'dm_index/alice/alice_bob': { with: 'bob', last: 1, lastFrom: 'alice', lastMsg: 'm1' },
 		'dm_index/bob/alice_bob': { with: 'alice', last: 1, lastFrom: 'alice', lastMsg: 'm1' },
+		// One Alice removed from her list: gone all the same.
+		'dm_convos/alice_carol': { a: 'alice', b: 'carol', at: 1 },
+		'dm_messages/alice_carol/m1': { from: 'alice', to: 'carol', text: 'hidden', at: 1 },
+		'dm_index/carol/alice_carol': { with: 'alice', last: 1, lastFrom: 'alice', lastMsg: 'm1' },
+		'dm_convos/bob_dave': { a: 'bob', b: 'dave', at: 1 },
 		'blog_posts/b1': { by: 'alice', title: 'Mine', body: 'x', at: 1 },
 		'blog_comments/b1/c1': { by: 'bob', text: 'x', at: 2 },
 		'blog_posts/b2': { by: 'bob', title: 'His', body: 'x', at: 1 },
@@ -264,10 +283,12 @@ test('disbanding a team, and deleting an account', async () => {
 	// One multi-path update, as deleteUserData sends it.
 	await db.ref().update(updates);
 	for (const p of ['dm_convos/alice_bob', 'dm_messages/alice_bob', 'dm_index/bob/alice_bob', 'dm_index/alice', 'blog_posts/b1', 'blog_comments/b1',
+		'dm_convos/alice_carol', 'dm_messages/alice_carol', 'dm_index/carol/alice_carol',
 		'notifications/alice', 'teams/solo', 'team_members/solo', 'user_teams/alice', 'team_members/blues/alice']) assert.strictEqual(await get(p), null, p);
 	// The moderator takes the team over.
 	assert.strictEqual(await get('teams/blues/leader'), 'carol');
 	assert.strictEqual(await get('team_members/blues/carol/role'), 'leader');
+	assert.ok(await get('dm_convos/bob_dave'));
 	assert.ok(await get('blog_comments/b2/c1'));
 	assert.ok(await get('blog_posts/b2'));
 });

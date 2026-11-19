@@ -250,6 +250,10 @@ test('forums: threads, replies, edits and removals', async () => {
 	await seed({ 'forum_mods/carol': true });
 	await assertSucceeds(set(ref(db('carol'), 'forum_threads/general/t1/locked'), true));
 	await assertSucceeds(set(ref(db('carol'), 'forum_threads/general/t1/pinned'), true));
+	// Deleting the flag is no way around it.
+	await assertFails(remove(ref(db('bob'), 'forum_threads/general/t1/locked')));
+	await assertFails(remove(ref(db('bob'), 'forum_threads/general/t1/pinned')));
+	await assertFails(update(ref(db('bob')), Object.assign(reply('bob', 'general', 't1', 'p4', 'unlocked?'), { 'forum_threads/general/t1/locked': null })));
 	await clearLimits('bob');
 	await assertFails(update(ref(db('bob')), reply('bob', 'general', 't1', 'p4', 'locked out')));
 	await assertFails(update(ref(db('alice'), 'forum_posts/general/t1/p1'), { text: 'edit while locked', editedAt: TS }));

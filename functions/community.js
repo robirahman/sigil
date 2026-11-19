@@ -16,8 +16,8 @@
  *   - teams: the member count; join requests to the staff; acceptance and
  *     role changes to the player; battle invitations to the invited
  *     leaders; disbanding (disbandTeam).
- *   - team battles: each rated game scored (team-battle.js), and the start
- *     and the result announced to the teams (battleTick).
+ *   - team battles: the roster, each rated game scored (team-battle.js),
+ *     and the start and the result announced to the teams (battleTick).
  *   - correspondence game results in the inbox.
  *   - account deletion: deletionUpdates.
  *
@@ -34,6 +34,9 @@ const PUSH_TTL_S = 24 * 3600;
 const THREAD_NOTIFY_MAX = 20;
 // Members of a team told of a battle starting or ending.
 const BATTLE_NOTIFY_MAX = 300;
+// A battle is closed this long after its end: games that ended in time are
+// still being recorded and rated (recordRoom waits, rateGame queues).
+const BATTLE_GRACE_MS = 10 * 60000;
 
 const val = (db, p) => db.ref(p).once('value').then((s) => s.val());
 const human = (uid) => typeof uid === 'string' && uid !== '' && uid !== 'deleted' && !AI_UID.test(uid);
@@ -188,6 +191,7 @@ async function onTeamMember(db, tid, uid, before, after, now, send) {
 	if (!team) return null;
 	const count = Object.keys(members || {}).length;
 	if (team.memberCount !== count) await db.ref('teams/' + tid + '/memberCount').set(count);
+	if (!before && after) await joinRunningBattles(db, tid, uid, after.joined, now);
 	const url = 'teams.html?id=' + encodeURIComponent(tid);
 	const base = { type: 'team', team: tid, teamName: cut(team.name, 40), at: now };
 	if (!before && after && after.by && after.by !== uid) {
@@ -200,6 +204,27 @@ async function onTeamMember(db, tid, uid, before, after, now, send) {
 		});
 	}
 	return { count };
+}
+
+/**
+ * A player who joins `tid` while a battle it plays in is running goes on
+ * that battle's roster (from now), unless already on it. Rosters not yet
+ * written are left alone: they will be built with this membership.
+ */
+async function joinRunningBattles(db, tid, uid, joined, now) {
+	const snap = await db.ref('team_battles').orderByChild('end').startAt(now).once('value');
+	const running = [];
+	snap.forEach((c) => {
+		const b = c.val();
+		if (b && b.start <= now && b.teams && b.teams[tid] === 'accepted') running.push(c.key);
+	});
+	for (const bid of running) {
+		const base = 'team_battle_scores/' + bid;
+		if (!(await val(db, base + '/rosterAt'))) continue;
+		const since = typeof joined === 'number' ? joined : now;
+		await db.ref(base + '/roster/' + uid).transaction((cur) => (cur ? undefined : { team: tid, since }));
+	}
+	return running.length;
 }
 
 async function onTeamRequest(db, tid, uid, now, send) {
@@ -231,12 +256,19 @@ async function onBattleCreated(db, bid, battle, now, send) {
 	return told;
 }
 
-/** Tell every member (up to BATTLE_NOTIFY_MAX a team) of a battle's teams. */
+/**
+ * Tell the battle's players (its roster, up to BATTLE_NOTIFY_MAX a team; the
+ * accepted teams' members if it has none).
+ */
 async function tellBattleTeams(db, bid, battle, entry, push, send) {
+	const roster = (await val(db, 'team_battle_scores/' + bid + '/roster')) || {};
+	const byTeam = {};
+	for (const t of battleTeams(battle)) byTeam[t] = [];
+	Object.keys(roster).forEach((uid) => { if (roster[uid] && byTeam[roster[uid].team]) byTeam[roster[uid].team].push(uid); });
 	let told = 0;
-	for (const t of battleTeams(battle)) {
-		const members = Object.keys((await val(db, 'team_members/' + t)) || {}).slice(0, BATTLE_NOTIFY_MAX);
-		for (const uid of members) {
+	for (const t of Object.keys(byTeam)) {
+		const players = byTeam[t].length ? byTeam[t] : Object.keys((await val(db, 'team_members/' + t)) || {});
+		for (const uid of players.slice(0, BATTLE_NOTIFY_MAX)) {
 			if (await notify(db, uid, 'battle-' + bid, Object.assign({ team: t }, entry), { send, push })) told++;
 		}
 	}
@@ -244,8 +276,10 @@ async function tellBattleTeams(db, bid, battle, entry, push, send) {
 }
 
 /**
- * Every few minutes: announce battles that have started, and close those
- * that have ended (team_battles/{id}/result, the final standings).
+ * Every few minutes: announce battles that have started (and fix their
+ * rosters), and close those that ended BATTLE_GRACE_MS ago (team_battles/
+ * {id}/result, the final standings; a game rated later still counts and
+ * rewrites them).
  */
 async function battleTick(db, now, send) {
 	const snap = await db.ref('team_battles').orderByChild('end').startAt(now - 7 * 86400000).once('value');
@@ -255,20 +289,19 @@ async function battleTick(db, now, send) {
 	for (const [bid, b] of battles) {
 		if (!b || b.finished) continue;
 		const url = 'teams.html?battle=' + encodeURIComponent(bid);
-		if (now >= b.end) {
-			const players = (await val(db, 'team_battle_scores/' + bid + '/players')) || {};
-			const standings = teamBattleStandings(b, players).map((s) => ({ team: s.team, score: s.score, points: s.points, players: s.players.length }));
+		if (now >= b.end + BATTLE_GRACE_MS) {
 			const claim = await db.ref('team_battles/' + bid + '/finished').transaction((cur) => (cur ? undefined : now));
 			if (!claim.committed) continue;
-			await db.ref('team_battles/' + bid + '/result').set({ standings, at: now });
+			const standings = await writeResult(db, bid, b, now);
 			const win = standings[0] && standings[0].score > 0 && (!standings[1] || standings[0].score > standings[1].score) ? standings[0].team : null;
 			const winName = win ? (await val(db, 'teams/' + win + '/name')) || win : null;
 			await tellBattleTeams(db, bid, b, { type: 'team', event: 'battle-end', battle: bid, name: cut(b.name, 80), winner: win, winnerName: winName ? cut(winName, 40) : null, at: now },
 				{ title: 'Team battle over', body: '“' + cut(b.name, 60) + '”: ' + (winName ? cut(winName, 40) + ' won.' : 'a tie.'), url, tag: 'sigil-battle-' + bid }, send);
 			out.finished++;
-		} else if (now >= b.start && !b.startedAt) {
+		} else if (now >= b.start && now < b.end && !b.startedAt) {
 			const claim = await db.ref('team_battles/' + bid + '/startedAt').transaction((cur) => (cur ? undefined : now));
 			if (!claim.committed) continue;
+			await ensureRoster(db, bid, b, now);
 			await tellBattleTeams(db, bid, b, { type: 'team', event: 'battle-start', battle: bid, name: cut(b.name, 80), at: now },
 				{ title: 'Team battle started', body: '“' + cut(b.name, 60) + '” is on: rated games against the other teams count.', url, tag: 'sigil-battle-' + bid }, send);
 			out.started++;
@@ -277,53 +310,81 @@ async function battleTick(db, now, send) {
 	return out;
 }
 
-/** {teamId: joinedAt} of a player's teams. */
-async function memberships(db, uid) {
-	const teams = Object.keys((await val(db, 'user_teams/' + uid)) || {});
-	const out = {};
-	await Promise.all(teams.map(async (t) => {
-		const joined = await val(db, 'team_members/' + t + '/' + uid + '/joined');
-		if (typeof joined === 'number') out[t] = joined;
-	}));
-	return out;
+/**
+ * The battle's roster, team_battle_scores/{id}/roster/{uid} = {team, since}:
+ * who plays for which team, fixed when the battle starts (written then by
+ * battleTick, or by the first game scored if that comes first) from the
+ * accepted teams' members at that moment; players who join one of them
+ * during the battle are added by onTeamMember. Leaving a team later does
+ * not take a player off the roster, and a game counts only if both players
+ * were on it (`since`) when it ended.
+ */
+async function ensureRoster(db, bid, battle, now) {
+	const base = 'team_battle_scores/' + bid;
+	if (await val(db, base + '/rosterAt')) return (await val(db, base + '/roster')) || {};
+	const accepted = battleTeams(battle);
+	const joined = {};   // uid -> {team: joinedAt}
+	for (const t of accepted) {
+		const members = (await val(db, 'team_members/' + t)) || {};
+		Object.keys(members).forEach((uid) => {
+			if (human(uid) && members[uid] && typeof members[uid].joined === 'number') (joined[uid] = joined[uid] || {})[t] = members[uid].joined;
+		});
+	}
+	const updates = { [base + '/rosterAt']: now };
+	const roster = {};
+	Object.keys(joined).forEach((uid) => {
+		const team = battleTeamOf(joined[uid], accepted);
+		roster[uid] = { team, since: joined[uid][team] };
+		updates[base + '/roster/' + uid] = roster[uid];
+	});
+	// Child paths, so two first writers merge rather than clobber.
+	await db.ref().update(updates);
+	return (await val(db, base + '/roster')) || {};
 }
 
 /**
- * Score a rated game for every battle running when it ended: the player's
- * points (1 a win) for their team, if the opponent plays for another team
- * of that battle. Safe to repeat (each game is counted once).
+ * Score a rated game for every battle it was played in (it ended between
+ * the battle's start and end, whenever the event arrives): the player's
+ * points (1 a win) for their roster team, if the opponent is on the roster
+ * of another team. Safe to repeat (each game is counted once). A battle
+ * already closed gets its final standings rewritten.
  */
-async function scoreGame(db, uid, gameId, entry) {
+async function scoreGame(db, uid, gameId, entry, now) {
 	if (!entry || entry.rated !== true || entry.opponentIsAI || !human(uid) || !human(entry.opponentUid)) return [];
 	const ts = entry.timestamp;
 	if (typeof ts !== 'number') return [];
 	const snap = await db.ref('team_battles').orderByChild('end').startAt(ts).once('value');
-	const running = [];
+	const battles = [];
 	snap.forEach((c) => {
 		const b = c.val();
-		if (b && b.start <= ts && ts < b.end && !b.finished) running.push([c.key, b]);
+		if (b && b.start <= ts && ts < b.end) battles.push([c.key, b]);
 	});
-	if (!running.length) return [];
-	const [mine, theirs] = await Promise.all([memberships(db, uid), memberships(db, entry.opponentUid)]);
 	const scored = [];
-	for (const [bid, b] of running) {
-		const accepted = battleTeams(b);
-		const [meNow, themNow] = await Promise.all([
-			val(db, 'team_battle_scores/' + bid + '/players/' + uid + '/team'),
-			val(db, 'team_battle_scores/' + bid + '/players/' + entry.opponentUid + '/team'),
-		]);
-		const team = meNow || battleTeamOf(mine, accepted);
-		const other = themNow || battleTeamOf(theirs, accepted);
-		if (!team || !other || team === other) continue;
+	for (const [bid, b] of battles) {
+		const roster = await ensureRoster(db, bid, b, typeof now === 'number' ? now : Date.now());
+		const me = roster[uid];
+		const them = roster[entry.opponentUid];
+		if (!me || !them || !me.team || !them.team || me.team === them.team) continue;
+		if (!(me.since <= ts) || !(them.since <= ts)) continue;
 		const win = entry.result === 'win';
 		const res = await db.ref('team_battle_scores/' + bid + '/players/' + uid).transaction((cur) => {
-			const p = cur || { team, points: 0, games: 0 };
+			const p = cur || { team: me.team, points: 0, games: 0 };
 			if (p.seen && p.seen[gameId]) return undefined;
-			return Object.assign({}, p, { points: (p.points || 0) + (win ? 1 : 0), games: (p.games || 0) + 1, seen: Object.assign({}, p.seen, { [gameId]: true }) });
+			return Object.assign({}, p, { team: me.team, points: (p.points || 0) + (win ? 1 : 0), games: (p.games || 0) + 1, seen: Object.assign({}, p.seen, { [gameId]: true }) });
 		});
-		if (res.committed) scored.push({ battle: bid, team, win });
+		if (!res.committed) continue;
+		scored.push({ battle: bid, team: me.team, win });
+		if (b.finished) await writeResult(db, bid, b, now);
 	}
 	return scored;
+}
+
+/** team_battles/{id}/result: the standings as they are now. */
+async function writeResult(db, bid, battle, now) {
+	const players = (await val(db, 'team_battle_scores/' + bid + '/players')) || {};
+	const standings = teamBattleStandings(battle, players).map((s) => ({ team: s.team, score: s.score, points: s.points, players: s.players.length }));
+	await db.ref('team_battles/' + bid + '/result').set({ standings, at: typeof now === 'number' ? now : Date.now() });
+	return standings;
 }
 
 /** A correspondence game's result in the inbox (realtime ones are seen live). */
@@ -343,7 +404,7 @@ async function gameResultNotice(db, uid, gameId, entry, now, send) {
 
 /** A new user_games entry: team battles, then the inbox. */
 async function onUserGame(db, uid, gameId, entry, now, send) {
-	const scored = await scoreGame(db, uid, gameId, entry);
+	const scored = await scoreGame(db, uid, gameId, entry, now);
 	const notice = await gameResultNotice(db, uid, gameId, entry, now, send);
 	return { scored, notified: !!notice };
 }
@@ -390,17 +451,25 @@ async function deletionUpdates(db, uid, updates) {
 	for (const p of ['notifications', 'notify_prefs', 'community_prefs', 'rate_limits', 'community_mutes', 'forum_mods', 'dm_index', 'user_teams']) {
 		updates[p + '/' + uid] = null;
 	}
-	const [convos, teams, posts] = await Promise.all([
+	// Every conversation: the index lists the ones not hidden, the
+	// conversations themselves (by member) all of them.
+	const [index, asA, asB, teams, posts] = await Promise.all([
 		val(db, 'dm_index/' + uid),
+		db.ref('dm_convos').orderByChild('a').equalTo(uid).once('value'),
+		db.ref('dm_convos').orderByChild('b').equalTo(uid).once('value'),
 		val(db, 'user_teams/' + uid),
 		db.ref('blog_posts').orderByChild('by').equalTo(uid).once('value'),
 	]);
-	Object.keys(convos || {}).forEach((cid) => {
-		const other = convos[cid] && convos[cid].with;
+	const convos = {};   // cid -> the other member
+	Object.keys(index || {}).forEach((cid) => { convos[cid] = index[cid] && index[cid].with; });
+	asA.forEach((c) => { convos[c.key] = (c.val() || {}).b; });
+	asB.forEach((c) => { convos[c.key] = (c.val() || {}).a; });
+	Object.keys(convos).forEach((cid) => {
+		const other = convos[cid];
 		updates['dm_convos/' + cid] = null;
 		updates['dm_messages/' + cid] = null;
 		updates['dm_flags/' + cid] = null;
-		if (typeof other === 'string' && other) updates['dm_index/' + other + '/' + cid] = null;
+		if (typeof other === 'string' && other && other !== uid) updates['dm_index/' + other + '/' + cid] = null;
 	});
 	posts.forEach((c) => {
 		updates['blog_posts/' + c.key] = null;
@@ -426,7 +495,7 @@ async function deletionUpdates(db, uid, updates) {
 }
 
 module.exports = {
-	notify, pushAllowed, pushNotice,
+	notify, pushAllowed, pushNotice, ensureRoster, joinRunningBattles,
 	onFollow, onChallenge, onMessage, onForumPost, onBlogComment,
 	onTeamMember, onTeamRequest, onBattleCreated, battleTick,
 	scoreGame, gameResultNotice, onUserGame, disbandTeam, deletionUpdates,

@@ -280,7 +280,7 @@
 							</div>
 							<p class="cm-meta" x-text="battleTimes(battle)"></p>
 							<p class="cm-note" x-show="battle.description" x-text="mask(battle.description)"></p>
-							<p class="cm-note" x-text="'Every rated online game between members of two different accepted teams scores 1 point for the winner. Each team counts its ' + battle.topN + ' best player' + (battle.topN === 1 ? '' : 's') + '.'"></p>
+							<p class="cm-note" x-text="'Every rated online game between members of two different accepted teams scores 1 point for the winner. Each team counts its ' + battle.topN + ' best player' + (battle.topN === 1 ? '' : 's') + '. The teams are fixed at the start (players who join a team during the battle play for it from then on).'"></p>
 							<template x-if="canCancel">
 								<button class="cm-btn cm-btn--danger" x-on:click="cancelBattle()" x-bind:disabled="busy">Cancel the battle</button>
 							</template>

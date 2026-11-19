@@ -5,10 +5,13 @@
  * A battle (team_battles/{id}) runs from `start` to `end` between its
  * accepted teams. Every rated online game between members of two different
  * accepted teams scores: 1 point for the winner (team_battle_scores/{id}/
- * players/{uid} = {team, points, games}). A player plays for one team per
- * battle, fixed by their first scored game: of their accepted teams, the one
- * they joined first. A team's score is the sum of its topN best players'
- * points, so a big team does not win by numbers alone.
+ * players/{uid} = {team, points, games}), counted by the game's end time, so
+ * a game rated after the battle closed still counts. Who plays for which
+ * team is the battle's roster (team_battle_scores/{id}/roster), fixed at the
+ * start from the teams' members (of several accepted teams, the one joined
+ * first); a player who joins one during the battle is added from then, and
+ * leaving does not take anyone off. A team's score is the sum of its topN
+ * best players' points, so a big team does not win by numbers alone.
  *
  * An arena tournament (when the site has them) plugs in the same way: its
  * per-player scores go into `players` and teamBattleStandings sums them.
