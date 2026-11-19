@@ -1,14 +1,14 @@
 {
  "spellNames": [
   "Flourish",
-  "Seal_of_Lightning",
+  "Carnage",
   "Bewitch",
   "Hail_Storm",
-  "Grow",
   "Meteor",
-  "Sprout",
-  "Slash",
-  "Comet"
+  "Fireblast",
+  "Seal_of_Summer",
+  "Surge",
+  "Slash"
  ],
  "winner": "red",
  "turns": [
@@ -190,8 +190,6 @@
     "b9",
     "b6",
     "a7",
-    "Sprout",
-    "b5",
     "pass"
    ]
   },
@@ -200,16 +198,13 @@
    "turnNumber": 9,
    "kind": "input",
    "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 10,
-   "kind": "input",
-   "actions": [
-    "b6",
+    "a2",
     "dash",
+    "c3",
+    "b7",
+    "c6",
+    "b1",
+    "b12",
     "c12",
     "a12",
     "c5",
@@ -224,37 +219,32 @@
     "c12",
     "a9",
     "a13",
-    "a12",
+    "a2",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 10,
+   "kind": "input",
+   "actions": [
     "b5",
-    "c4",
-    "a13",
-    "a10",
+    "dash",
     "a4",
     "c2",
     "c1",
     "b8",
     "b6",
-    "a7",
-    "Sprout",
-    "a7",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 11,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 12,
-   "kind": "input",
-   "actions": [
-    "a8",
-    "dash",
+    "b3",
+    "a1",
+    "c2",
+    "a4",
+    "c8",
+    "b13",
+    "b11",
+    "b6",
+    "c2",
+    "a10",
     "c1",
     "b1",
     "b2",
@@ -270,44 +260,27 @@
     "a2",
     "a3",
     "a8",
+    "c4",
+    "a12",
+    "b13",
+    "c7",
+    "b4",
+    "c7",
+    "b3",
     "b12",
-    "Sprout",
-    "b5",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 13,
-   "kind": "input",
-   "actions": [
-    "a9",
-    "dash",
     "a3",
     "b11",
     "a13",
-    "a10",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 14,
-   "kind": "input",
-   "actions": [
-    "a7",
-    "Sprout",
-    "b4",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 15,
-   "kind": "input",
-   "actions": [
-    "a13",
-    "dash",
+    "b6",
+    "a5",
+    "a1",
+    "a5",
+    "c10",
+    "b3",
+    "b11",
+    "b7",
+    "a12",
+    "b7",
     "c12",
     "a4",
     "a11",
@@ -317,11 +290,17 @@
     "c4",
     "c8",
     "b5",
-    "c1",
-    "a8",
-    "b11",
+    "b12",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 11,
+   "kind": "input",
+   "actions": [
     "a6",
-    "c13",
+    "dash",
     "b2",
     "a12",
     "a10",
@@ -376,13 +355,79 @@
     "c10",
     "c6",
     "a3",
-    "c1",
-    "b4",
-    "c8",
-    "a8",
-    "a13",
-    "a13",
+    "a6",
     "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 12,
+   "kind": "input",
+   "actions": [
+    "b5",
+    "dash",
+    "c2",
+    "c13",
+    "b13",
+    "c7",
+    "b8",
+    "c7",
+    "b4",
+    "b7",
+    "a7",
+    "c4",
+    "c6",
+    "c9",
+    "b6",
+    "b2",
+    "c3",
+    "a6",
+    "a1",
+    "c2",
+    "c9",
+    "a9",
+    "b7",
+    "b13",
+    "a6",
+    "c1",
+    "a13",
+    "c9",
+    "c13",
+    "b11",
+    "b5",
+    "b5",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 13,
+   "kind": "input",
+   "actions": [
+    "move"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 14,
+   "kind": "input",
+   "actions": [
+    "a7",
+    "dash",
+    "c3",
+    "b3",
+    "b5",
+    "b12",
+    "a4",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 15,
+   "kind": "input",
+   "actions": [
+    "move"
    ]
   },
   {
@@ -406,7 +451,8 @@
    "turnNumber": 18,
    "kind": "input",
    "actions": [
-    "move"
+    "a5",
+    "pass"
    ]
   },
   {
@@ -414,23 +460,7 @@
    "turnNumber": 19,
    "kind": "input",
    "actions": [
-    "a3",
-    "dash",
-    "c9",
-    "b6",
-    "b2",
-    "c3",
-    "a6",
     "a1",
-    "c2",
-    "c9",
-    "a9",
-    "b7",
-    "b13",
-    "a6",
-    "c1",
-    "a13",
-    "a13",
     "pass"
    ]
   },
@@ -447,65 +477,8 @@
    "turnNumber": 21,
    "kind": "input",
    "actions": [
-    "a9",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 22,
-   "kind": "input",
-   "actions": [
-    "a7",
-    "Sprout",
-    "b6",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 23,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 24,
-   "kind": "input",
-   "actions": [
-    "b7",
-    "Slash",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 25,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 26,
-   "kind": "input",
-   "actions": [
-    "b11",
+    "a5",
     "dash",
-    "a11",
-    "c7",
-    "a1",
-    "a10",
-    "c8",
-    "c6",
-    "c5",
-    "b11",
-    "b8",
-    "c4",
-    "b7",
     "a11",
     "b11",
     "b1",
@@ -537,160 +510,111 @@
     "c12",
     "b2",
     "b4",
-    "b2",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 27,
-   "kind": "input",
-   "actions": [
+    "b1",
+    "b7",
+    "a10",
+    "b6",
+    "b13",
     "a2",
-    "dash",
-    "a2",
-    "c2",
-    "c7",
-    "a3",
-    "a8",
+    "a11",
     "pass"
    ]
   },
   {
    "color": "blue",
-   "turnNumber": 28,
-   "kind": "input",
-   "actions": [
-    "b3",
-    "dash",
-    "c11",
-    "c2",
-    "b12",
-    "b2",
-    "b11",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 29,
-   "kind": "input",
-   "actions": [
-    "a3",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 30,
-   "kind": "input",
-   "actions": [
-    "b2",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 31,
+   "turnNumber": 22,
    "kind": "input",
    "actions": [
     "move"
    ]
   },
   {
-   "color": "blue",
-   "turnNumber": 32,
+   "color": "red",
+   "turnNumber": 23,
    "kind": "input",
    "actions": [
-    "b13",
+    "a2",
     "dash",
+    "a11",
+    "c11",
+    "c2",
+    "b12",
+    "b2",
+    "b8",
+    "b9",
+    "a8",
+    "c12",
+    "c1",
+    "b3",
+    "c13",
+    "c5",
+    "b10",
+    "a3",
+    "c11",
+    "a9",
+    "c4",
     "c1",
     "a1",
-    "a5",
+    "a1",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 24,
+   "kind": "input",
+   "actions": [
     "a3",
-    "a8",
-    "b4",
-    "b4",
+    "dash",
     "b11",
     "c3",
     "c13",
     "a3",
     "c13",
     "a7",
-    "b13",
-    "b4",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 33,
-   "kind": "input",
-   "actions": [
     "a7",
     "pass"
    ]
   },
   {
-   "color": "blue",
-   "turnNumber": 34,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
    "color": "red",
-   "turnNumber": 35,
+   "turnNumber": 25,
    "kind": "input",
    "actions": [
-    "b12",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 36,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 37,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 38,
-   "kind": "input",
-   "actions": [
-    "b7",
-    "Slash",
-    "b12",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 39,
-   "kind": "input",
-   "actions": [
-    "b12",
+    "a3",
+    "dash",
+    "c13",
+    "c3",
+    "a5",
+    "c9",
+    "c13",
+    "c9",
+    "a1",
+    "c7",
+    "c13",
+    "b13",
+    "a13",
+    "a13",
+    "b11",
+    "c4",
+    "a8",
+    "c6",
     "c7",
     "a7",
     "b9",
     "c11",
     "a3",
-    "c12",
-    "b4",
-    "c13",
-    "c2",
-    "b1",
+    "a11",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 26,
+   "kind": "input",
+   "actions": [
+    "c7",
+    "dash",
     "c8",
     "b3",
     "b1",
@@ -704,8 +628,297 @@
     "c5",
     "c9",
     "b7",
-    "Sprout",
+    "c4",
+    "c1",
+    "c10",
+    "a3",
+    "b1",
+    "a1",
+    "b10",
+    "b3",
+    "c3",
+    "b2",
+    "a3",
+    "c2",
+    "a6",
+    "c6",
+    "c8",
+    "b3",
+    "b1",
+    "b4",
+    "c6",
+    "b11",
+    "b10",
+    "c9",
     "a10",
+    "c13",
+    "b13",
+    "c6",
+    "c2",
+    "b10",
+    "c12",
+    "a5",
+    "c6",
+    "a11",
+    "c10",
+    "b2",
+    "c9",
+    "c6",
+    "c2",
+    "a2",
+    "b11",
+    "b12",
+    "b11",
+    "b1",
+    "b12",
+    "c9",
+    "c9",
+    "c6",
+    "c12",
+    "b6",
+    "b11",
+    "b13",
+    "b13",
+    "c13",
+    "b5",
+    "a4",
+    "a4",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 27,
+   "kind": "input",
+   "actions": [
+    "a3",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 28,
+   "kind": "input",
+   "actions": [
+    "move"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 29,
+   "kind": "input",
+   "actions": [
+    "c10",
+    "dash",
+    "c2",
+    "c11",
+    "a4",
+    "c1",
+    "c2",
+    "a1",
+    "a12",
+    "c13",
+    "c13",
+    "b3",
+    "a7",
+    "b3",
+    "a7",
+    "a12",
+    "b11",
+    "c6",
+    "b11",
+    "a11",
+    "a3",
+    "a1",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 30,
+   "kind": "input",
+   "actions": [
+    "move"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 31,
+   "kind": "input",
+   "actions": [
+    "a3",
+    "dash",
+    "b13",
+    "c5",
+    "c2",
+    "b1",
+    "a4",
+    "c9",
+    "c9",
+    "c6",
+    "c11",
+    "a13",
+    "a2",
+    "c12",
+    "a13",
+    "b4",
+    "a10",
+    "a4",
+    "a13",
+    "b12",
+    "c10",
+    "a13",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 32,
+   "kind": "input",
+   "actions": [
+    "move"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 33,
+   "kind": "input",
+   "actions": [
+    "a9",
+    "dash",
+    "b13",
+    "a1",
+    "a2",
+    "a8",
+    "a2",
+    "a6",
+    "a2",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 34,
+   "kind": "input",
+   "actions": [
+    "c7",
+    "Slash",
+    "a3",
+    "b4",
+    "c5",
+    "c1",
+    "c13",
+    "a1",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 35,
+   "kind": "input",
+   "actions": [
+    "a8",
+    "dash",
+    "c9",
+    "a6",
+    "a2",
+    "a3",
+    "a5",
+    "a8",
+    "a8",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 36,
+   "kind": "input",
+   "actions": [
+    "a13",
+    "pass"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 37,
+   "kind": "input",
+   "actions": [
+    "a2",
+    "dash",
+    "b4",
+    "c8",
+    "c12",
+    "c10",
+    "c7",
+    "c3",
+    "c2",
+    "b12",
+    "b13",
+    "b8",
+    "a7",
+    "b7",
+    "b9",
+    "b4",
+    "a13",
+    "b9",
+    "b9",
+    "b7",
+    "a12",
+    "a5",
+    "a7",
+    "b11",
+    "a1",
+    "a1",
+    "b13",
+    "a10",
+    "a6",
+    "pass"
+   ]
+  },
+  {
+   "color": "blue",
+   "turnNumber": 38,
+   "kind": "input",
+   "actions": [
+    "move"
+   ]
+  },
+  {
+   "color": "red",
+   "turnNumber": 39,
+   "kind": "input",
+   "actions": [
+    "a11",
+    "dash",
+    "c3",
+    "c8",
+    "b13",
+    "a4",
+    "a7",
+    "c12",
+    "b7",
+    "b1",
+    "c2",
+    "c1",
+    "b3",
+    "b3",
+    "b8",
+    "a11",
+    "c3",
+    "a11",
+    "c13",
+    "c1",
+    "a3",
+    "b12",
+    "b9",
+    "c1",
+    "a7",
+    "a1",
+    "c3",
+    "c7",
+    "b2",
+    "a2",
+    "a13",
     "pass"
    ]
   },
@@ -714,9 +927,14 @@
    "turnNumber": 40,
    "kind": "input",
    "actions": [
-    "b11",
+    "a13",
+    "dash",
+    "b6",
+    "a3",
+    "a2",
+    "c7",
     "Slash",
-    "a10",
+    "a9",
     "pass"
    ]
   },
@@ -733,10 +951,22 @@
    "turnNumber": 42,
    "kind": "input",
    "actions": [
-    "b12",
+    "a10",
+    "a8",
+    "a11",
+    "a8",
+    "a7",
+    "b1",
     "dash",
-    "c8",
-    "b3",
+    "a6",
+    "c10",
+    "b4",
+    "a8",
+    "a10",
+    "a3",
+    "c11",
+    "b12",
+    "a9",
     "a9",
     "pass"
    ]
@@ -746,9 +976,16 @@
    "turnNumber": 43,
    "kind": "input",
    "actions": [
-    "a12",
-    "Sprout",
-    "c7",
+    "a11",
+    "dash",
+    "b1",
+    "a13",
+    "b13",
+    "b10",
+    "b4",
+    "b1",
+    "a8",
+    "b6",
     "pass"
    ]
   },
@@ -757,52 +994,24 @@
    "turnNumber": 44,
    "kind": "input",
    "actions": [
-    "b7",
-    "Slash",
-    "a13",
-    "b10",
-    "c12",
     "a5",
-    "c6",
+    "dash",
+    "c8",
     "a11",
-    "c10",
-    "b2",
-    "c9",
-    "c6",
-    "c2",
-    "a2",
-    "b11",
-    "b12",
-    "b11",
     "b1",
-    "b12",
-    "c9",
-    "c9",
-    "c6",
-    "c12",
-    "b6",
-    "b11",
-    "b13",
-    "b13",
-    "c13",
-    "b5",
-    "a4",
-    "a4",
-    "b7",
-    "a11",
-    "c6",
-    "c4",
-    "b4",
-    "b13",
-    "c10",
-    "b3",
-    "a2",
     "c2",
     "c11",
-    "a4",
-    "c1",
+    "a8",
+    "b6",
     "c2",
-    "a1",
+    "c4",
+    "a12",
+    "b6",
+    "c1",
+    "b2",
+    "a12",
+    "a5",
+    "b12",
     "pass"
    ]
   },
@@ -811,7 +1020,7 @@
    "turnNumber": 45,
    "kind": "input",
    "actions": [
-    "c8",
+    "a5",
     "pass"
    ]
   },
@@ -821,14 +1030,6 @@
    "kind": "input",
    "actions": [
     "a3",
-    "b3",
-    "a7",
-    "dash",
-    "c6",
-    "b11",
-    "a11",
-    "a3",
-    "a3",
     "pass"
    ]
   },
@@ -837,7 +1038,17 @@
    "turnNumber": 47,
    "kind": "input",
    "actions": [
-    "move"
+    "a2",
+    "dash",
+    "a3",
+    "c8",
+    "a12",
+    "c6",
+    "b6",
+    "c13",
+    "a11",
+    "a10",
+    "pass"
    ]
   },
   {
@@ -845,21 +1056,7 @@
    "turnNumber": 48,
    "kind": "input",
    "actions": [
-    "a2",
-    "dash",
-    "b13",
-    "c5",
-    "c2",
-    "b1",
-    "a4",
-    "c9",
-    "c9",
-    "c6",
-    "c11",
-    "a13",
-    "a2",
-    "b11",
-    "pass"
+    "move"
    ]
   },
   {
@@ -867,14 +1064,50 @@
    "turnNumber": 49,
    "kind": "input",
    "actions": [
-    "a10",
-    "a10",
-    "a4",
+    "b6",
+    "dash",
+    "b4",
     "a13",
-    "Comet",
+    "a7",
+    "a9",
+    "a10",
+    "c5",
+    "c11",
+    "b5",
+    "b5",
+    "b13",
+    "a8",
+    "b6",
+    "a3",
+    "a2",
+    "a9",
+    "a13",
+    "a12",
+    "c11",
+    "b11",
+    "c4",
+    "c7",
+    "b10",
+    "a7",
+    "b1",
+    "b4",
+    "a11",
+    "a3",
+    "a1",
+    "a3",
+    "a3",
+    "a3",
+    "c3",
+    "a12",
+    "c1",
+    "a4",
+    "b13",
+    "a3",
+    "b4",
+    "b4",
     "c9",
-    "c6",
-    "c8",
+    "b7",
+    "a8",
     "pass"
    ]
   },
@@ -883,22 +1116,17 @@
    "turnNumber": 50,
    "kind": "input",
    "actions": [
-    "b1",
+    "b5",
     "dash",
-    "b13",
-    "a1",
-    "a2",
-    "a8",
-    "a2",
-    "a6",
-    "a2",
-    "b1",
-    "c7",
-    "c4",
+    "b9",
     "c11",
-    "a8",
-    "b4",
-    "b3",
+    "b10",
+    "a7",
+    "b7",
+    "a10",
+    "a2",
+    "a4",
+    "b6",
     "pass"
    ]
   },
@@ -907,9 +1135,37 @@
    "turnNumber": 51,
    "kind": "input",
    "actions": [
-    "c13",
-    "Sprout",
+    "b6",
+    "dash",
+    "a4",
+    "a4",
+    "a7",
     "a11",
+    "a5",
+    "b10",
+    "b9",
+    "a13",
+    "a8",
+    "c7",
+    "b3",
+    "c10",
+    "b13",
+    "a1",
+    "b7",
+    "b2",
+    "b4",
+    "a5",
+    "c13",
+    "a11",
+    "c7",
+    "c13",
+    "a3",
+    "b2",
+    "b4",
+    "a13",
+    "c5",
+    "b7",
+    "b1",
     "pass"
    ]
   },
@@ -918,7 +1174,13 @@
    "turnNumber": 52,
    "kind": "input",
    "actions": [
-    "move"
+    "a7",
+    "dash",
+    "b12",
+    "b7",
+    "a8",
+    "a4",
+    "pass"
    ]
   },
   {
@@ -926,7 +1188,29 @@
    "turnNumber": 53,
    "kind": "input",
    "actions": [
-    "move"
+    "a11",
+    "dash",
+    "c12",
+    "c6",
+    "b2",
+    "c2",
+    "c11",
+    "a12",
+    "b10",
+    "c11",
+    "c4",
+    "c6",
+    "c4",
+    "c6",
+    "c2",
+    "b3",
+    "c4",
+    "b13",
+    "b12",
+    "c10",
+    "b6",
+    "a5",
+    "pass"
    ]
   },
   {
@@ -934,16 +1218,18 @@
    "turnNumber": 54,
    "kind": "input",
    "actions": [
-    "a2",
+    "a10",
     "dash",
-    "b5",
-    "b4",
-    "b13",
     "c6",
-    "a1",
-    "a4",
     "b12",
-    "a4",
+    "c12",
+    "a2",
+    "c3",
+    "a13",
+    "c5",
+    "c5",
+    "b1",
+    "b6",
     "pass"
    ]
   },
@@ -952,7 +1238,7 @@
    "turnNumber": 55,
    "kind": "input",
    "actions": [
-    "c8",
+    "a10",
     "pass"
    ]
   },
@@ -961,7 +1247,16 @@
    "turnNumber": 56,
    "kind": "input",
    "actions": [
-    "move"
+    "a5",
+    "dash",
+    "c2",
+    "b6",
+    "c5",
+    "a6",
+    "b13",
+    "a5",
+    "b4",
+    "pass"
    ]
   },
   {
@@ -969,7 +1264,8 @@
    "turnNumber": 57,
    "kind": "input",
    "actions": [
-    "move"
+    "b1",
+    "pass"
    ]
   },
   {
@@ -977,21 +1273,7 @@
    "turnNumber": 58,
    "kind": "input",
    "actions": [
-    "b1",
-    "dash",
-    "b7",
-    "b9",
-    "b4",
-    "a13",
-    "b9",
-    "b9",
-    "b7",
-    "a12",
-    "a5",
-    "a7",
-    "b11",
-    "a1",
-    "pass"
+    "move"
    ]
   },
   {
@@ -999,9 +1281,17 @@
    "turnNumber": 59,
    "kind": "input",
    "actions": [
-    "b12",
-    "Meteor",
-    "c12",
+    "c10",
+    "dash",
+    "b7",
+    "c8",
+    "c6",
+    "c9",
+    "b13",
+    "c8",
+    "b11",
+    "b1",
+    "c8",
     "pass"
    ]
   },
@@ -1010,7 +1300,53 @@
    "turnNumber": 60,
    "kind": "input",
    "actions": [
-    "move"
+    "b6",
+    "dash",
+    "c6",
+    "a7",
+    "c11",
+    "b12",
+    "c12",
+    "b11",
+    "c9",
+    "c12",
+    "c7",
+    "a3",
+    "a6",
+    "a5",
+    "a11",
+    "a12",
+    "b10",
+    "c2",
+    "a9",
+    "a10",
+    "a2",
+    "b8",
+    "a8",
+    "b12",
+    "c12",
+    "a12",
+    "c10",
+    "a2",
+    "c3",
+    "a2",
+    "a8",
+    "a6",
+    "a12",
+    "a2",
+    "a5",
+    "b5",
+    "c13",
+    "c9",
+    "c6",
+    "a7",
+    "c2",
+    "a1",
+    "a11",
+    "a13",
+    "b6",
+    "a9",
+    "pass"
    ]
   },
   {
@@ -1026,7 +1362,34 @@
    "turnNumber": 62,
    "kind": "input",
    "actions": [
-    "move"
+    "b7",
+    "dash",
+    "a3",
+    "b3",
+    "b1",
+    "b12",
+    "a5",
+    "b11",
+    "c2",
+    "b12",
+    "c5",
+    "c12",
+    "a7",
+    "b10",
+    "b4",
+    "c8",
+    "b3",
+    "c6",
+    "b10",
+    "a6",
+    "c4",
+    "b3",
+    "b11",
+    "a10",
+    "a3",
+    "Surge",
+    "b11",
+    "pass"
    ]
   },
   {
@@ -1034,7 +1397,19 @@
    "turnNumber": 63,
    "kind": "input",
    "actions": [
-    "move"
+    "a5",
+    "dash",
+    "c13",
+    "a4",
+    "b10",
+    "a11",
+    "c7",
+    "a1",
+    "b13",
+    "b5",
+    "a12",
+    "a4",
+    "pass"
    ]
   },
   {
@@ -1042,7 +1417,36 @@
    "turnNumber": 64,
    "kind": "input",
    "actions": [
+    "a4",
+    "dash",
+    "a11",
+    "c9",
+    "c11",
+    "c11",
+    "c6",
+    "b7",
+    "b7",
+    "a8",
+    "c5",
+    "b11",
+    "a5",
+    "c12",
+    "c8",
+    "c3",
+    "b5",
+    "b1",
+    "b3",
+    "b2",
+    "a13",
     "a6",
+    "b4",
+    "c2",
+    "a7",
+    "c10",
+    "a7",
+    "b7",
+    "a4",
+    "c7",
     "pass"
    ]
   },
@@ -1051,9 +1455,9 @@
    "turnNumber": 65,
    "kind": "input",
    "actions": [
-    "b5",
-    "Sprout",
-    "b11",
+    "a3",
+    "Slash",
+    "a13",
     "pass"
    ]
   },
@@ -1062,19 +1466,7 @@
    "turnNumber": 66,
    "kind": "input",
    "actions": [
-    "a13",
-    "dash",
-    "a11",
-    "c13",
-    "c1",
-    "a3",
-    "b12",
-    "b9",
-    "c1",
-    "a7",
-    "a1",
-    "b5",
-    "pass"
+    "move"
    ]
   },
   {
@@ -1082,270 +1474,10 @@
    "turnNumber": 67,
    "kind": "input",
    "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 68,
-   "kind": "input",
-   "actions": [
-    "b13",
-    "dash",
-    "a1",
-    "c10",
-    "b6",
-    "a3",
-    "a2",
-    "b11",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 69,
-   "kind": "input",
-   "actions": [
-    "b5",
-    "dash",
-    "b8",
-    "b3",
-    "b8",
-    "a8",
-    "a11",
-    "a7",
-    "Sprout",
-    "c3",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 70,
-   "kind": "input",
-   "actions": [
-    "a3",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 71,
-   "kind": "input",
-   "actions": [
-    "a8",
-    "dash",
-    "c11",
-    "b12",
-    "a9",
-    "b12",
-    "b10",
-    "c3",
-    "b2",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 72,
-   "kind": "input",
-   "actions": [
-    "a8",
-    "dash",
-    "b10",
-    "b4",
-    "b1",
-    "a8",
-    "b4",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 73,
-   "kind": "input",
-   "actions": [
-    "a11",
+    "c7",
     "Slash",
-    "b11",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 74,
-   "kind": "input",
-   "actions": [
-    "a10",
-    "dash",
-    "a8",
-    "b6",
-    "c2",
-    "c4",
-    "a12",
-    "b6",
-    "c1",
-    "b2",
-    "a12",
-    "a5",
-    "c13",
-    "b13",
-    "a13",
-    "b13",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 75,
-   "kind": "input",
-   "actions": [
     "a4",
-    "c13",
-    "a1",
-    "a6",
-    "a7",
-    "a7",
-    "a3",
-    "c8",
-    "a12",
-    "c6",
-    "b6",
-    "c13",
-    "a11",
-    "b4",
-    "c3",
-    "a2",
-    "Sprout",
-    "c3",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 76,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 77,
-   "kind": "input",
-   "actions": [
-    "a6",
-    "dash",
-    "c5",
-    "c11",
-    "b5",
-    "b5",
-    "b13",
-    "a8",
-    "b5",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 78,
-   "kind": "input",
-   "actions": [
-    "a4",
-    "dash",
-    "a12",
-    "c11",
-    "b11",
-    "c4",
-    "c7",
-    "b10",
-    "a7",
-    "b1",
-    "b4",
-    "a7",
-    "a3",
-    "a1",
-    "a3",
-    "a3",
-    "a3",
-    "c3",
-    "a12",
-    "c1",
-    "a4",
-    "b13",
-    "a3",
-    "b4",
-    "b4",
-    "c9",
-    "b7",
-    "a8",
-    "Sprout",
-    "a7",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 79,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 80,
-   "kind": "input",
-   "actions": [
-    "move"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 81,
-   "kind": "input",
-   "actions": [
-    "b4",
-    "dash",
-    "a4",
-    "c8",
-    "b13",
-    "c13",
-    "b11",
-    "c9",
-    "pass"
-   ]
-  },
-  {
-   "color": "blue",
-   "turnNumber": 82,
-   "kind": "input",
-   "actions": [
-    "a5",
-    "dash",
-    "a5",
-    "b10",
-    "b9",
-    "a11",
-    "a8",
-    "c7",
-    "b3",
-    "c10",
-    "b13",
-    "a1",
-    "b7",
-    "b2",
-    "b4",
-    "a5",
-    "pass"
-   ]
-  },
-  {
-   "color": "red",
-   "turnNumber": 83,
-   "kind": "input",
-   "actions": [
-    "c5",
+    "b12",
     "pass"
    ]
   }

@@ -3,6 +3,11 @@
  * Writes test/online-game.json: a complete online-style game (every turn an
  * input-token transcript, as rooms/{code}/turns holds) played by a seeded
  * random player through the real GameController, for rating.test.js.
+ * The first seed whose game is decided on the board in at least MIN_TURNS
+ * turns: a game that comes to a position for the third time ends there as a
+ * Blue win (threefold repetition, as the game loops and the rating
+ * function's replay rule it) and is skipped, so the analysis tests have a
+ * final position that shows the result, and enough turns to batch.
  *
  *   node functions/test/gen-online-fixture.js [seed]
  */
@@ -10,6 +15,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { ENGINE_FILES, engineDir } = require('../engine-loader');
+
+const MIN_TURNS = 60;
 
 function rng(seed) {
 	let s = seed >>> 0;
@@ -45,7 +52,7 @@ async function playOne(seed) {
 	};
 	const turns = [];
 	for (let n = 1; n <= 300 && !board.gameover; n++) {
-		board.takeSnapshot();
+		if (board.takeSnapshot() >= 3) return null;
 		board.turnCounter = n;
 		board.whoseTurn = n % 2 === 1 ? 'red' : 'blue';
 		board.update();
@@ -72,7 +79,7 @@ async function playOne(seed) {
 	for (let seed = Number(process.argv[2] || 1); seed < Number(process.argv[3] || 200); seed++) {
 		let game = null;
 		try { game = await playOne(seed); } catch (e) { if (process.env.DEBUG) console.error(seed, e.message); }
-		if (game) {
+		if (game && game.turns.length >= MIN_TURNS) {
 			game.seed = seed;
 			fs.writeFileSync(path.join(__dirname, 'online-game.json'), JSON.stringify(game, null, 1) + '\n');
 			console.log('seed', seed, 'winner', game.winner, 'turns', game.turns.length);
