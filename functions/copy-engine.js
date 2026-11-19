@@ -15,4 +15,8 @@ for (const [sub, f] of [['wasm', 'sigil_engine.js'], ['wasm', 'sigil_engine_bg.w
 	fs.mkdirSync(path.join(__dirname, sub), { recursive: true });
 	fs.copyFileSync(path.join(stat, sub, f), path.join(__dirname, sub, f));
 }
-console.log('copied the engine, shared files, wasm build and position calibration into ' + __dirname);
+// racer.js: the Puzzle Racer pool (ids and ratings of the mate puzzles).
+const { poolFromSet } = require('./racer');
+const puzzles = JSON.parse(fs.readFileSync(path.join(stat, 'puzzles', 'mate_puzzles.json'), 'utf8')).puzzles;
+fs.writeFileSync(path.join(__dirname, 'data', 'racer-pool.json'), JSON.stringify(poolFromSet(puzzles)));
+console.log('copied the engine, shared files, wasm build, position calibration and Racer puzzle pool into ' + __dirname);

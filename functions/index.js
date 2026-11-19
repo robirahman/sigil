@@ -24,6 +24,9 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   puzzleRace     - Puzzle Racer (racer.js): opens, joins, leaves, starts
+ *                    and rematches races; picks each race's puzzles and start.
+ *   sweepPuzzleRaces - every 5 minutes, deletes stale Racer lobbies and old races.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -45,6 +48,7 @@ const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const racer = require('./racer');
 const crypto = require('crypto');
 
 initializeApp();
@@ -489,6 +493,26 @@ exports.setVacation = onCall({ region: REGION }, async (request) => {
 		}
 		throw e;
 	}
+});
+
+// Puzzle Racer: { action: 'create' | 'join' | 'leave' | 'start' | 'rematch',
+// id, public }. Guests (anonymous accounts) race too, under a "Guest" name.
+exports.puzzleRace = onCall({ region: REGION }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	const fb = (auth.token && auth.token.firebase) || {};
+	try {
+		return await racer.handle(database(), request.data || {}, { uid: auth.uid, guest: fb.sign_in_provider === 'anonymous' }, Date.now());
+	} catch (e) {
+		if (e && e.raceError === 'bad-request') throw new HttpsError('invalid-argument', e.raceError);
+		if (e && e.raceError) throw new HttpsError('failed-precondition', e.raceError);
+		throw e;
+	}
+});
+
+exports.sweepPuzzleRaces = onSchedule({ schedule: 'every 5 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
+	const n = await racer.sweepRaces(database(), Date.now());
+	if (n) logger.info('sweepPuzzleRaces', { deleted: n });
 });
 
 exports.settleAbort = onValueWritten({
