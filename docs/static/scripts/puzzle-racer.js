@@ -116,6 +116,7 @@ async function bootRacer(all, params) {
 			return;
 		}
 		if (what === 'join-next') { go(R.race.next); return; }
+		if (what === 'reload') { location.reload(); return; }
 		if (R.busy) return;
 		R.busy = true;
 		setMsg('');
@@ -128,7 +129,8 @@ async function bootRacer(all, params) {
 			}
 			if (what === 'join') await call({ action: 'join', id: R.id });
 			if (what === 'start') await call({ action: 'start', id: R.id });
-			if (what === 'leave') { presence(false); await call({ action: 'leave', id: R.id }); go(null); return; }
+			// Presence stays on until the server has taken the racer out.
+			if (what === 'leave') { await call({ action: 'leave', id: R.id }); presence(false); go(null); return; }
 			if (what === 'rematch') { const res = await call({ action: 'rematch', id: R.id }); go(res.id); return; }
 		} catch (e) {
 			setMsg(racerErrorText(e));
@@ -330,7 +332,14 @@ async function bootRacer(all, params) {
 		}
 		if (phase === 'racing') {
 			// A spectator, a racer who has done every puzzle, or a racer whose puzzles did not load.
-			const done = R.run && R.run.over;
+			const failed = R.run && R.run.over && !R.run.seq;
+			const done = R.run && R.run.over && R.run.seq;
+			if (failed) {
+				root.innerHTML = '<h2>The puzzles did not load</h2><p>Check your connection and try again: the race goes on for another '
+					+ '<span id="racer-left">' + racerClock(race.endAt - now()) + '</span>.</p>'
+					+ '<button class="action-button" type="button" data-racer="reload">Try again</button>' + msg;
+				return;
+			}
 			root.innerHTML = '<h2>' + (done ? 'Every puzzle done!' : me && me.p ? 'Loading the puzzles…' : 'Race in progress') + '</h2>'
 				+ '<p>' + (done ? 'You finished all ' + R.run.seq.length + ' puzzles. The results come when the clock runs out: '
 					: me && me.p ? '' : 'You are watching. ') + '<span id="racer-left">' + racerClock(race.endAt - now()) + '</span> left.</p>' + msg;
@@ -343,9 +352,11 @@ async function bootRacer(all, params) {
 		const log = run && run.log.length ? '<p class="racer-note">Your puzzles (open one to review it):</p><ul class="storm-log">'
 			+ run.log.map((e, i) => '<li><a class="' + (e.ok ? 'is-ok' : 'is-miss') + '" href="puzzles.html?id=' + encodeURIComponent(e.id) + '" title="'
 				+ (e.ok ? 'Solved' : 'Missed') + '">' + (i + 1) + '</a></li>').join('') + '</ul>' : '';
-		const next = typeof race.next === 'string'
-			? '<button class="action-button" type="button" data-racer="join-next">Join the rematch</button>'
-			: mine ? '<button class="action-button" type="button" data-racer="rematch">Rematch</button>' : '';
+		// A racer goes through the server, which joins the linked rematch or
+		// opens a new one when that can no longer be joined; a spectator follows the link.
+		const next = mine ? '<button class="action-button" type="button" data-racer="rematch">'
+				+ (typeof race.next === 'string' ? 'Join the rematch' : 'Rematch') + '</button>'
+			: typeof race.next === 'string' ? '<button class="action-button" type="button" data-racer="join-next">Watch the rematch</button>' : '';
 		root.innerHTML = '<h2>' + (mine ? 'You finished ' + racerOrdinal(mine) + ' of ' + rows.length : 'Race over') + '</h2>'
 			+ (R.final ? '' : '<p class="racer-note">The last solves are still coming in…</p>')
 			+ '<table class="racer-results"><thead><tr><th>#</th><th>Racer</th><th>Solved</th><th>Tried</th></tr></thead><tbody>'

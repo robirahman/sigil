@@ -355,9 +355,9 @@ if (process.env.SIGIL_RACER_POOL) {
 		const id2 = (await R(pb)).id;
 		r = await race(id);
 		check('the old race links the rematch', r.next === id2, r.next);
-		await pa.waitForFunction(() => !!document.querySelector('[data-racer="join-next"]'), { timeout: 15000, polling: 250 }).catch(() => {});
-		check('the others are offered it', /A rematch is open/.test(await text(pa)));
-		await clickRacer(pa, 'join-next');
+		await pa.waitForFunction(() => { const b = document.querySelector('[data-racer="rematch"]'); return b && /Join the rematch/.test(b.textContent); }, { timeout: 15000, polling: 250 }).catch(() => {});
+		check('the others are offered it', /A rematch is open/.test(await text(pa)) && /Join the rematch/.test(await text(pa)));
+		await clickRacer(pa, 'rematch');
 		await pa.waitForFunction((rid) => window.SIGIL_RACER && window.SIGIL_RACER.id === rid && window.SIGIL_RACER.phase === 'lobby', { timeout: 30000, polling: 250 }, id2);
 		r = await until(async () => { const x = await race(id2); return x && x.players && x.players[aliceUid] ? x : null; }, 20000);
 		check('the rematch: B hosts, Alice is in, public like the first', r && r.host === bUid && r.public === true && r.status === 'lobby', r);
