@@ -104,14 +104,21 @@ async function notify(db, uid, key, entry, opts) {
 		});
 		written = res.snapshot.val();
 		fresh = !repeat && res.committed && (written && written.n) === 1;
+	} else if (o.token) {
+		// The same notice again (a retried step, a racing handler): only the
+		// writer whose transaction puts the token there pushes.
+		let repeat = false;
+		const res = await ref.transaction((cur) => {
+			repeat = !!(cur && cur.tok === o.token);
+			return repeat ? undefined : Object.assign({}, entry, { tok: o.token });
+		});
+		fresh = res.committed && !repeat;
 	} else {
-		if (o.quietMs || o.token) {
+		if (o.quietMs) {
 			const prev = await val(db, 'notifications/' + uid + '/' + key);
-			if (o.quietMs) fresh = !(prev && typeof prev.at === 'number' && prev.at > entry.at - o.quietMs);
-			// The same notice again (a retried step): written, not pushed.
-			if (o.token) fresh = fresh && !(prev && prev.tok === o.token);
+			fresh = !(prev && typeof prev.at === 'number' && prev.at > entry.at - o.quietMs);
 		}
-		await ref.set(o.token ? Object.assign({}, entry, { tok: o.token }) : entry);
+		await ref.set(entry);
 	}
 	if (o.push && fresh) await pushNotice(db, uid, entry.type, o.push, o.send).catch(() => null);
 	return written;
@@ -306,9 +313,17 @@ async function onTeamRequest(db, tid, uid, now, send) {
 	return told;
 }
 
+// Teams in one battle, the host included (teams.html invites at most nine).
+// The rules cannot count a battle's teams, so a bigger one is removed here.
+const BATTLE_TEAMS_MAX = 10;
+
 /** A new battle: each invited team's leader is asked. */
 async function onBattleCreated(db, bid, battle, now, send) {
 	if (!battle || !battle.teams) return 0;
+	if (Object.keys(battle.teams).length > BATTLE_TEAMS_MAX) {
+		await db.ref('team_battles/' + bid).remove();
+		return 0;
+	}
 	const host = (await val(db, 'teams/' + battle.host + '/name')) || battle.host;
 	let told = 0;
 	for (const t of Object.keys(battle.teams)) {

@@ -86,8 +86,11 @@ test('inbox: written once per subject, pushed only when switched on', async () =
 	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 10 }, { send, push: p, token: 'end-reds' });
 	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 11 }, { send, push: p, token: 'end-reds' });
 	assert.strictEqual(sent.length, before + 3);
-	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 12 }, { send, push: p, token: 'end-blues' });
+	// Two racing writers of the same notice: one push.
+	await Promise.all([1, 2].map((i) => community.notify(db, 'bob', 'battle-y', { type: 'team', event: 'battle-end', at: 20 + i }, { send, push: p, token: 'end-reds' })));
 	assert.strictEqual(sent.length, before + 4);
+	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 12 }, { send, push: p, token: 'end-blues' });
+	assert.strictEqual(sent.length, before + 5);
 });
 
 test('challenges and messages', async () => {
@@ -217,6 +220,12 @@ test('team battles: scored games, the start, the result', async () => {
 		'team_battles/old': { name: 'Old', host: 'reds', by: 'alice', created: 1, start: now - 5 * HOUR, end: now - 4 * HOUR, topN: 3, teams: { reds: 'accepted', blues: 'accepted' } },
 	});
 	assert.strictEqual(await community.onBattleCreated(db, 'tb1', Object.assign({}, await get('team_battles/tb1'), { teams: { reds: 'accepted', blues: 'invited' } }), now), 1);
+	// More teams than a battle takes (a custom client): removed, nobody asked.
+	const crowd = { reds: 'accepted' };
+	for (let i = 0; i < 12; i++) crowd['team-' + i] = 'invited';
+	await db.ref('team_battles/big').set({ name: 'Everyone', host: 'reds', by: 'alice', created: 1, start: now + HOUR, end: now + 2 * HOUR, topN: 1, teams: crowd });
+	assert.strictEqual(await community.onBattleCreated(db, 'big', await get('team_battles/big'), now), 0);
+	assert.strictEqual(await get('team_battles/big'), null);
 	assert.strictEqual((await get('notifications/bob/battleinv-tb1')).event, 'invite');
 	const game = (opp, result, extra) => Object.assign({ timestamp: now, opponentUid: opp, opponent: opp, rated: true, result, color: 'red', opponentIsAI: false }, extra || {});
 	// Alice beats Bob: a point for the reds.
