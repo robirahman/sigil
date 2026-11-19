@@ -190,6 +190,11 @@
 				async init() {
 					// friends.js (loaded by auth-status.js) names the clocks and variants.
 					for (let i = 0; i < 30 && !window.SigilFriends; i++) await new Promise((r) => setTimeout(r, 100));
+					// The viewer, before the first pick (their own games are skipped).
+					await new Promise((r) => {
+						const t = setTimeout(r, 3000);
+						const off = firebase.auth().onAuthStateChanged(() => { clearTimeout(t); off(); r(); });
+					});
 					const db = firebase.database();
 					db.ref('live_rooms').on('value', () => this._soon(), () => { this.loading = false; });
 					setInterval(() => this.refresh(), TV_REFRESH_MS);

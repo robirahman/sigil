@@ -150,6 +150,8 @@
 				build() {
 					const now = Date.now();
 					const E = window.SigilEvents;
+					// site-events.js did not load (offline, blocked): nothing to show.
+					if (!E) { this.loading = false; return; }
 					const fmt = (t) => new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 					const all = new Map();
 					for (const e of this._past.concat(this._current)) all.set(e.id, e);
