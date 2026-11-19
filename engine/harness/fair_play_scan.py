@@ -46,9 +46,10 @@ What is measured, per turn the player made (position i = that turn's sfnBefore):
     untimed, a fresh table per position, the game so far as repetition history;
   * the played turn is searched FIRST at the root (`probe_first`), so its score is
     exact; when the root list does not hold it (the engine never generated it), the
-    position after it is searched at depth-1 instead and its score negated;
+    position after it is searched at depth-1 instead and its score negated (not on
+    a game's last turn, whose recorded after-position keeps the mover's token);
   * match: the turn reaches the same position as the engine's choice (side-to-move
-    token aside, eval_games.position_key);
+    and turn-counter tokens aside, as the engine's own probe matches it);
   * loss: best score - played score, both clamped to +-cap centistones (STONE = 100),
     never negative;
   * close: loss <= --close centistones (Sigil has many equivalent orders of a turn).
@@ -114,9 +115,10 @@ def _human(uid):
 
 
 def position_key(sfn):
-    """eval_games.position_key: the position without the side-to-move token."""
-    p = sfn.split()
-    return ' '.join(p[:1] + p[2:])
+    """The position without the side-to-move and turn-counter tokens (the engine's
+    search::probe_key): the recorded final position keeps the mover's token
+    (eval_games.position_key), so neither may decide a match."""
+    return ' '.join(t for i, t in enumerate(sfn.split()) if i not in (1, 2))
 
 
 # ------------------------------------------------------------------ select ---
@@ -245,6 +247,10 @@ def analyse_turn(se, positions, i, depth, time_ms, tt_bits=TT_BITS):
     if probe is not None:
         _pd, ix, n, v, alpha = probe
         row.update(played=v, exact=v > alpha, ix=ix, n=n, fallback=False)
+    elif i + 1 >= len(positions) - 1:
+        # The game's last turn: its after-position is the recorded final one,
+        # which keeps the mover's token, so it is not searched (no loss).
+        row.update(played=None, exact=False, ix=None, n=None, fallback=False)
     else:
         # The root list never held the played turn: its value from the position
         # it reached, one ply shallower, from the mover's side.

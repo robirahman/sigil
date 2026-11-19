@@ -175,6 +175,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/auth-status.js?v=35',
 	'./static/scripts/board-marks.js?v=35',
 	'./static/scripts/engine/elo.js?v=35',
+	// Automatic suspensions: the account page's standing and the admin page.
+	'./static/scripts/engine/fair-play.js?v=35',
 	'./static/scripts/engine/firebase-sync.js?v=36',
 	'./static/scripts/engine/game-review.js?v=42',
 	'./static/scripts/engine/multiplayer-controller.js?v=36',

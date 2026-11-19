@@ -74,6 +74,29 @@
 		.flags-table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
 		.flags-table th, .flags-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-bg-mid); }
 		.flags-table th { color: var(--color-text-dim); font-family: 'Arvo', serif; font-size: 0.8em; text-transform: uppercase; }
+		.flags-wrap { overflow-x: auto; }
+		.report-card--appeal { border-left-color: var(--color-accent); }
+		.report-card__games { margin: 6px 0; padding-left: 20px; font-size: 0.9em; }
+		.scan__note {
+			background: rgba(230, 102, 102, 0.12);
+			border: 1px solid var(--color-error);
+			border-radius: 8px;
+			margin: 8px 0 12px;
+			padding: 10px 14px;
+		}
+		.scan__meta { color: var(--color-text-dim); font-size: 0.9em; margin: 4px 0; overflow-wrap: anywhere; }
+		.scan__controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+		.scan__controls input[type="file"] { color: var(--color-text-warm); font-family: inherit; max-width: 100%; }
+		.scan-card { border-left-color: var(--color-border); }
+		.scan-card--strong { border-left-color: var(--color-error); }
+		.scan-card--review { border-left-color: var(--color-btn-dash-hover); }
+		.scan-card--anchor { border-left-color: var(--color-accent); }
+		.scan-card__flag { font-family: 'Arvo', serif; font-size: 0.8em; text-transform: uppercase; color: var(--color-text-dim); }
+		.scan-card--strong .scan-card__flag { color: var(--color-error); }
+		.scan-card__stats { margin: 6px 0; font-size: 0.95em; }
+		.scan-card__why { margin: 4px 0; padding-left: 20px; font-size: 0.9em; }
+		.scan-card details { font-size: 0.9em; }
+		.scan-card summary { cursor: pointer; color: var(--color-accent); }
 	</style>
 </head>
 <body>
@@ -102,10 +125,12 @@
 					<div class="admin__tabs" role="tablist">
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + (openTruncated ? '+, oldest shown' : '') + ')'"></button>
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'all' }" x-on:click="view = 'all'" x-text="'All reports (' + reports.length + ')'"></button>
-						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'players' }" x-on:click="view = 'players'">Suspensions and abandonments</button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'appeals' }" x-on:click="view = 'appeals'" x-text="'Appeals (' + openAppeals + ')'" data-testid="tab-appeals"></button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'players' }" x-on:click="view = 'players'">Suspensions, abandons, stalls</button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'scan' }" x-on:click="openScan()" data-testid="tab-scan">Engine scan</button>
 					</div>
 
-					<template x-if="view !== 'players'">
+					<template x-if="view === 'open' || view === 'all'">
 						<div>
 							<p class="admin__msg" x-show="shownReports.length === 0">No reports here.</p>
 							<template x-for="r in shownReports" x-bind:key="r.id">
@@ -149,20 +174,138 @@
 
 					<template x-if="view === 'players'">
 						<div>
-							<p class="admin__msg" x-show="flagRows.length === 0">No suspensions or abandonments recorded.</p>
+							<p class="admin__msg" x-show="flagRows.length === 0">No suspensions, abandonments or stalls recorded.</p>
+							<div class="flags-wrap">
 							<table class="flags-table" x-show="flagRows.length > 0">
-								<thead><tr><th>Player</th><th>Abandonments</th><th>Suspension</th><th></th></tr></thead>
+								<thead><tr><th>Player</th><th>Abandons</th><th>Stalls</th><th>Last 30 days</th><th>Suspension</th><th></th></tr></thead>
 								<tbody>
 									<template x-for="f in flagRows" x-bind:key="f.uid">
 										<tr>
 											<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(f.uid)" x-text="nameOf(f.uid)"></a></td>
 											<td x-text="f.abandons || 0"></td>
-											<td><span x-text="banned(f.uid) ? banText(f.uid) : 'none'"></span><span x-show="f.reason && banned(f.uid)" x-text="' (' + f.reason + ')'"></span></td>
+											<td x-text="f.stalls || 0"></td>
+											<td x-text="recentCount(f.uid)"></td>
+											<td><span x-text="banned(f.uid) ? banText(f.uid) : 'none'"></span><span x-show="banned(f.uid) && f.auto === true" x-text="' (automatic)'"></span><span x-show="f.reason && banned(f.uid)" x-text="' (' + f.reason + ')'"></span></td>
 											<td><button class="admin__btn" x-show="banned(f.uid)" x-on:click="lift(f.uid)" x-bind:disabled="busy">Lift</button></td>
 										</tr>
 									</template>
 								</tbody>
 							</table>
+							</div>
+						</div>
+					</template>
+
+					<!-- Appeals (appeals/{uid}): one per suspension, filed on the
+					     account page; decided once. Lifting an automatic suspension
+					     overturns it (it no longer raises the next one's level) and
+					     can forgive the games behind it. -->
+					<template x-if="view === 'appeals'">
+						<div>
+							<p class="admin__msg" x-show="appeals.length === 0">No appeals.</p>
+							<template x-for="a in appeals" x-bind:key="a.uid + ':' + a.at">
+								<div class="report-card report-card--appeal" x-bind:class="{ 'report-card--resolved': a.status !== 'open' }" data-testid="appeal-card">
+									<div class="report-card__head">
+										<span class="report-card__reason">Appeal</span>
+										<span>by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(a.uid)" x-text="nameOf(a.uid)" data-testid="appeal-player"></a></span>
+										<span class="report-card__meta" x-text="when(a.at)"></span>
+									</div>
+									<p class="report-card__note" x-text="a.text"></p>
+									<p class="report-card__flags">
+										<template x-if="banned(a.uid)"><strong x-text="'Suspended ' + banText(a.uid) + (flagsOf(a.uid).auto === true ? ' (automatic)' : '')"></strong></template>
+										<template x-if="!banned(a.uid)"><span>No suspension running now.</span></template>
+										<span x-show="flagsOf(a.uid).reason" x-text="' ' + flagsOf(a.uid).reason"></span>
+										<span x-show="a.banAt !== flagsOf(a.uid).at && a.status === 'open'"> (the suspension appealed has since been changed)</span>
+									</p>
+									<template x-if="restrictionGames(a.uid).length">
+										<ul class="report-card__games">
+											<template x-for="o in restrictionGames(a.uid)" x-bind:key="o.room">
+												<li><a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(o.room)" x-text="o.room"></a>: <span x-text="offenseText(o)"></span></li>
+											</template>
+										</ul>
+									</template>
+									<p class="report-card__flags" x-text="(flagsOf(a.uid).abandons || 0) + ' abandoned, ' + (flagsOf(a.uid).stalls || 0) + ' stalled in all; ' + recentCount(a.uid) + ' in the last 30 days'"></p>
+									<template x-if="a.status !== 'open'">
+										<p class="report-card__meta" x-text="'Decided: ' + a.status + (a.resolvedAt ? ' ' + when(a.resolvedAt) : '') + (a.adminNote ? ': ' + a.adminNote : '')"></p>
+									</template>
+									<template x-if="a.status === 'open'">
+										<div>
+											<textarea rows="2" maxlength="1000" placeholder="Note to the player (shown on their account page)" x-model="appealNotes[a.uid]" data-testid="appeal-note"></textarea>
+											<div class="report-card__controls">
+												<button class="admin__btn" x-on:click="decideAppeal(a, 'lifted')" x-bind:disabled="busy" data-testid="appeal-lift">Lift suspension</button>
+												<label x-show="flagsOf(a.uid).auto === true"><input type="checkbox" x-model="appealForgive[a.uid]" /> forgive its games</label>
+												<button class="admin__btn" x-on:click="decideAppeal(a, 'kept')" x-bind:disabled="busy" data-testid="appeal-keep">Keep</button>
+												<select x-model="appealExtend[a.uid]" aria-label="Extend by">
+													<option value="1">1 day</option>
+													<option value="7">7 days</option>
+													<option value="30">30 days</option>
+												</select>
+												<button class="admin__btn admin__btn--danger" x-on:click="decideAppeal(a, 'extended')" x-bind:disabled="busy" data-testid="appeal-extend">Extend</button>
+											</div>
+										</div>
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<!-- The engine-correlation scan (engine/harness/fair_play_scan.py):
+					     the latest report Robi published to fairplay_reports/, or a
+					     report file opened here (read in this browser only). -->
+					<template x-if="view === 'scan'">
+						<div>
+							<div class="scan__note"><strong>For human review only.</strong> A flag means: open the games and look. Never suspend on a flag alone; strong players agree with the engine more, and a short sample is noisy.</div>
+							<div class="scan__controls">
+								<button class="admin__btn" x-on:click="loadScan()" x-bind:disabled="busy">Latest from the database</button>
+								<label>Open a report file <input type="file" accept=".json,application/json" x-on:change="openScanFile($event)" data-testid="scan-file" /></label>
+								<label><input type="checkbox" x-model="scanAll" /> show unflagged players</label>
+							</div>
+							<p class="admin__msg" x-show="!scan && !scanError">No scan report yet. Robi runs engine/harness/fair_play_scan.py (see its header) and either publishes the report or sends the file.</p>
+							<p class="admin__msg" x-show="scanError" x-text="scanError"></p>
+							<template x-if="scan">
+								<div data-testid="scan-report">
+									<p class="scan__meta" x-text="'Report ' + (scan.run || '') + (scanSource ? ' (' + scanSource + ')' : '') + ': ' + when(scan.generatedAt) + ' · engine ' + (scan.engine || '?') + ' · depth ' + (scan.depth || '?') + ' · ' + ((scan.source || {}).games || 0) + ' games, ' + (scan.players || []).length + ' players'"></p>
+									<p class="scan__meta" x-text="scanCounts"></p>
+									<p class="admin__msg" x-show="scanShown.length === 0">No flagged players in this report.</p>
+									<template x-for="p in scanShown" x-bind:key="p.uid">
+										<div class="report-card scan-card" x-bind:class="'scan-card--' + p.flag" data-testid="scan-card">
+											<div class="report-card__head">
+												<span class="scan-card__flag" x-text="p.flag"></span>
+												<a x-bind:href="'profile.html?uid=' + encodeURIComponent(p.uid)" x-text="nameOf(p.uid)" data-testid="scan-player"></a>
+												<span class="report-card__meta" x-text="'rating ' + (p.rating === null ? '?' : Math.round(p.rating)) + ' · ' + p.games + ' games, ' + p.turns + ' turns'"></span>
+											</div>
+											<p class="scan-card__stats" x-text="statLine(p, 't1')"></p>
+											<p class="scan-card__stats" x-text="statLine(p, 'acpl')"></p>
+											<template x-if="p.why && p.why.length">
+												<ul class="scan-card__why"><template x-for="w in p.why" x-bind:key="w"><li x-text="w"></li></template></ul>
+											</template>
+											<details>
+												<summary x-text="'Games (' + (p.gameList || []).length + ')'"></summary>
+												<ul class="report-card__games">
+													<template x-for="g in (p.gameList || [])" x-bind:key="g.gameId">
+														<li>
+															<template x-if="g.roomCode"><a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(g.roomCode)" x-text="g.roomCode"></a></template>
+															<template x-if="!g.roomCode"><span x-text="g.gameId"></span></template>
+															<span x-text="' ' + (g.timestamp ? when(g.timestamp) : '') + ', ' + g.color + ' vs ' + nameOf(g.opponentUid) + ': match ' + pct(g.t1) + ', loss ' + g.acpl + ' (' + g.turns + ' turns)'"></span>
+														</li>
+													</template>
+												</ul>
+											</details>
+										</div>
+									</template>
+									<template x-if="(scan.anchors || []).length">
+										<div>
+											<h3>The site's AI on the same measures</h3>
+											<template x-for="p in scan.anchors" x-bind:key="p.uid">
+												<div class="report-card scan-card scan-card--anchor">
+													<div class="report-card__head"><span x-text="nameOf(p.uid)"></span><span class="report-card__meta" x-text="p.games + ' games, ' + p.turns + ' turns'"></span></div>
+													<p class="scan-card__stats" x-text="statLine(p, 't1')"></p>
+													<p class="scan-card__stats" x-text="statLine(p, 'acpl')"></p>
+												</div>
+											</template>
+										</div>
+									</template>
+								</div>
+							</template>
 						</div>
 					</template>
 				</div>
@@ -187,11 +330,15 @@
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 	<script src="static/scripts/report-dialog.js?v=35"></script>
+	<script src="static/scripts/engine/fair-play.js?v=35"></script>
 
 	<script>
-		// Reports (reports/), suspensions and abandonment counts (user_flags/).
-		// The rules let only admins (admins/{uid} === true) read either or
-		// write user_flags; a report's own fields stay as filed.
+		// Reports (reports/), suspensions and the abandoned and stalled games
+		// behind them (user_flags/), appeals (appeals/) and the engine scan
+		// (fairplay_reports/). The rules let only admins (admins/{uid} ===
+		// true) read them or write user_flags; a report's or an appeal's own
+		// fields stay as filed, and the server's record of offenses can only
+		// be forgiven, never edited.
 		document.addEventListener('alpine:init', () => {
 			// A suspension "indefinitely": far enough out to be permanent.
 			const FOREVER = Date.UTC(2200, 0, 1);
@@ -207,6 +354,26 @@
 				drafts: {},
 				banDays: {},
 				banReasons: {},
+				appeals: [],
+				appealNotes: {},
+				appealForgive: {},
+				appealExtend: {},
+				scan: null,
+				scanSource: '',
+				scanError: '',
+				scanAll: false,
+				scanLoaded: false,
+
+				get openAppeals() { return this.appeals.filter((a) => a.status === 'open').length; },
+				get scanShown() {
+					const ps = (this.scan && this.scan.players) || [];
+					return this.scanAll ? ps : ps.filter((p) => p.flag === 'strong' || p.flag === 'review');
+				},
+				get scanCounts() {
+					const c = {};
+					for (const p of (this.scan && this.scan.players) || []) c[p.flag] = (c[p.flag] || 0) + 1;
+					return ['strong', 'review', 'none', 'insufficient'].map((k) => (c[k] || 0) + ' ' + k).join(' · ');
+				},
 
 				get openCount() { return this.reports.filter((r) => !r.resolved).length; },
 				get shownReports() { return this.view === 'open' ? this.reports.filter((r) => !r.resolved) : this.reports; },
@@ -217,7 +384,7 @@
 				openTruncated: false,
 				get flagRows() {
 					return Object.keys(this.flags).map((uid) => Object.assign({ uid }, this.flags[uid]))
-						.filter((f) => f.abandons > 0 || typeof f.banUntil === 'number')
+						.filter((f) => f.abandons > 0 || f.stalls > 0 || typeof f.banUntil === 'number')
 						.sort((a, b) => (this.banned(b.uid) - this.banned(a.uid)) || ((b.abandons || 0) - (a.abandons || 0)));
 				},
 
@@ -250,11 +417,25 @@
 					// push an older open one out of the queue, and the download
 					// stays bounded (each account files one a minute, rules).
 					const OPEN_MAX = 500;
-					const [openSnap, recentSnap, flagSnap] = await Promise.all([
+					const [openSnap, recentSnap, flagSnap, appealOpenSnap, appealRecentSnap] = await Promise.all([
 						db.ref('reports').orderByChild('resolved').equalTo(null).limitToFirst(OPEN_MAX).once('value'),
 						db.ref('reports').orderByChild('at').limitToLast(500).once('value'),
 						db.ref('user_flags').once('value'),
+						// Every open appeal (one per player), and the latest decided.
+						db.ref('appeals').orderByChild('status').equalTo('open').once('value'),
+						db.ref('appeals').orderByChild('at').limitToLast(50).once('value'),
 					]);
+					const appeals = new Map();
+					for (const snap of [appealOpenSnap, appealRecentSnap]) {
+						snap.forEach((c) => { appeals.set(c.key, Object.assign({ uid: c.key }, c.val())); });
+					}
+					// Open first (oldest first), then the decided, newest first.
+					this.appeals = Array.from(appeals.values()).sort((a, b) => ((a.status === 'open') === (b.status === 'open')
+						? (a.status === 'open' ? a.at - b.at : b.at - a.at) : (a.status === 'open' ? -1 : 1)));
+					for (const a of this.appeals) {
+						if (!(a.uid in this.appealExtend)) this.appealExtend[a.uid] = '7';
+						if (!(a.uid in this.appealForgive)) this.appealForgive[a.uid] = true;
+					}
 					const byId = new Map();
 					for (const snap of [openSnap, recentSnap]) {
 						snap.forEach((c) => { byId.set(c.key, Object.assign({ id: c.key }, c.val())); });
@@ -281,7 +462,13 @@
 					const uids = new Set();
 					for (const r of reports) { uids.add(r.by); uids.add(r.target); }
 					for (const uid of Object.keys(this.flags)) uids.add(uid);
-					await Promise.all([...uids].filter((u) => u && !(u in this.names)).map(async (u) => {
+					for (const a of this.appeals) uids.add(a.uid);
+					await this._names(uids);
+				},
+
+				async _names(uids) {
+					const db = firebase.database();
+					await Promise.all([...uids].filter((u) => typeof u === 'string' && u && !(u in this.names)).map(async (u) => {
 						try {
 							const n = (await db.ref('users/' + u + '/displayName').once('value')).val();
 							this.names[u] = n || u;
@@ -289,12 +476,51 @@
 					}));
 				},
 
-				nameOf(uid) { return this.names[uid] || uid; },
+				nameOf(uid) { return this.names[uid] || uid || '?'; },
 				flagsOf(uid) { return this.flags[uid] || {}; },
 				banned(uid) { const f = this.flags[uid]; return !!(f && typeof f.banUntil === 'number' && f.banUntil > Date.now()); },
 				banText(uid) {
 					const t = this.flagsOf(uid).banUntil;
 					return t >= FOREVER ? 'indefinitely' : 'until ' + new Date(t).toLocaleString();
+				},
+				recentCount(uid) {
+					return typeof fairPlayRecentOffenses === 'function' ? fairPlayRecentOffenses(this.flagsOf(uid), Date.now()).length : 0;
+				},
+				// The automatic suspension running now (its record has the
+				// suspension's own `at`), or null.
+				currentRestriction(uid) {
+					const f = this.flagsOf(uid);
+					if (f.auto !== true || !f.restrictions) return null;
+					const key = Object.keys(f.restrictions).find((k) => f.restrictions[k] && f.restrictions[k].at === f.at);
+					return key ? Object.assign({ key }, f.restrictions[key]) : null;
+				},
+				restrictionGames(uid) {
+					const r = this.currentRestriction(uid);
+					const offenses = this.flagsOf(uid).offenses || {};
+					return r && r.rooms ? Object.keys(r.rooms).map((room) => Object.assign({ room, kind: r.rooms[room] }, offenses[room] || {})) : [];
+				},
+				offenseText(o) {
+					const at = typeof o.at === 'number' ? ', ' + this.when(o.at) : '';
+					if (o.kind === 'stall') {
+						return 'stalled' + (typeof o.leftMs === 'number'
+							? ' (sat ' + Math.round((o.satMs || 0) / 1000) + ' s with ' + Math.round(o.leftMs / 1000) + ' s left; median turn ' + Math.round((o.medianMs || 0) / 1000) + ' s over ' + (o.turns || 0) + ' turns)'
+							: '') + at + (o.forgiven ? ', forgiven' : '');
+					}
+					return 'abandoned (claim upheld)' + at + (o.forgiven ? ', forgiven' : '');
+				},
+				pct(x) { return typeof x === 'number' ? Math.round(x * 100) + '%' : '?'; },
+				statLine(p, key) {
+					const v = p[key] || {};
+					const peers = p.peers || null;
+					if (key === 't1') {
+						return 'Engine match ' + this.pct(v.est) + ' [' + this.pct(v.lo) + ', ' + this.pct(v.hi) + ']'
+							+ (peers && peers.t1 ? ' · peers (' + peers.n + ' within ' + peers.band + '): mean ' + this.pct(peers.t1.mean) + ', 95th pct ' + this.pct(peers.t1.p95) : '')
+							+ (p.z && typeof p.z.t1 === 'number' ? ' · z ' + p.z.t1 : '');
+					}
+					const f = (x) => (typeof x === 'number' ? x.toFixed(1) : '?');
+					return 'Average loss ' + f(v.est) + ' [' + f(v.lo) + ', ' + f(v.hi) + '] centistones'
+						+ (peers && peers.acpl ? ' · peers: mean ' + f(peers.acpl.mean) + ', 5th pct ' + f(peers.acpl.p05) : '')
+						+ (p.z && typeof p.z.acpl === 'number' ? ' · z ' + p.z.acpl : '');
 				},
 				reasonText(code) {
 					const hit = (window.SigilReport && SigilReport.REASONS || []).find((r) => r[0] === code);
@@ -328,10 +554,12 @@
 					const d = this.banDays[target] || '7';
 					const until = d === 'forever' ? FOREVER : Date.now() + Number(d) * 86400000;
 					const reason = (this.banReasons[target] || '').trim().slice(0, 500);
-					// update, not set: the abandonment count stays.
+					// update, not set: the abandonment count stays. An admin's
+					// suspension is not automatic (`auto` cleared).
 					return this._write((db) => db.ref('user_flags/' + target).update({
 						banUntil: until,
 						reason: reason || null,
+						auto: null,
 						by: this.uid,
 						at: firebase.database.ServerValue.TIMESTAMP,
 					}));
@@ -341,9 +569,100 @@
 					return this._write((db) => db.ref('user_flags/' + target).update({
 						banUntil: 0,
 						reason: null,
+						auto: null,
 						by: this.uid,
 						at: firebase.database.ServerValue.TIMESTAMP,
 					}));
+				},
+
+				// One atomic write: the appeal's decision, and the suspension
+				// lifted (an automatic one overturned, its games forgiven when
+				// ticked), kept, or extended from its current end.
+				decideAppeal(a, status) {
+					const TS = firebase.database.ServerValue.TIMESTAMP;
+					const uid = a.uid;
+					const f = this.flagsOf(uid);
+					const ap = 'appeals/' + uid + '/';
+					const fl = 'user_flags/' + uid + '/';
+					const note = (this.appealNotes[uid] || '').trim().slice(0, 1000);
+					const u = { [ap + 'status']: status, [ap + 'resolvedBy']: this.uid, [ap + 'resolvedAt']: TS };
+					if (note) u[ap + 'adminNote'] = note;
+					const running = typeof f.banUntil === 'number' && f.banUntil > Date.now() ? f.banUntil : 0;
+					if (status === 'lifted') {
+						const r = this.currentRestriction(uid);
+						if (r) {
+							u[fl + 'restrictions/' + r.key + '/overturned'] = true;
+							u[fl + 'restrictions/' + r.key + '/overturnedBy'] = this.uid;
+							u[fl + 'restrictions/' + r.key + '/overturnedAt'] = TS;
+							if (this.appealForgive[uid]) {
+								for (const room of Object.keys(r.rooms || {})) {
+									if ((f.offenses || {})[room]) u[fl + 'offenses/' + room + '/forgiven'] = true;
+								}
+							}
+						}
+						Object.assign(u, { [fl + 'banUntil']: 0, [fl + 'reason']: null, [fl + 'auto']: null, [fl + 'by']: this.uid, [fl + 'at']: TS });
+						u[ap + 'until'] = 0;
+					} else if (status === 'extended') {
+						// From the current end (or now): `at` and `by` stay, so this
+						// suspension is not appealed again.
+						const until = Math.max(running, Date.now()) + Number(this.appealExtend[uid] || 7) * 86400000;
+						u[fl + 'banUntil'] = until;
+						u[ap + 'until'] = until;
+					} else if (running) {
+						u[ap + 'until'] = running;
+					}
+					return this._write((db) => db.ref().update(u));
+				},
+
+				async openScan() {
+					this.view = 'scan';
+					if (!this.scanLoaded) await this.loadScan();
+				},
+
+				async loadScan() {
+					this.scanError = '';
+					this.scanLoaded = true;
+					try {
+						const snap = await firebase.database().ref('fairplay_reports').orderByKey().limitToLast(1).once('value');
+						let rep = null;
+						snap.forEach((c) => { rep = c.val(); });
+						if (rep) await this._showScan(rep, 'database');
+					} catch (e) {
+						console.error('[Admin] scan load failed:', e);
+						this.scanError = 'Could not load the scan reports: ' + (e.message || e);
+					}
+				},
+
+				openScanFile(ev) {
+					const file = ev.target.files && ev.target.files[0];
+					if (!file) return;
+					this.scanError = '';
+					const reader = new FileReader();
+					reader.onload = () => {
+						try {
+							const rep = JSON.parse(reader.result);
+							if (!rep || rep.version !== 1 || !Array.isArray(rep.players)) throw new Error('not a fair_play_scan.py report (version 1)');
+							this._showScan(rep, file.name);
+						} catch (e) {
+							this.scanError = 'That file is not a scan report: ' + (e.message || e);
+						}
+					};
+					reader.readAsText(file);
+				},
+
+				async _showScan(rep, source) {
+					// The database turns arrays with gaps into objects: back to lists.
+					const list = (x) => (Array.isArray(x) ? x : x && typeof x === 'object' ? Object.values(x) : []);
+					rep.players = list(rep.players).map((p) => Object.assign(p, { why: list(p.why), gameList: list(p.gameList) }));
+					rep.anchors = list(rep.anchors);
+					this.scan = rep;
+					this.scanSource = source;
+					const uids = new Set();
+					for (const p of rep.players.concat(rep.anchors)) {
+						uids.add(p.uid);
+						for (const g of p.gameList || []) uids.add(g.opponentUid);
+					}
+					await this._names(uids);
 				},
 			}));
 		});

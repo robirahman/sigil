@@ -129,3 +129,18 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Fair play (emulators)
+
+```sh
+(cd docs && python3 -m http.server 8801) &
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/fair-play-emulator-test.js http://localhost:8801 && node ../tools/browser/fair-play-appeals-emulator-test.js http://localhost:8801'
+```
+
+`fair-play-emulator-test.js`: a report from a profile and from the game-over modal, the admin
+suspending the reported player. `fair-play-appeals-emulator-test.js`: an automatic suspension
+(seeded as `rateGame` writes it) shown with its games on account.html, an appeal filed there and
+lifted from admin.html's queue (the games forgiven), an admin's suspension appealed and extended,
+the fair-play standing of a player with one offense, and the Engine scan tab with a published
+report and a report file.
