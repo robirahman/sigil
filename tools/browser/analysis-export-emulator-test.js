@@ -341,6 +341,7 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		const recorded = await page.evaluate(() => { const B = document.querySelector('[x-data^="gameBoard"]')._x_dataStack[0]; return JSON.parse(JSON.stringify(B._engine._gameLog.slice(-1)[0].actions)); });
 		// The refused c9 stays in the transcript, as a refused click does (replay re-asks the same way).
 		check('typed: the turn is recorded in the notation it was typed in', JSON.stringify(recorded) === JSON.stringify(['a3', 'dash', 'c9', 'a2', 'a6', dashTo, 'pass']), recorded);
+		check('game page: the image caption names the side to move', (await boardVal(page, 'B._exportLabel()')) === 'Blue to move');
 		before = downloadsBefore(dl);
 		await page.evaluate(() => [...document.querySelectorAll('.action-button--image')].find((b) => b.offsetParent !== null).click());
 		const gpng = await download(dl, '.png', before);

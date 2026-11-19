@@ -420,6 +420,14 @@ function boardExportMixin() {
 			};
 		},
 
+		/** The caption's middle: the reviewed turn, else the result or the side to move. */
+		_exportLabel() {
+			if (this.reviewMode) return (this.reviewTurnLabels || [])[this.reviewIndex] || '';
+			if (this.winner === 'red' || this.winner === 'blue') return (this.winner === 'red' ? 'Red' : 'Blue') + ' wins';
+			if (this.whoseTurn === 'red' || this.whoseTurn === 'blue') return (this.whoseTurn === 'red' ? 'Red' : 'Blue') + ' to move';
+			return '';
+		},
+
 		// Plain methods, not getters: a spread mixin would freeze a getter's value.
 		canExportImage() {
 			return !!(this.spellDict && Object.keys(this.spellDict).length);
@@ -432,7 +440,7 @@ function boardExportMixin() {
 			try {
 				const st = this.boardExportState();
 				const names = this._exportNames();
-				const label = this.reviewMode ? (this.reviewTurnLabels || [])[this.reviewIndex] || '' : '';
+				const label = this._exportLabel();
 				const canvas = await BoardImage.render(st, {
 					size: 1200, artOnly: !!this.useArtOnlySpells,
 					caption: {
