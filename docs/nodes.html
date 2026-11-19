@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta http-equiv="X-UA-Compatible" content="ie=edge" />
+		<link href="static/css/global.css?v202305191" rel="stylesheet" />
+		<link href="static/css/layout.css" rel="stylesheet" />
+		<link href="static/css/styles.css?v=35" rel="stylesheet" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+		<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+		<title>Node Trainer - Sigil Online</title>
+		<style>
+			header { position: absolute; }
+			body > .main { padding-top: 0px; }
+
+			.trainer-panel {
+				font-family: 'Overlock', sans-serif;
+				color: var(--color-text-warm, #eee);
+				padding: 56px 0 8px;
+				max-width: 640px;
+			}
+			.trainer-panel h2 { font-family: 'Arvo', serif; font-size: 1.35em; margin: 0 0 6px; }
+			.trainer-panel p { margin: 0 0 8px; line-height: 1.45; }
+			.trainer-guide { margin: 0 0 8px; }
+			.trainer-guide summary { cursor: pointer; color: var(--color-accent); }
+			.trainer-guide ul { margin: 6px 0 0; padding-left: 20px; line-height: 1.45; }
+			.trainer-modes { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+			.trainer-modes button {
+				font: inherit;
+				color: inherit;
+				background: transparent;
+				border: 1px solid var(--color-border, #555);
+				border-radius: 14px;
+				padding: 4px 12px;
+				cursor: pointer;
+			}
+			.trainer-modes button[aria-pressed="true"] { border-color: #d4af37; font-weight: bold; }
+			.trainer-modes button:disabled { opacity: 0.5; cursor: default; }
+			.trainer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; }
+			.trainer-row .action-button { margin: 0; }
+			.trainer-stat { font-size: 1.05em; }
+			.trainer-stat strong { font-size: 1.2em; }
+			.trainer-timer {
+				height: 6px;
+				border-radius: 3px;
+				background: var(--color-border, #555);
+				overflow: hidden;
+				margin: 6px 0;
+			}
+			.trainer-timer__bar { height: 100%; width: 100%; background: #d4af37; transition: width 0.1s linear; }
+			.trainer-prompt {
+				min-height: 2.4em;
+				font-family: 'Arvo', serif;
+				font-size: 2em;
+				text-align: center;
+				margin: 4px 0;
+			}
+			.trainer-feedback { min-height: 1.4em; text-align: center; color: var(--color-text-muted, #aaa); margin: 0 0 6px; }
+			.trainer-feedback--wrong { color: #e0604a; }
+			.trainer-feedback--right { color: #6fd46f; }
+			.trainer-keypad { display: none; margin: 4px 0 8px; }
+			.trainer--name .trainer-keypad { display: block; }
+			.trainer-keypad__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 4px 0; }
+			.trainer-keypad button {
+				font: inherit;
+				min-width: 2.4em;
+				min-height: 2.2em;
+				color: inherit;
+				background: var(--color-surface, rgba(255, 255, 255, 0.06));
+				border: 1px solid var(--color-border, #555);
+				border-radius: 6px;
+				cursor: pointer;
+			}
+			.trainer-keypad button.is-on { border-color: #d4af37; background: rgba(212, 175, 55, 0.25); }
+			.trainer-keypad__typed { text-align: center; min-height: 1.3em; color: var(--color-text-muted, #aaa); }
+			.trainer-result {
+				margin: 8px 0;
+				padding: 10px 12px;
+				border-radius: 6px;
+				border: 1px solid #6fd46f;
+				background: rgba(111, 212, 111, 0.12);
+				line-height: 1.45;
+			}
+			.trainer-history { font-size: 0.9em; color: var(--color-text-muted, #aaa); }
+			.back-link { color: var(--color-accent); }
+
+			/* The board: the printed board image with one button per node,
+			   placed by the .stone-node--<node> rules of styles.css. */
+			.trainer-node { cursor: pointer; animation: none; }
+			.trainer--name .trainer-node { cursor: default; }
+			.trainer-node:hover { box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.45); }
+			.trainer--name .trainer-node:hover { box-shadow: none; }
+			.trainer-node__label {
+				position: absolute;
+				inset: 0;
+				display: none;
+				align-items: center;
+				justify-content: center;
+				font-family: 'Arvo', serif;
+				font-size: clamp(8px, 1.6vw, 14px);
+				font-weight: bold;
+				color: #fff;
+				text-shadow: 0 0 3px #000, 0 0 2px #000;
+				pointer-events: none;
+			}
+			.trainer--labels .trainer-node__label,
+			.trainer-node--right .trainer-node__label,
+			.trainer-node--wrong .trainer-node__label { display: flex; }
+			.trainer-node--target::after {
+				content: '';
+				position: absolute; inset: -6px;
+				border: 3px solid #f0d77a;
+				border-radius: 50%;
+				box-shadow: 0 0 10px 3px rgba(240, 215, 122, 0.8);
+				pointer-events: none;
+			}
+			.trainer-node--right { background: rgba(111, 212, 111, 0.85); }
+			.trainer-node--wrong { background: rgba(224, 96, 74, 0.85); }
+		</style>
+		<script>
+			var webpDetector = new Image();
+			webpDetector.onload = function () { document.documentElement.classList.add('webp'); };
+			webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+		</script>
+		<script src="static/scripts/theme-manager.js"></script>
+	</head>
+
+	<body>
+		<header>
+			<div class="container">
+				<div class="header-container">
+					<div>
+						<h1 class="logo">
+							<a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a>
+						</h1>
+					</div>
+					<h1></h1>
+					<div id="auth-status"></div>
+				</div>
+			</div>
+		</header>
+
+		<div class="main" id="trainer-root">
+			<div class="container">
+				<div class="container__inner">
+					<div class="trainer-panel">
+						<h2>Node Trainer</h2>
+						<p>Games, puzzles and the rules name every node of the board. Learn the names: in 30 seconds, find as many nodes as you can, or name them.</p>
+						<details class="trainer-guide">
+							<summary>How the nodes are named</summary>
+							<ul>
+								<li>The board has three zones, <strong>a</strong>, <strong>b</strong> and <strong>c</strong>, of 13 nodes each.</li>
+								<li><strong>1</strong> is the zone's mana node: a1 is where Red starts, b1 where Blue starts, c1 is at the top.</li>
+								<li><strong>2&ndash;6</strong> are the zone's five-node sigil, <strong>7</strong> its charm (one-node sigil) and <strong>8&ndash;10</strong> its three-node sigil.</li>
+								<li><strong>11&ndash;13</strong> are the void nodes, between the sigils.</li>
+							</ul>
+						</details>
+
+						<div class="trainer-modes" role="group" aria-label="Mode">
+							<button type="button" data-mode="find" aria-pressed="true">Find the node</button>
+							<button type="button" data-mode="name" aria-pressed="false">Name the node</button>
+						</div>
+						<label class="trainer-row"><input type="checkbox" id="trainer-labels" /> Show the names on the board (practice: the round is not scored)</label>
+
+						<div class="trainer-row">
+							<button type="button" class="action-button" id="trainer-start">Start</button>
+							<span class="trainer-stat">Score <strong id="trainer-score">0</strong></span>
+							<span class="trainer-stat" id="trainer-best">Best &ndash;</span>
+							<span class="trainer-stat" id="trainer-time"></span>
+						</div>
+						<div class="trainer-timer" aria-hidden="true"><div class="trainer-timer__bar" id="trainer-timer-bar"></div></div>
+						<div class="trainer-prompt" id="trainer-prompt" aria-live="assertive"></div>
+						<div class="trainer-feedback" id="trainer-feedback" aria-live="polite"></div>
+
+						<div class="trainer-keypad" id="trainer-keypad" aria-label="Node name">
+							<div class="trainer-keypad__row" id="trainer-zones"></div>
+							<div class="trainer-keypad__row" id="trainer-numbers"></div>
+							<div class="trainer-keypad__typed" id="trainer-typed">Click a zone letter and a number, or type them (e.g. <kbd>b</kbd> <kbd>7</kbd>).</div>
+						</div>
+
+						<div class="trainer-result" id="trainer-result" role="status" hidden></div>
+						<div class="trainer-history" id="trainer-history"></div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container" style="overflow: auto">
+				<div class="container__inner game-board-container">
+					<div class="position:relative">
+						<picture>
+							<source type="image/webp" srcset="static/images/game-board.webp" />
+							<img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="The Sigil board" />
+						</picture>
+						<div class="stone-nodes" id="trainer-nodes"></div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container" style="text-align:center; padding: 12px 0 24px;">
+				<a class="back-link" href="drills.html">Practice drills</a> &middot;
+				<a class="back-link" href="tutorial.html">Tutorial</a> &middot;
+				<a class="back-link" href="./">&larr; Back to menu</a>
+			</div>
+		</div>
+
+		<script src="static/scripts/node-trainer.js"></script>
+
+		<!-- Firebase SDK: the header's sign-in status, and best scores for signed-in accounts -->
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+		<script>
+			if (typeof firebase !== 'undefined') firebase.initializeApp({
+				apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+				authDomain: "sigil-js.firebaseapp.com",
+				databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+				projectId: "sigil-js",
+				storageBucket: "sigil-js.firebasestorage.app",
+				messagingSenderId: "174679859896",
+				appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+			});
+		</script>
+		<script src="static/scripts/auth-status.js?v=35"></script>
+
+		<script>
+			(function () {
+				var root = document.getElementById('trainer-root');
+				var nodesEl = document.getElementById('trainer-nodes');
+				var $ = function (id) { return document.getElementById(id); };
+				// The page's state; tools/browser/node-trainer-test.js reads it.
+				var st = window.SIGIL_NODE_TRAINER = {
+					mode: 'find', running: false, score: 0, misses: 0, target: null,
+					endsAt: 0, labels: false, zone: '', digits: '', user: null,
+					record: null, lastResult: null,
+				};
+				var timer = null, digitTimer = null, flashTimer = null;
+
+				// One button per node, placed by styles.css.
+				var buttons = {};
+				nodeTrainerNodes().forEach(function (n) {
+					var b = document.createElement('button');
+					b.type = 'button';
+					b.className = 'stone-node trainer-node stone-node--' + n;
+					b.id = 'trainer-node--' + n;
+					b.dataset.node = n;
+					var lab = document.createElement('span');
+					lab.className = 'trainer-node__label';
+					lab.textContent = n;
+					b.appendChild(lab);
+					b.addEventListener('click', function () { if (st.mode === 'find') answer(n); });
+					nodesEl.appendChild(b);
+					buttons[n] = b;
+				});
+				// The keypad of the "name" mode.
+				['a', 'b', 'c'].forEach(function (z) {
+					var b = document.createElement('button');
+					b.type = 'button';
+					b.textContent = z;
+					b.dataset.zone = z;
+					b.setAttribute('aria-label', 'Zone ' + z);
+					b.addEventListener('click', function () { pickZone(z); });
+					$('trainer-zones').appendChild(b);
+				});
+				for (var k = 1; k <= 13; k++) (function (k) {
+					var b = document.createElement('button');
+					b.type = 'button';
+					b.textContent = String(k);
+					b.dataset.number = String(k);
+					b.addEventListener('click', function () { pickNumber(String(k)); });
+					$('trainer-numbers').appendChild(b);
+				})(k);
+
+				function nodeLabels() {
+					// "find": the buttons must not announce their names.
+					// "name": the board is only looked at; the keypad answers.
+					nodeTrainerNodes().forEach(function (n) {
+						var b = buttons[n];
+						b.setAttribute('aria-label', st.labels ? n : 'Board node');
+						b.tabIndex = st.mode === 'find' ? 0 : -1;
+					});
+				}
+
+				function setMode(m) {
+					if (st.running || !NODE_TRAINER_MODES.includes(m)) return;
+					st.mode = m;
+					root.classList.toggle('trainer--name', m === 'name');
+					Array.prototype.forEach.call(document.querySelectorAll('.trainer-modes button'), function (b) {
+						b.setAttribute('aria-pressed', b.dataset.mode === m ? 'true' : 'false');
+					});
+					$('trainer-prompt').textContent = '';
+					$('trainer-feedback').textContent = '';
+					clearTarget();
+					nodeLabels();
+					showBest();
+				}
+
+				function clearTarget() {
+					Object.keys(buttons).forEach(function (n) { buttons[n].classList.remove('trainer-node--target'); });
+				}
+
+				function showBest() {
+					var r = st.record && st.record[st.mode];
+					$('trainer-best').textContent = 'Best ' + (r && r.best ? r.best : '–')
+						+ (st.record ? (st.record.signedIn ? ' (your account)' : ' (this device)') : '');
+					var h = readNodeTrainerLocal()[st.mode].history.slice(-5).reverse();
+					$('trainer-history').textContent = h.length ? 'Recent rounds here: ' + h.map(function (x) { return x.score; }).join(', ') : '';
+				}
+
+				function refreshRecord() {
+					return loadNodeTrainerRecord(st.user).then(function (r) { st.record = r; showBest(); }).catch(function () { showBest(); });
+				}
+
+				function next() {
+					st.target = nodeTrainerPick(st.target);
+					st.zone = '';
+					st.digits = '';
+					updateKeypad();
+					clearTarget();
+					if (st.mode === 'find') {
+						$('trainer-prompt').textContent = st.target;
+					} else {
+						$('trainer-prompt').textContent = 'Which node is ringed?';
+						buttons[st.target].classList.add('trainer-node--target');
+					}
+				}
+
+				function flash(node, cls) {
+					var b = buttons[node];
+					if (!b) return;
+					b.classList.add(cls);
+					setTimeout(function () { b.classList.remove(cls); }, 700);
+				}
+
+				function answer(node) {
+					if (!st.running) return;
+					var target = st.target;
+					var fb = $('trainer-feedback');
+					if (node === target) {
+						st.score += 1;
+						$('trainer-score').textContent = String(st.score);
+						flash(node, 'trainer-node--right');
+						fb.className = 'trainer-feedback trainer-feedback--right';
+						fb.textContent = node + ': right.';
+					} else {
+						st.misses += 1;
+						if (st.mode === 'find') flash(node, 'trainer-node--wrong');
+						flash(target, 'trainer-node--right');
+						fb.className = 'trainer-feedback trainer-feedback--wrong';
+						fb.textContent = (st.mode === 'find'
+							? 'That was ' + node + '. ' + target
+							: 'Not ' + node + ': it was ' + target) + ', ' + nodeTrainerRole(target) + '.';
+					}
+					next();
+				}
+
+				// "name": a zone letter, then a number (or the other way round).
+				function pickZone(z) {
+					if (!st.running || st.mode !== 'name') return;
+					st.zone = z;
+					if (st.digits) submitTyped(); else updateKeypad();
+				}
+				function pickNumber(d) {
+					if (!st.running || st.mode !== 'name') return;
+					st.digits = d;
+					if (st.zone) submitTyped(); else updateKeypad();
+				}
+				function submitTyped() {
+					clearTimeout(digitTimer);
+					var n = nodeTrainerParse(st.zone + st.digits);
+					if (n) answer(n);
+					else { st.digits = ''; updateKeypad(); }
+				}
+				function updateKeypad() {
+					Array.prototype.forEach.call(document.querySelectorAll('#trainer-zones button'), function (b) {
+						b.classList.toggle('is-on', b.dataset.zone === st.zone);
+					});
+					Array.prototype.forEach.call(document.querySelectorAll('#trainer-numbers button'), function (b) {
+						b.classList.toggle('is-on', b.dataset.number === st.digits);
+					});
+					$('trainer-typed').textContent = (st.zone || st.digits) ? (st.zone || '?') + (st.digits || '?')
+						: 'Click a zone letter and a number, or type them (e.g. b then 7).';
+				}
+
+				document.addEventListener('keydown', function (e) {
+					if (e.ctrlKey || e.metaKey || e.altKey) return;
+					var t = e.target;
+					if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+					if (!st.running) {
+						if (e.key === 'Enter' && t === document.body) { e.preventDefault(); start(); }
+						return;
+					}
+					if (st.mode !== 'name') return;
+					var key = e.key.toLowerCase();
+					if (/^[abc]$/.test(key)) {
+						e.preventDefault();
+						st.zone = key;
+						st.digits = '';
+						clearTimeout(digitTimer);
+						updateKeypad();
+					} else if (/^[0-9]$/.test(key) && st.zone) {
+						e.preventDefault();
+						st.digits = (st.digits + key).slice(-2);
+						clearTimeout(digitTimer);
+						// "1" may be the start of 10-13: wait a moment for a second digit.
+						if (st.digits === '1') {
+							updateKeypad();
+							digitTimer = setTimeout(submitTyped, 700);
+						} else {
+							submitTyped();
+						}
+					} else if (e.key === 'Enter' && st.zone && st.digits) {
+						e.preventDefault();
+						submitTyped();
+					} else if (e.key === 'Backspace') {
+						e.preventDefault();
+						clearTimeout(digitTimer);
+						if (st.digits) st.digits = st.digits.slice(0, -1);
+						else st.zone = '';
+						updateKeypad();
+					}
+				});
+
+				function tick() {
+					var left = Math.max(0, st.endsAt - Date.now());
+					$('trainer-timer-bar').style.width = (100 * left / NODE_TRAINER_ROUND_MS) + '%';
+					$('trainer-time').textContent = (left / 1000).toFixed(1) + ' s';
+					if (left <= 0) end();
+				}
+
+				function start() {
+					if (st.running) return;
+					st.running = true;
+					st.score = 0;
+					st.misses = 0;
+					st.target = null;
+					st.labelsUsed = st.labels;
+					st.endsAt = Date.now() + NODE_TRAINER_ROUND_MS;
+					$('trainer-score').textContent = '0';
+					$('trainer-result').hidden = true;
+					$('trainer-feedback').textContent = '';
+					$('trainer-start').disabled = true;
+					Array.prototype.forEach.call(document.querySelectorAll('.trainer-modes button'), function (b) { b.disabled = true; });
+					next();
+					clearInterval(timer);
+					timer = setInterval(tick, 100);
+					tick();
+				}
+
+				function end() {
+					if (!st.running) return;
+					st.running = false;
+					clearInterval(timer);
+					clearTimeout(digitTimer);
+					clearTarget();
+					$('trainer-prompt').textContent = '';
+					$('trainer-time').textContent = '';
+					$('trainer-start').disabled = false;
+					$('trainer-start').textContent = 'Play again';
+					Array.prototype.forEach.call(document.querySelectorAll('.trainer-modes button'), function (b) { b.disabled = false; });
+					var res = $('trainer-result');
+					var line = 'Score: ' + st.score + ' right' + (st.misses ? ', ' + st.misses + ' wrong' : '') + '.';
+					res.hidden = false;
+					if (st.labelsUsed || st.labels) {
+						res.textContent = line + ' The names were shown, so this practice round is not scored.';
+						st.lastResult = { practice: true, score: st.score };
+						return;
+					}
+					res.textContent = line + ' Saving…';
+					recordNodeTrainerRound(st.user, st.mode, st.score).then(function (r) {
+						st.lastResult = r;
+						res.textContent = line + (r.newBest ? ' New best!' : ' Best: ' + r.best + '.')
+							+ (r.queued ? ' (Saved on this device; it will reach your account when you are online.)' : '');
+						return refreshRecord();
+					}).catch(function () {
+						res.textContent = line;
+						showBest();
+					});
+				}
+
+				Array.prototype.forEach.call(document.querySelectorAll('.trainer-modes button'), function (b) {
+					b.addEventListener('click', function () { setMode(b.dataset.mode); });
+				});
+				$('trainer-start').addEventListener('click', start);
+				$('trainer-labels').addEventListener('change', function (e) {
+					st.labels = !!e.target.checked;
+					if (st.running && st.labels) st.labelsUsed = true;
+					root.classList.toggle('trainer--labels', st.labels);
+					nodeLabels();
+				});
+				var q = new URLSearchParams(window.location.search).get('mode');
+				setMode(q === 'name' ? 'name' : 'find');
+
+				// Best scores: the account's when signed in (not as a guest).
+				refreshRecord();
+				if (typeof firebase !== 'undefined' && firebase.auth) {
+					firebase.auth().onAuthStateChanged(function (user) {
+						st.user = user || null;
+						refreshRecord();
+					});
+				}
+			})();
+		</script>
+	</body>
+</html>
