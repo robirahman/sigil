@@ -146,7 +146,7 @@
 		.recent-row__pip { width: 8px; height: 8px; border-radius: 50%; }
 		.recent-row__pip--win { background: var(--color-success); }
 		.recent-row__pip--loss { background: var(--color-error); }
-		.profile-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--color-border); margin: 8px 0 4px; }
+		.profile-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--color-border); margin: 8px 0 4px; }
 		.profile-tab {
 			background: none;
 			border: none;
@@ -248,7 +248,7 @@
 		.profile__extras-line a { color: var(--color-accent); }
 		.profile__catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 6px; }
 		.profile__catalog-desc { color: var(--color-text-dim); font-size: 0.8em; margin-left: 4px; }
-		.profile__catalog summary { cursor: pointer; color: var(--color-text-dim); font-size: 0.85em; }
+		.profile__catalog-box summary { cursor: pointer; color: var(--color-text-dim); font-size: 0.85em; }
 		.private-note { background: var(--color-surface); border-radius: 8px; padding: 10px 12px; }
 		.private-note label { display: block; color: var(--color-text-dim); font-size: 0.85em; margin-bottom: 4px; }
 		.private-note textarea, .saved-row textarea, .saved-row input {
@@ -342,7 +342,7 @@
 							<span class="profile__badges-label" x-text="extras.badges.length ? 'Badges' : 'No badges yet'"></span>
 							<span style="display: contents;" x-ref="badgeChips"></span>
 						</div>
-						<details class="profile__catalog">
+						<details class="profile__catalog-box">
 							<summary>All badges and how to earn them</summary>
 							<div class="profile__catalog" x-ref="badgeCatalog"></div>
 						</details>
