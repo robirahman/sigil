@@ -24,6 +24,10 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   socialGame     - each new user_games entry: the win for the followers'
+ *                    activity feed, rating milestones and badges (social.js).
+ *   socialPuzzle   - a daily puzzle solved: the server's streak count, its
+ *                    milestones and badges (social.js).
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -45,6 +49,7 @@ const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const social = require('./social');
 const crypto = require('crypto');
 
 initializeApp();
@@ -369,6 +374,10 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		['user_flags/' + uid]: null,
 		['report_limits/' + uid]: null,
 	};
+	// Badges, activity, private notes and bookmarks, the streamer listing and
+	// a title; the opponents' feed entries for wins over this player lose
+	// the name (social.js).
+	await social.deletionUpdates(db, uid, games, updates);
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
 	// Blocks both ways: theirs of this account (through the blockedBy
@@ -552,4 +561,31 @@ exports.notifyChallenge = onValueCreated({
 	const db = event.data.ref.root.database;
 	const res = await notifyChallenge(db, event.params.target, event.params.room, fcmSend);
 	if (res && res.sent + res.removed > 0) logger.info('notifyChallenge', Object.assign({ room: event.params.room }, res));
+});
+
+// Badges and the activity feed (social.js). Best-effort and idempotent (fixed
+// keys), so not retried: a missed entry is not worth a week of retries.
+exports.socialGame = onValueCreated({
+	ref: '/user_games/{uid}/{gameId}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: false,
+}, async (event) => {
+	const db = event.data.ref.root.database;
+	const res = await social.onUserGame(db, event.params.uid, event.params.gameId, event.data.val(), Date.now());
+	if (res && ((res.posted && res.posted.length) || (res.badges && res.badges.length))) {
+		logger.info('socialGame', Object.assign({ uid: event.params.uid, gameId: event.params.gameId }, res));
+	}
+});
+
+exports.socialPuzzle = onValueWritten({
+	ref: '/users/{uid}/puzzleProgress/daily/{day}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: false,
+}, async (event) => {
+	if (!event.data.after.exists()) return;
+	const db = event.data.after.ref.root.database;
+	const res = await social.onPuzzleDaily(db, event.params.uid, event.params.day, event.data.after.val(), Date.now());
+	if (res && res.streak) logger.info('socialPuzzle', Object.assign({ uid: event.params.uid }, res));
 });
