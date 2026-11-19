@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/community.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Blog - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="blogPage()">
+		<div class="cm">
+			<div class="cm-crumbs">
+				<a href="blog.html">Blog</a>
+				<template x-if="view === 'user' || (view === 'post' && post && !post.site)">
+					<span> &rsaquo; <a x-bind:href="'blog.html?u=' + encodeURIComponent(authorUid)" x-text="mask(names[authorUid] || '…') + '\'s blog'"></a></span>
+				</template>
+			</div>
+			<p class="cm-error" x-show="error" x-text="error" x-cloak></p>
+
+			<!-- The site blog and the latest community posts -->
+			<template x-if="view === 'home'">
+				<div>
+					<div class="cm-row">
+						<h2>Blog</h2>
+						<span class="cm-spacer"></span>
+						<a class="cm-btn cm-btn--primary" href="blog.html?new=1" x-show="account" data-testid="write-post">Write a post</a>
+					</div>
+					<h3>From the site</h3>
+					<p class="cm-msg" x-show="!loading && sitePosts.length === 0">No news yet.</p>
+					<template x-for="p in sitePosts" x-bind:key="p.id">
+						<div class="cm-card" data-testid="site-post">
+							<a class="cm-title" x-bind:href="'blog.html?p=' + encodeURIComponent(p.id)" x-text="mask(p.title)"></a>
+							<div class="cm-meta" x-text="when(p.at) + ' · ' + mask(names[p.by] || '…')"></div>
+							<p class="cm-note" x-text="excerpt(p.body)"></p>
+						</div>
+					</template>
+					<h3>From the players</h3>
+					<p class="cm-msg" x-show="!loading && userPosts.length === 0">No posts yet. <a href="blog.html?new=1" x-show="account">Write the first.</a></p>
+					<template x-for="p in userPosts" x-bind:key="p.id">
+						<div class="cm-card" data-testid="user-post">
+							<a class="cm-title" x-bind:href="'blog.html?p=' + encodeURIComponent(p.id)" x-text="mask(p.title)"></a>
+							<div class="cm-meta">by <a x-bind:href="'blog.html?u=' + encodeURIComponent(p.by)" x-text="mask(names[p.by] || '…')"></a> &middot; <span x-text="when(p.at)"></span></div>
+							<p class="cm-note" x-text="excerpt(p.body)"></p>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<!-- One player's blog -->
+			<template x-if="view === 'user'">
+				<div>
+					<div class="cm-row">
+						<h2 x-text="mask(names[authorUid] || '…') + '\'s blog'"></h2>
+						<span class="cm-spacer"></span>
+						<a class="cm-btn cm-btn--primary" href="blog.html?new=1" x-show="account && account.uid === authorUid">Write a post</a>
+					</div>
+					<p class="cm-meta"><a x-bind:href="'profile.html?uid=' + encodeURIComponent(authorUid)">Profile</a></p>
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && userPosts.length === 0">No posts yet.</p>
+					<template x-for="p in userPosts" x-bind:key="p.id">
+						<div class="cm-card">
+							<a class="cm-title" x-bind:href="'blog.html?p=' + encodeURIComponent(p.id)" x-text="mask(p.title)"></a>
+							<div class="cm-meta" x-text="when(p.at)"></div>
+							<p class="cm-note" x-text="excerpt(p.body)"></p>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<!-- One post -->
+			<template x-if="view === 'post'">
+				<div>
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && !post" x-cloak>This post does not exist (any more).</p>
+					<template x-if="post">
+						<article>
+							<template x-if="post.site"><span class="cm-badge">Site news</span></template>
+							<h2 x-text="mask(post.title)" data-testid="post-title"></h2>
+							<p class="cm-meta">
+								by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(post.by)" x-text="mask(names[post.by] || '…')"></a>
+								&middot; <span x-text="fullTime(post.at)"></span>
+								<span x-show="post.editedAt" x-text="' · edited ' + when(post.editedAt)"></span>
+							</p>
+							<div class="md cm-card" x-effect="md($el, post.body)" data-testid="post-body"></div>
+							<div class="cm-row">
+								<a class="cm-btn" x-show="account && account.uid === post.by" x-bind:href="'blog.html?edit=' + encodeURIComponent(pid)" data-testid="edit-post">Edit</a>
+								<button class="cm-btn cm-btn--danger" x-show="account && (account.uid === post.by || roles.forumMod)" x-on:click="deletePost()" x-bind:disabled="busy" data-testid="delete-post">Delete</button>
+								<button class="cm-link" x-show="account && account.uid !== post.by" x-on:click="reportPost()">Report this post</button>
+							</div>
+
+							<h3 id="comments" x-text="'Comments (' + comments.length + ')'"></h3>
+							<p class="cm-note" x-show="post.comments === false">Comments are closed.</p>
+							<template x-for="c in comments" x-bind:key="c.id">
+								<div class="cm-card" data-testid="comment">
+									<div class="cm-row">
+										<a class="post__author" x-bind:href="'profile.html?uid=' + encodeURIComponent(c.by)" x-text="mask(names[c.by] || '…')"></a>
+										<span class="cm-meta" x-text="when(c.at)" x-bind:title="fullTime(c.at)"></span>
+										<span class="cm-spacer"></span>
+										<button class="cm-link" x-show="account && (account.uid === c.by || account.uid === post.by || roles.forumMod)" x-on:click="removeComment(c)">Remove</button>
+										<button class="cm-link" x-show="account && account.uid !== c.by" x-on:click="reportComment(c)">Report</button>
+									</div>
+									<div style="white-space: pre-wrap; overflow-wrap: anywhere;" x-text="mask(c.text)" data-testid="comment-text"></div>
+								</div>
+							</template>
+							<template x-if="post.comments !== false && account && !muted">
+								<div class="cm-form">
+									<label for="comment-body">Add a comment</label>
+									<textarea id="comment-body" class="cm-textarea" rows="3" maxlength="2000" x-model="commentBody" data-testid="comment-body"></textarea>
+									<div><button class="cm-btn cm-btn--primary" x-on:click="addComment()" x-bind:disabled="busy || !commentBody.trim()" data-testid="add-comment">Comment</button></div>
+								</div>
+							</template>
+							<p class="cm-note" x-show="post.comments !== false && !account"><a href="account.html">Sign in</a> with an account to comment.</p>
+						</article>
+					</template>
+				</div>
+			</template>
+
+			<!-- Writing or editing a post -->
+			<template x-if="view === 'edit'">
+				<div>
+					<h2 x-text="pid ? 'Edit post' : 'Write a post'"></h2>
+					<p class="cm-msg" x-show="!account" x-cloak><a href="account.html">Sign in</a> with an account to write.</p>
+					<p class="cm-note" x-show="mutedText" x-text="mutedText"></p>
+					<template x-if="account && !loading">
+						<div class="cm-form">
+							<label for="post-title">Title</label>
+							<input id="post-title" class="cm-input" maxlength="140" x-model="draft.title" data-testid="draft-title" />
+							<div class="cm-row">
+								<label for="post-body">Text</label>
+								<span class="cm-spacer"></span>
+								<button class="cm-link" x-on:click="preview = !preview" x-text="preview ? 'Write' : 'Preview'"></button>
+							</div>
+							<textarea id="post-body" class="cm-textarea" rows="16" maxlength="40000" x-model="draft.body" x-show="!preview" data-testid="draft-body"></textarea>
+							<div class="md md-preview" x-show="preview" x-effect="preview && md($el, draft.body)"></div>
+							<div class="cm-row">
+								<span class="md-help"># headings, **bold**, *italic*, `code`, [links](https://…), - lists, &gt; quotes, ``` code blocks. No HTML or images.</span>
+								<span class="cm-spacer"></span>
+								<span class="cm-count" x-text="draft.body.length + ' / 40000'"></span>
+							</div>
+							<label class="cm-check"><input type="checkbox" x-model="draft.comments" /> Allow comments</label>
+							<label class="cm-check" x-show="roles.admin && !pid"><input type="checkbox" x-model="draft.site" data-testid="draft-site" /> Post on the site blog (as site news)</label>
+							<div class="cm-row">
+								<button class="cm-btn cm-btn--primary" x-on:click="save()" x-bind:disabled="busy || draft.title.trim().length < 3 || !draft.body.trim()" data-testid="publish" x-text="pid ? 'Save' : 'Publish'"></button>
+								<a class="cm-btn" x-bind:href="pid ? 'blog.html?p=' + encodeURIComponent(pid) : 'blog.html'">Cancel</a>
+							</div>
+						</div>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
+	<script src="static/scripts/markdown-lite.js?v=35"></script>
+	<script src="static/scripts/community.js?v=35"></script>
+
+	<script>
+		// Blogs: blog_posts/{id} ({by, title, body, at, editedAt?, site?, comments?})
+		// and blog_comments/{post}/{id}. Anyone with an account blogs; the site
+		// blog is the posts with site: true, which only admins write (rules).
+		//   blog.html             the site blog and the latest posts
+		//   blog.html?u={uid}     one player's blog
+		//   blog.html?p={id}      a post with its comments
+		//   blog.html?new=1, ?edit={id}
+		document.addEventListener('alpine:init', () => {
+			const C = window.SigilCommunity;
+			const params = new URLSearchParams(location.search);
+			const db = () => firebase.database();
+			const DRAFT_KEY = 'sigil-blog-draft';
+			Alpine.data('blogPage', () => ({
+				view: params.get('p') ? 'post' : params.get('u') ? 'user' : (params.get('new') || params.get('edit')) ? 'edit' : 'home',
+				pid: params.get('p') || params.get('edit') || '',
+				authorUid: params.get('u') || '',
+				account: null,
+				roles: { admin: false, forumMod: false, mutedUntil: 0 },
+				names: {},
+				sitePosts: [],
+				userPosts: [],
+				post: null,
+				comments: [],
+				commentBody: '',
+				draft: { title: '', body: '', comments: true, site: false },
+				preview: false,
+				loading: true,
+				busy: false,
+				error: '',
+				_refs: [],
+
+				get muted() { return this.roles.mutedUntil > C.serverNow(); },
+				get mutedText() { return this.account && this.muted ? 'Your account is muted until ' + new Date(this.roles.mutedUntil).toLocaleString() + '.' : ''; },
+
+				init() {
+					C.onUser(async (u) => {
+						this.account = u;
+						this.roles = await C.roles();
+						if (this.view === 'edit') this.loadDraft();
+					});
+					if (this.view === 'home') this.loadHome();
+					else if (this.view === 'user') this.loadUser();
+					else if (this.view === 'post') this.loadPost();
+					// Keep an unsaved new post across a reload.
+					if (this.view === 'edit' && !params.get('edit')) {
+						this.$watch('draft', (d) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch (e) { /* full or private */ } });
+					}
+				},
+
+				md(el, text) { C.md(el, text); },
+				mask: (s) => C.mask(s),
+				when: (ts) => C.when(ts),
+				fullTime: (ts) => C.fullTime(ts),
+				excerpt: (s) => C.excerpt(s, 220),
+
+				_list(snap) {
+					const list = [];
+					snap.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+					return list.sort((a, b) => (b.at || 0) - (a.at || 0));
+				},
+
+				async loadHome() {
+					try {
+						const [site, recent] = await Promise.all([
+							db().ref('blog_posts').orderByChild('site').equalTo(true).limitToLast(20).once('value'),
+							db().ref('blog_posts').orderByChild('at').limitToLast(40).once('value'),
+						]);
+						this.sitePosts = this._list(site);
+						this.userPosts = this._list(recent).filter((p) => !p.site).slice(0, 30);
+						C.fillNames(this.sitePosts.concat(this.userPosts).map((p) => p.by), this.names);
+					} catch (e) { this.error = C.errorText(e); }
+					this.loading = false;
+				},
+
+				async loadUser() {
+					C.fillNames([this.authorUid], this.names).then(() => { document.title = this.names[this.authorUid] + '\'s blog - Sigil Online'; });
+					try {
+						const snap = await db().ref('blog_posts').orderByChild('by').equalTo(this.authorUid).once('value');
+						this.userPosts = this._list(snap).filter((p) => !p.site);
+					} catch (e) { this.error = C.errorText(e); }
+					this.loading = false;
+				},
+
+				loadPost() {
+					const pRef = db().ref('blog_posts/' + this.pid);
+					const cRef = db().ref('blog_comments/' + this.pid).limitToFirst(500);
+					pRef.on('value', (s) => {
+						this.post = s.val();
+						this.loading = false;
+						if (this.post) {
+							this.authorUid = this.post.by;
+							C.fillNames([this.post.by], this.names);
+							document.title = C.mask(this.post.title) + ' - Sigil Online';
+						}
+					}, (e) => { this.error = C.errorText(e); this.loading = false; });
+					cRef.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						this.comments = list;
+						C.fillNames(list.map((c) => c.by), this.names);
+					}, () => {});
+					this._refs = [pRef, cRef];
+				},
+
+				async loadDraft() {
+					this.loading = true;
+					if (params.get('edit')) {
+						const p = (await db().ref('blog_posts/' + this.pid).once('value').catch(() => null));
+						const v = p && p.val();
+						if (!v) this.error = 'This post does not exist.';
+						else if (!this.account || v.by !== this.account.uid) this.error = 'Only its author edits a post.';
+						else this.draft = { title: v.title, body: v.body, comments: v.comments !== false, site: !!v.site };
+					} else {
+						try {
+							const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+							if (saved && typeof saved.body === 'string') this.draft = Object.assign(this.draft, saved, { site: false });
+						} catch (e) { /* nothing saved */ }
+					}
+					this.loading = false;
+				},
+
+				async _run(fn) {
+					this.busy = true;
+					this.error = '';
+					try {
+						await fn();
+						return true;
+					} catch (e) {
+						console.warn('[Blog]', e);
+						this.error = C.errorText(e);
+						return false;
+					} finally {
+						this.busy = false;
+					}
+				},
+
+				async save() {
+					const title = this.draft.title.trim();
+					const body = this.draft.body.trim();
+					if (title.length < 3 || !body) return;
+					const me = this.account.uid;
+					let id = this.pid;
+					const ok = await this._run(async () => {
+						if (id) {
+							await db().ref('blog_posts/' + id).update({ title, body, comments: !!this.draft.comments, editedAt: C.TS() });
+						} else {
+							id = C.newKey('blog_posts');
+							const post = { by: me, title, body, at: C.TS(), comments: !!this.draft.comments };
+							if (this.draft.site && this.roles.admin) post.site = true;
+							await C.commit('blog', { ['blog_posts/' + id]: post });
+						}
+					});
+					if (ok) {
+						try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+						location.href = 'blog.html?p=' + encodeURIComponent(id);
+					}
+				},
+
+				async deletePost() {
+					if (!confirm('Delete this post and its comments? This cannot be undone.')) return;
+					const ok = await this._run(() => db().ref().update({ ['blog_posts/' + this.pid]: null, ['blog_comments/' + this.pid]: null }));
+					if (ok) location.href = 'blog.html';
+				},
+
+				async addComment() {
+					const text = this.commentBody.trim();
+					if (!text) return;
+					const cid = C.newKey('blog_comments/' + this.pid);
+					const ok = await this._run(() => C.commit('comment', {
+						['blog_comments/' + this.pid + '/' + cid]: { by: this.account.uid, text: text.slice(0, 2000), at: C.TS() },
+					}));
+					if (ok) this.commentBody = '';
+				},
+
+				removeComment(c) {
+					if (!confirm('Remove this comment?')) return;
+					return this._run(() => db().ref('blog_comments/' + this.pid + '/' + c.id).remove());
+				},
+
+				reportPost() {
+					C.report({ kind: 'blog', target: this.post.by, post: this.pid, what: 'this post' });
+				},
+
+				reportComment(c) {
+					C.report({ kind: 'comment', target: c.by, post: this.pid, comment: c.id, what: 'this comment' });
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

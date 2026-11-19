@@ -53,7 +53,8 @@
 
 	// "Your move" badge and turn notifications (turn-notify.js), which need
 	// the shared turn rule (engine/room-clock.js) first; then follows, blocks
-	// and the challenge banner (friends.js).
+	// and the challenge banner (friends.js); then the "Inbox (N)" link
+	// (inbox.js).
 	(function loadTurnNotify() {
 		const add = (src) => {
 			const s = document.createElement('script');
@@ -64,6 +65,7 @@
 		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js?v=35');
 		add('static/scripts/turn-notify.js?v=35');
 		add('static/scripts/friends.js?v=35');
+		add('static/scripts/inbox.js?v=35');
 	})();
 
 	const el = document.getElementById('auth-status');
@@ -82,6 +84,7 @@
 			const render = function (name) {
 				el.innerHTML = '<a class="auth-status__name" href="' + ROOT + 'profile.html?uid=' + encodeURIComponent(user.uid) + '" style="color: inherit; text-decoration: none;">' + _escHtml(name) + '</a>';
 				if (window.SigilTurns) window.SigilTurns.renderBadge();
+				if (window.SigilInbox) window.SigilInbox.render();
 			};
 			// Show the Auth name at once (the read below never settles while
 			// offline), then the RTDB profile name once it arrives.

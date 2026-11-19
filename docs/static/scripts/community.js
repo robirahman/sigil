@@ -115,37 +115,45 @@
 	class LimitError extends Error {}
 
 	/**
-	 * One multi-path update with the rate limit of `kind` in it. A wait of a
-	 * few seconds is waited out; a longer one, or the window's allowance
-	 * used up, throws a LimitError that says when to come back.
+	 * One multi-path update with the rate limit of `kind` (or of each of
+	 * several kinds) in it. A wait of a few seconds is waited out; a longer
+	 * one, or the window's allowance used up, throws a LimitError that says
+	 * when to come back.
 	 */
-	async function commit(kind, updates) {
+	async function commit(kinds, updates) {
 		if (!account) throw new Error('Sign in with an account first.');
-		const L = LIMITS[kind];
+		const list = Array.isArray(kinds) ? kinds : [kinds];
 		const uid = account.uid;
-		const path = 'rate_limits/' + uid + '/' + kind;
-		let flip = false;
+		let flip = {};
 		for (let attempt = 0; attempt < 2; attempt++) {
-			const cur = (await db().ref(path).once('value')).val();
-			let now = serverNow();
-			if (cur && cur.at > now - L.gap) {
-				const wait = cur.at + L.gap - now + 100;
-				if (wait > 3000) throw new LimitError('Please wait ' + Math.ceil(wait / 1000) + ' seconds before the next one.');
-				await sleep(wait);
-				now = serverNow();
-			}
-			let fresh = !cur || cur.since <= now - L.window;
-			if (flip) fresh = !fresh;
-			if (!fresh && cur.n >= L.max) {
-				throw new LimitError('That is the most ' + L.what + ' allowed in ' + span(L.window) + '; try again in ' + span(cur.since + L.window - now) + '.');
-			}
-			const value = fresh ? { at: TS(), n: 1, since: TS() } : { at: TS(), n: cur.n + 1, since: cur.since };
+			const curs = await Promise.all(list.map((k) => db().ref('rate_limits/' + uid + '/' + k).once('value').then((s) => s.val())));
+			let wait = 0;
+			list.forEach((k, i) => {
+				const cur = curs[i];
+				if (cur && cur.at > serverNow() - LIMITS[k].gap) wait = Math.max(wait, cur.at + LIMITS[k].gap - serverNow() + 100);
+			});
+			if (wait > 3000) throw new LimitError('Please wait ' + Math.ceil(wait / 1000) + ' seconds before the next one.');
+			if (wait) await sleep(wait);
+			const now = serverNow();
+			const limits = {};
+			let edge = false;
+			list.forEach((k, i) => {
+				const L = LIMITS[k];
+				const cur = curs[i];
+				let fresh = !cur || cur.since <= now - L.window;
+				if (flip[k]) fresh = !fresh;
+				if (!fresh && cur.n >= L.max) {
+					throw new LimitError('That is the most ' + L.what + ' allowed in ' + span(L.window) + '; try again in ' + span(cur.since + L.window - now) + '.');
+				}
+				if (cur && Math.abs(cur.since + L.window - now) < 15000) { edge = true; flip[k] = true; }
+				limits['rate_limits/' + uid + '/' + k] = fresh ? { at: TS(), n: 1, since: TS() } : { at: TS(), n: cur.n + 1, since: cur.since };
+			});
 			try {
-				await db().ref().update(Object.assign({}, updates, { [path]: value }));
+				await db().ref().update(Object.assign({}, updates, limits));
 				return;
 			} catch (e) {
-				// At the window's edge the server may judge it the other way.
-				if (attempt === 0 && cur && Math.abs(cur.since + L.window - now) < 15000) { flip = true; continue; }
+				// At a window's edge the server may judge it the other way.
+				if (attempt === 0 && edge) continue;
 				throw e;
 			}
 		}

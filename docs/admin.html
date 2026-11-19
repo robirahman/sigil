@@ -92,6 +92,7 @@
 	<div class="main" x-data="adminPage()">
 		<div class="admin">
 			<h2>Admin</h2>
+			<p><a href="admin-community.html">Community moderation</a>: reported messages, forum posts, blog posts and teams; mutes; forum moderators; inbox pushes.</p>
 			<p class="admin__msg" x-show="state === 'loading'">Loading...</p>
 			<p class="admin__msg" x-show="state === 'signed-out'" x-cloak>Sign in on the <a href="account.html">account page</a> first.</p>
 			<p class="admin__msg" x-show="state === 'denied'" x-cloak data-testid="admin-denied">This page is for site admins. (An admin is added by hand at admins/{uid} in the database.)</p>

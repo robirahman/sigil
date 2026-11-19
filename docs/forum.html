@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/community.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Forums - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="forumPage()">
+		<div class="cm">
+			<div class="cm-crumbs">
+				<a href="forum.html">Forums</a>
+				<template x-if="cat"><span> &rsaquo; <a x-bind:href="'forum.html?c=' + encodeURIComponent(cat)" x-text="catName"></a></span></template>
+			</div>
+			<p class="cm-error" x-show="error" x-text="error" x-cloak></p>
+
+			<!-- The categories -->
+			<template x-if="view === 'index'">
+				<div>
+					<h2>Forums</h2>
+					<p class="cm-note">Talk about Sigil with other players. Be kind; posts that break the <a href="#rules">rules</a> are removed.</p>
+					<template x-for="c in categories" x-bind:key="c.id">
+						<div class="cm-card" data-testid="category">
+							<div class="cm-row">
+								<a class="cm-title" x-bind:href="'forum.html?c=' + c.id" x-text="c.name"></a>
+								<span class="cm-spacer"></span>
+								<template x-if="latest[c.id]">
+									<span class="cm-meta">Latest: <a x-bind:href="'forum.html?c=' + c.id + '&t=' + encodeURIComponent(latest[c.id].id)" x-text="mask(latest[c.id].title)"></a> &middot; <span x-text="when(latest[c.id].lastAt)"></span></span>
+								</template>
+							</div>
+							<div class="cm-meta" x-text="c.about"></div>
+						</div>
+					</template>
+					<h3 id="rules">Forum rules</h3>
+					<ul class="cm-note">
+						<li>Be respectful. No harassment, slurs or personal attacks.</li>
+						<li>No spam, advertising or cheating help in live games.</li>
+						<li>Use "Report" on anything that breaks these rules; moderators can remove posts, lock threads and mute accounts.</li>
+					</ul>
+				</div>
+			</template>
+
+			<!-- One category -->
+			<template x-if="view === 'category'">
+				<div>
+					<div class="cm-row">
+						<h2 x-text="catName"></h2>
+						<span class="cm-spacer"></span>
+						<button class="cm-btn cm-btn--primary" x-show="canStart && !composing" x-on:click="composing = true" data-testid="new-thread">New thread</button>
+					</div>
+					<p class="cm-note" x-text="catAbout"></p>
+					<p class="cm-note" x-show="!account" x-cloak><a href="account.html">Sign in</a> with an account to post.</p>
+					<p class="cm-note" x-show="account && !canStart && cat === 'announcements'" x-cloak>Moderators post announcements; anyone may reply.</p>
+					<p class="cm-note" x-show="account && !canStart && isTeamCat" x-cloak>Only the team's members post here.</p>
+					<p class="cm-note" x-show="mutedText" x-text="mutedText" x-cloak></p>
+
+					<template x-if="composing">
+						<div class="cm-card">
+							<div class="cm-form">
+								<label for="thread-title">Title</label>
+								<input id="thread-title" class="cm-input" maxlength="120" x-model="newTitle" data-testid="thread-title" />
+								<label for="thread-body">Post</label>
+								<textarea id="thread-body" class="cm-textarea" rows="8" maxlength="10000" x-model="newBody" data-testid="thread-body"></textarea>
+								<div class="cm-row">
+									<span class="md-help">**bold**, *italic*, `code`, [links](https://…), - lists, &gt; quotes</span>
+									<span class="cm-spacer"></span>
+									<span class="cm-count" x-text="newBody.length + ' / 10000'"></span>
+								</div>
+								<template x-if="newBody.trim()">
+									<div><div class="cm-label">Preview</div><div class="md md-preview" x-effect="md($el, newBody)"></div></div>
+								</template>
+								<div class="cm-row">
+									<button class="cm-btn cm-btn--primary" x-on:click="startThread()" x-bind:disabled="busy || newTitle.trim().length < 3 || !newBody.trim()" data-testid="post-thread">Post thread</button>
+									<button class="cm-btn" x-on:click="composing = false">Cancel</button>
+								</div>
+							</div>
+						</div>
+					</template>
+
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && threads.length === 0">No threads yet.</p>
+					<template x-for="t in threads" x-bind:key="t.id">
+						<div class="cm-card" x-bind:class="{ 'cm-card--pinned': t.pinned }" data-testid="thread-row">
+							<div class="cm-row">
+								<template x-if="t.pinned"><span class="cm-badge">Pinned</span></template>
+								<template x-if="t.locked"><span class="cm-badge">Locked</span></template>
+								<a class="cm-title" x-bind:href="'forum.html?c=' + encodeURIComponent(cat) + '&t=' + encodeURIComponent(t.id)" x-text="mask(t.title)"></a>
+								<span class="cm-spacer"></span>
+								<span class="cm-meta" x-text="(t.replies || 0) + ((t.replies || 0) === 1 ? ' reply' : ' replies')"></span>
+							</div>
+							<div class="cm-meta">
+								by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(t.by)" x-text="mask(names[t.by] || '…')"></a>
+								&middot; last post <span x-text="when(t.lastAt)"></span> by <span x-text="mask(names[t.lastBy] || '…')"></span>
+							</div>
+						</div>
+					</template>
+					<button class="cm-btn" x-show="threads.length >= threadLimit" x-on:click="threadLimit += 50; loadCategory()">Show older threads</button>
+				</div>
+			</template>
+
+			<!-- One thread -->
+			<template x-if="view === 'thread'">
+				<div>
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && !thread" x-cloak>This thread does not exist (any more).</p>
+					<template x-if="thread">
+						<div>
+							<div class="cm-row">
+								<template x-if="thread.pinned"><span class="cm-badge">Pinned</span></template>
+								<template x-if="thread.locked"><span class="cm-badge">Locked</span></template>
+								<h2 x-show="!editingTitle" x-text="mask(thread.title)" data-testid="thread-heading"></h2>
+								<template x-if="editingTitle">
+									<div class="cm-row" style="flex: 1 1 100%;">
+										<input class="cm-input" style="flex: 1 1 200px;" maxlength="120" x-model="titleDraft" aria-label="Title" />
+										<button class="cm-btn cm-btn--primary" x-on:click="saveTitle()" x-bind:disabled="busy || titleDraft.trim().length < 3">Save</button>
+										<button class="cm-btn" x-on:click="editingTitle = false">Cancel</button>
+									</div>
+								</template>
+							</div>
+							<template x-if="isMod || (account && thread.by === account.uid)">
+								<div class="mod-bar" data-testid="mod-bar">
+									<button class="cm-btn" x-show="!editingTitle" x-on:click="titleDraft = thread.title; editingTitle = true">Edit title</button>
+									<template x-if="isMod">
+										<span class="cm-row">
+											<button class="cm-btn" x-on:click="setFlag('pinned', !thread.pinned)" x-bind:disabled="busy" x-text="thread.pinned ? 'Unpin' : 'Pin'" data-testid="pin"></button>
+											<button class="cm-btn" x-on:click="setFlag('locked', !thread.locked)" x-bind:disabled="busy" x-text="thread.locked ? 'Unlock' : 'Lock'" data-testid="lock"></button>
+											<button class="cm-btn cm-btn--danger" x-on:click="deleteThread()" x-bind:disabled="busy" data-testid="delete-thread">Delete thread</button>
+										</span>
+									</template>
+								</div>
+							</template>
+
+							<template x-for="(p, i) in posts" x-bind:key="p.id">
+								<div class="post" x-bind:class="{ 'post--removed': p.removed }" x-bind:id="'p-' + p.id" data-testid="post">
+									<div class="post__head">
+										<a class="post__author" x-bind:href="'profile.html?uid=' + encodeURIComponent(p.by)" x-text="mask(names[p.by] || '…')"></a>
+										<span class="cm-meta"><a x-bind:href="'#p-' + p.id" x-text="when(p.at)" x-bind:title="fullTime(p.at)"></a><span x-show="p.editedAt" x-text="' · edited ' + when(p.editedAt)"></span></span>
+										<span class="cm-spacer"></span>
+										<span class="cm-meta" x-text="'#' + (i + 1)"></span>
+									</div>
+									<template x-if="p.removed">
+										<p class="cm-meta" x-text="p.removed.by === p.by ? 'Removed by its author.' : 'Removed by a moderator.'"></p>
+									</template>
+									<template x-if="!p.removed && editing !== p.id">
+										<div class="md" x-effect="md($el, p.text)" data-testid="post-body"></div>
+									</template>
+									<template x-if="!p.removed && editing === p.id">
+										<div class="cm-form">
+											<textarea class="cm-textarea" rows="6" maxlength="10000" x-model="editDraft" aria-label="Edit post" data-testid="edit-body"></textarea>
+											<div class="cm-row">
+												<button class="cm-btn cm-btn--primary" x-on:click="saveEdit(p)" x-bind:disabled="busy || !editDraft.trim()" data-testid="save-edit">Save</button>
+												<button class="cm-btn" x-on:click="editing = null">Cancel</button>
+											</div>
+										</div>
+									</template>
+									<div class="post__foot" x-show="!p.removed && editing !== p.id">
+										<button class="cm-link" x-show="canReply" x-on:click="quote(p)">Quote</button>
+										<button class="cm-link" x-show="account && p.by === account.uid && (!thread.locked || isMod)" x-on:click="editing = p.id; editDraft = p.text" data-testid="edit">Edit</button>
+										<button class="cm-link" x-show="account && (p.by === account.uid || isMod)" x-on:click="removePost(p)" data-testid="remove">Remove</button>
+										<button class="cm-link" x-show="account && p.by !== account.uid" x-on:click="report(p)" data-testid="report">Report</button>
+									</div>
+								</div>
+							</template>
+
+							<div id="reply">
+								<p class="cm-note" x-show="thread.locked && !isMod">This thread is locked.</p>
+								<p class="cm-note" x-show="!account"><a href="account.html">Sign in</a> with an account to reply.</p>
+								<p class="cm-note" x-show="mutedText" x-text="mutedText"></p>
+								<template x-if="canReply">
+									<div class="cm-form">
+										<label for="reply-body">Reply</label>
+										<textarea id="reply-body" class="cm-textarea" rows="5" maxlength="10000" x-model="replyBody" x-ref="reply" data-testid="reply-body"></textarea>
+										<template x-if="replyBody.trim()">
+											<div><div class="cm-label">Preview</div><div class="md md-preview" x-effect="md($el, replyBody)"></div></div>
+										</template>
+										<div class="cm-row">
+											<button class="cm-btn cm-btn--primary" x-on:click="reply()" x-bind:disabled="busy || !replyBody.trim()" data-testid="post-reply">Post reply</button>
+											<span class="md-help">**bold**, *italic*, `code`, [links](https://…), - lists, &gt; quotes</span>
+										</div>
+									</div>
+								</template>
+							</div>
+						</div>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
+	<script src="static/scripts/markdown-lite.js?v=35"></script>
+	<script src="static/scripts/community.js?v=35"></script>
+
+	<script>
+		// The forums: forum_threads/{cat}/{thread}, forum_posts/{cat}/{thread}/{post}
+		// (database.rules.json; functions/community.js counts replies and tells
+		// the thread's posters). Categories are fixed here and in the rules;
+		// team:{id} is a team's own forum (teams.html links it).
+		//   forum.html               the categories
+		//   forum.html?c={cat}       its threads
+		//   forum.html?c={cat}&t={thread}
+		const FORUM_CATEGORIES = [
+			{ id: 'announcements', name: 'Announcements', about: 'News from the site. Moderators start threads; anyone may reply.' },
+			{ id: 'general', name: 'General', about: 'Anything about Sigil.' },
+			{ id: 'strategy', name: 'Strategy', about: 'Openings, tactics, endgames and annotated games.' },
+			{ id: 'spells', name: 'Spells', about: 'Spells, combinations and matchups.' },
+			{ id: 'variants', name: 'Variants', about: 'Competitive, Deathmatch, Scramble, Cataclysm and new ideas.' },
+			{ id: 'puzzles', name: 'Puzzles', about: 'Puzzles from the site and your own.' },
+			{ id: 'feedback', name: 'Site feedback', about: 'Bugs, ideas and requests for the site.' },
+			{ id: 'offtopic', name: 'Off-topic', about: 'Everything else.' },
+		];
+
+		document.addEventListener('alpine:init', () => {
+			const C = window.SigilCommunity;
+			const params = new URLSearchParams(location.search);
+			const db = () => firebase.database();
+			Alpine.data('forumPage', () => ({
+				categories: FORUM_CATEGORIES,
+				cat: params.get('c') || '',
+				tid: params.get('t') || '',
+				view: 'index',
+				catName: '',
+				catAbout: '',
+				isTeamCat: false,
+				teamRole: null,
+				latest: {},
+				threads: [],
+				threadLimit: 50,
+				thread: null,
+				posts: [],
+				names: {},
+				loading: true,
+				error: '',
+				busy: false,
+				account: null,
+				roles: { admin: false, forumMod: false, mutedUntil: 0 },
+				composing: false,
+				newTitle: '',
+				newBody: '',
+				replyBody: '',
+				editing: null,
+				editDraft: '',
+				editingTitle: false,
+				titleDraft: '',
+				_refs: [],
+
+				get isMod() { return this.roles.forumMod || (this.isTeamCat && (this.teamRole === 'leader' || this.teamRole === 'mod')); },
+				get muted() { return this.roles.mutedUntil > C.serverNow(); },
+				get mutedText() { return this.account && this.muted ? 'Your account is muted until ' + new Date(this.roles.mutedUntil).toLocaleString() + '.' : ''; },
+				get canStart() {
+					if (!this.account || this.muted) return false;
+					if (this.cat === 'announcements') return this.isMod;
+					if (this.isTeamCat) return !!this.teamRole;
+					return true;
+				},
+				get canReply() {
+					if (!this.account || this.muted || !this.thread) return false;
+					if (this.thread.locked && !this.isMod) return false;
+					return !this.isTeamCat || !!this.teamRole;
+				},
+
+				init() {
+					const known = FORUM_CATEGORIES.find((c) => c.id === this.cat);
+					this.isTeamCat = /^team:[a-z0-9-]{3,30}$/.test(this.cat);
+					if (this.cat && !known && !this.isTeamCat) { this.error = 'There is no such forum.'; this.cat = ''; }
+					this.view = !this.cat ? 'index' : this.tid ? 'thread' : 'category';
+					if (known) { this.catName = known.name; this.catAbout = known.about; }
+					if (this.isTeamCat) {
+						const team = this.cat.slice(5);
+						this.catName = 'Team forum';
+						db().ref('teams/' + team + '/name').once('value').then((s) => {
+							if (!s.exists()) { this.error = 'This team no longer exists.'; return; }
+							this.catName = C.mask(s.val()) + ' (team forum)';
+							this.catAbout = 'The forum of the team ' + C.mask(s.val()) + '. Anyone may read it; its members post.';
+							document.title = this.catName + ' - Sigil Online';
+						}, () => {});
+					} else if (known) {
+						document.title = known.name + ' - Forums - Sigil Online';
+					}
+					C.onUser(async (u) => {
+						this.account = u;
+						this.roles = await C.roles();
+						this.teamRole = null;
+						if (u && this.isTeamCat) {
+							const r = await db().ref('team_members/' + this.cat.slice(5) + '/' + u.uid + '/role').once('value').catch(() => null);
+							this.teamRole = r && r.val();
+						}
+					});
+					if (this.view === 'index') this.loadIndex();
+					else if (this.view === 'category') this.loadCategory();
+					else this.loadThread();
+				},
+
+				md(el, text) { C.md(el, text); },
+				mask: (s) => C.mask(s),
+				when: (ts) => C.when(ts),
+				fullTime: (ts) => C.fullTime(ts),
+
+				_off() {
+					this._refs.forEach((r) => r.off());
+					this._refs = [];
+				},
+
+				loadIndex() {
+					this.loading = false;
+					FORUM_CATEGORIES.forEach((c) => {
+						db().ref('forum_threads/' + c.id).orderByChild('lastAt').limitToLast(1).once('value').then((s) => {
+							s.forEach((t) => { this.latest[c.id] = Object.assign({ id: t.key }, t.val()); });
+						}, () => {});
+					});
+				},
+
+				loadCategory() {
+					this._off();
+					this.loading = true;
+					const base = db().ref('forum_threads/' + this.cat);
+					const recent = base.orderByChild('lastAt').limitToLast(this.threadLimit);
+					const pinned = base.orderByChild('pinned').equalTo(true);
+					const got = { recent: {}, pinned: {} };
+					const render = () => {
+						const all = Object.assign({}, got.recent, got.pinned);
+						this.threads = Object.keys(all).map((id) => Object.assign({ id }, all[id]))
+							.sort((a, b) => (!!b.pinned - !!a.pinned) || (b.lastAt || 0) - (a.lastAt || 0));
+						C.fillNames(this.threads.flatMap((t) => [t.by, t.lastBy]), this.names);
+						this.loading = false;
+					};
+					recent.on('value', (s) => { got.recent = s.val() || {}; render(); }, (e) => { this.error = C.errorText(e); this.loading = false; });
+					pinned.on('value', (s) => { got.pinned = s.val() || {}; render(); }, () => {});
+					this._refs = [recent, pinned];
+				},
+
+				loadThread() {
+					this._off();
+					this.loading = true;
+					const tRef = db().ref('forum_threads/' + this.cat + '/' + this.tid);
+					const pRef = db().ref('forum_posts/' + this.cat + '/' + this.tid).limitToFirst(1000);
+					let first = true;
+					tRef.on('value', (s) => {
+						this.thread = s.val();
+						this.loading = false;
+						if (this.thread) document.title = C.mask(this.thread.title) + ' - Forums - Sigil Online';
+					}, (e) => { this.error = C.errorText(e); this.loading = false; });
+					pRef.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						this.posts = list;
+						C.fillNames(list.map((p) => p.by), this.names);
+						// A link to one post (#p-...): there once the posts are.
+						if (first && location.hash.startsWith('#p-')) {
+							first = false;
+							this.$nextTick(() => { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); });
+						}
+					}, () => {});
+					this._refs = [tRef, pRef];
+				},
+
+				async _run(fn) {
+					this.busy = true;
+					this.error = '';
+					try {
+						await fn();
+						return true;
+					} catch (e) {
+						console.warn('[Forum]', e);
+						this.error = C.errorText(e);
+						return false;
+					} finally {
+						this.busy = false;
+					}
+				},
+
+				async startThread() {
+					const title = this.newTitle.trim();
+					const text = this.newBody.trim();
+					if (title.length < 3 || title.length > 120 || !text) return;
+					const me = this.account.uid;
+					const tid = C.newKey('forum_threads/' + this.cat);
+					const pid = C.newKey('forum_posts');
+					const ok = await this._run(() => C.commit('forum', {
+						['forum_threads/' + this.cat + '/' + tid]: { title, by: me, at: C.TS(), lastAt: C.TS(), lastBy: me, lastPost: pid },
+						['forum_posts/' + this.cat + '/' + tid + '/' + pid]: { by: me, at: C.TS(), text },
+					}));
+					if (ok) location.href = 'forum.html?c=' + encodeURIComponent(this.cat) + '&t=' + encodeURIComponent(tid);
+				},
+
+				async reply() {
+					const text = this.replyBody.trim();
+					if (!text || !this.canReply) return;
+					const me = this.account.uid;
+					const pid = C.newKey('forum_posts');
+					const base = 'forum_threads/' + this.cat + '/' + this.tid + '/';
+					const ok = await this._run(() => C.commit('forum', {
+						['forum_posts/' + this.cat + '/' + this.tid + '/' + pid]: { by: me, at: C.TS(), text },
+						[base + 'lastAt']: C.TS(),
+						[base + 'lastBy']: me,
+						[base + 'lastPost']: pid,
+					}));
+					if (ok) {
+						this.replyBody = '';
+						this.$nextTick(() => { const el = document.getElementById('p-' + pid); if (el) el.scrollIntoView(); });
+					}
+				},
+
+				quote(p) {
+					const lines = String(p.text || '').split('\n').slice(0, 12).map((l) => '> ' + l).join('\n');
+					this.replyBody = (this.replyBody ? this.replyBody.trimEnd() + '\n\n' : '') + '> **' + (this.names[p.by] || 'Player') + '** wrote:\n' + lines + '\n\n';
+					this.$nextTick(() => { if (this.$refs.reply) this.$refs.reply.focus(); });
+				},
+
+				saveEdit(p) {
+					const text = this.editDraft.trim();
+					if (!text) return;
+					return this._run(async () => {
+						await db().ref('forum_posts/' + this.cat + '/' + this.tid + '/' + p.id).update({ text, editedAt: C.TS() });
+						this.editing = null;
+					});
+				},
+
+				removePost(p) {
+					const mine = p.by === this.account.uid;
+					if (!confirm(mine ? 'Remove your post? Its text is deleted.' : 'Remove this post as a moderator?')) return;
+					return this._run(() => db().ref('forum_posts/' + this.cat + '/' + this.tid + '/' + p.id).update({
+						text: null, editedAt: null, removed: { by: this.account.uid, at: C.TS() },
+					}));
+				},
+
+				report(p) {
+					C.report({ kind: 'forum', target: p.by, cat: this.cat, thread: this.tid, post: p.id, what: 'this post' });
+				},
+
+				setFlag(flag, on) {
+					return this._run(() => db().ref('forum_threads/' + this.cat + '/' + this.tid + '/' + flag).set(on));
+				},
+
+				saveTitle() {
+					const title = this.titleDraft.trim();
+					if (title.length < 3) return;
+					return this._run(async () => {
+						await db().ref('forum_threads/' + this.cat + '/' + this.tid + '/title').set(title.slice(0, 120));
+						this.editingTitle = false;
+					});
+				},
+
+				async deleteThread() {
+					if (!confirm('Delete this thread and all its posts? This cannot be undone.')) return;
+					this._off();
+					const ok = await this._run(() => db().ref().update({
+						['forum_threads/' + this.cat + '/' + this.tid]: null,
+						['forum_posts/' + this.cat + '/' + this.tid]: null,
+					}));
+					if (ok) location.href = 'forum.html?c=' + encodeURIComponent(this.cat);
+					else this.loadThread();
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>
