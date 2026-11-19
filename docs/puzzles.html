@@ -11,6 +11,7 @@
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
 		<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+		<link href="static/css/puzzle-racer.css" rel="stylesheet" />
 		<title>Puzzles - Sigil Online</title>
 		<style>
 			header { position: absolute; }
@@ -98,7 +99,7 @@
 			.puzzle-panel__tags { color: var(--color-text-muted, #aaa); font-size: 0.85em; margin: 0 0 6px; }
 			.puzzle-loading { padding: 80px 0; text-align: center; color: var(--color-text-muted, #aaa); }
 
-		/* Tabs: Puzzles | Dashboard | Storm */
+		/* Tabs: Puzzles | Dashboard | Storm | Racer */
 		.puzzle-tabs { font-family: 'Overlock', sans-serif; padding: 56px 16px 0; display: flex; flex-wrap: wrap; gap: 14px; }
 		.puzzle-tabs a { color: var(--color-text-warm, #eee); }
 		.puzzle-tabs a.is-active { font-weight: bold; text-decoration: underline; }
@@ -181,6 +182,7 @@
 				<a href="puzzles.html" data-tab="puzzles">Puzzles</a>
 				<a href="puzzles.html?tab=dashboard" data-tab="dashboard">Dashboard</a>
 				<a href="puzzles.html?tab=storm" data-tab="storm">Puzzle Storm</a>
+				<a href="puzzles.html?tab=racer" data-tab="racer">Puzzle Racer</a>
 				<a href="leaderboard.html?tab=puzzles">Leaderboard</a>
 			</nav>
 			<div id="puzzle-loading" class="puzzle-loading">Loading puzzles…</div>
@@ -188,6 +190,8 @@
 			<div id="puzzle-dashboard" class="puzzle-dash" style="display:none"></div>
 			<!-- ?tab=storm: the start and end screens; the run itself uses the board below -->
 			<div id="storm-intro" class="storm-intro" style="display:none"></div>
+			<!-- ?tab=racer: the Racer lobby, a race's lobby, countdown and results (puzzle-racer.js) -->
+			<div id="racer-root" class="racer" style="display:none"></div>
 			<!-- The run's clock: sticks to the top while the board scrolls -->
 			<div class="storm-bar" id="storm-bar">
 				<span class="storm-bar__time" id="storm-time">3:00</span>
@@ -198,6 +202,8 @@
 				<button class="action-button" id="storm-skip" type="button">Skip</button>
 				<button class="action-button" id="storm-end" type="button">End run</button>
 			</div>
+			<!-- Puzzle Racer: one lane per racer -->
+			<div id="racer-track" class="racer-track" role="region" aria-label="Race progress" style="display:none"></div>
 
 			<!-- Filled in by boot() once the puzzle set is loaded; Alpine is
 			     started only after window.SIGIL_PUZZLE exists so the board
@@ -451,10 +457,11 @@
 		<script src="static/scripts/game-board-local.js?v=44"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
-		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->
+		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync, Storm scores and Racer) -->
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 		<script>
 			firebase.initializeApp({
 				apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
@@ -467,6 +474,7 @@
 			});
 		</script>
 		<script src="static/scripts/auth-status.js?v=35"></script>
+		<script src="static/scripts/puzzle-racer.js"></script>
 
 		<script>
 			/**
@@ -1020,7 +1028,7 @@
 
 			(async function boot() {
 				const params = new URLSearchParams(window.location.search);
-				const tab = ['dashboard', 'storm'].includes(params.get('tab')) ? params.get('tab') : 'puzzles';
+				const tab = ['dashboard', 'storm', 'racer'].includes(params.get('tab')) ? params.get('tab') : 'puzzles';
 				document.querySelectorAll('#puzzle-tabs a[data-tab]').forEach((a) => {
 					if (a.dataset.tab === tab) a.classList.add('is-active');
 				});
@@ -1047,6 +1055,7 @@
 				if (params.has('bench')) return bootBench(params, all);
 				if (tab === 'dashboard') return bootDashboard(all);
 				if (tab === 'storm') return bootStorm(all);
+				if (tab === 'racer') return bootRacer(all, params);
 				const legacyMate = ['1', '2', '3'].includes(params.get('mate')) ? 'm' + params.get('mate') : null;
 				const filt = {
 					set: PUZZLE_SETS[params.get('set')] ? params.get('set') : legacyMate,

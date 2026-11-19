@@ -1,0 +1,59 @@
+/* Puzzle Racer (puzzles.html?tab=racer, puzzle-racer.js). The race itself
+   uses Puzzle Storm's sticky bar (.storm-bar) and the puzzle board. */
+
+.racer { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 8px 16px 16px; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+.racer h2 { font-family: 'Arvo', serif; font-size: 1.35em; margin: 8px 0 4px; }
+.racer h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 18px 0 6px; }
+.racer .action-button { margin: 10px 8px 0 0; }
+.racer a { color: var(--color-accent, #d4af37); }
+.racer a.action-button { color: inherit; }
+.racer-note { color: var(--color-text-muted, #aaa); font-size: 0.9em; margin: 4px 0; }
+.racer-msg { color: #f0d77a; min-height: 1.2em; margin: 6px 0 0; }
+.racer-msg:empty { min-height: 0; }
+.racer-center { text-align: center; }
+
+/* Open races */
+.racer-list { display: flex; flex-direction: column; gap: 6px; }
+.racer-race { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; overflow-wrap: anywhere; }
+.racer-race .action-button { margin: 0; flex: none; }
+
+/* A race's lobby */
+.racer-link { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.racer-link input { flex: 1 1 220px; min-width: 0; font: inherit; font-size: 0.85em; color: inherit; background: transparent; border: 1px solid var(--color-text-muted, #aaa); border-radius: 4px; padding: 4px 6px; }
+.racer-link .action-button { margin: 0; }
+.racer-players { padding-left: 1.6em; margin: 10px 0; }
+.racer-players li { margin: 2px 0; overflow-wrap: anywhere; }
+.racer-players .is-gone { color: var(--color-text-muted, #aaa); text-decoration: line-through; }
+.racer-count { font-size: 1.8em; text-align: center; margin: 24px 0 8px; }
+
+/* The track: one lane per racer, the car moved on by each solve */
+.racer-track { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 6px 16px 8px; max-width: 760px; margin: 0 auto; box-sizing: border-box; }
+.racer-track__head { display: flex; justify-content: space-between; color: var(--color-text-muted, #aaa); font-size: 0.8em; margin-bottom: 2px; }
+.racer-lane { display: grid; grid-template-columns: minmax(4.5em, 9em) 1fr; align-items: center; gap: 8px; margin: 3px 0; font-size: 0.85em; }
+.racer-lane__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.racer-lane.is-me .racer-lane__name { font-weight: bold; color: #f0d77a; }
+.racer-lane.is-gone { opacity: 0.5; }
+.racer-lane__road { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); border-right: 3px dashed rgba(255, 255, 255, 0.4); }
+.racer-car {
+	position: absolute; top: 0; left: 0; height: 18px; min-width: 22px; padding: 0 5px; box-sizing: border-box;
+	border-radius: 9px; font-size: 0.85em; font-weight: bold; line-height: 18px; text-align: center; color: #111;
+	transition: left 0.5s ease, transform 0.5s ease;
+}
+.racer-lane.is-me .racer-car { box-shadow: 0 0 0 2px #f0d77a; }
+.racer-car--0 { background: #e0604a; }
+.racer-car--1 { background: #5aa0e6; }
+.racer-car--2 { background: #6fd46f; }
+.racer-car--3 { background: #f0d77a; }
+.racer-car--4 { background: #c78be6; }
+.racer-car--5 { background: #f2a65a; }
+.racer-car--6 { background: #5fd4c8; }
+.racer-car--7 { background: #e67fae; }
+.racer-car--8 { background: #b5c96a; }
+.racer-car--9 { background: #d9d9d9; }
+@media (prefers-reduced-motion: reduce) { .racer-car { transition: none; } }
+
+/* Results */
+.racer-results { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 0.95em; }
+.racer-results th, .racer-results td { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.12); overflow-wrap: anywhere; }
+.racer-results th:nth-child(n+3), .racer-results td:nth-child(n+3) { text-align: right; }
+.racer-results .is-me td { color: #f0d77a; font-weight: bold; }
