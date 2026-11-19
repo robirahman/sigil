@@ -129,3 +129,23 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Image / GIF export, embeds, typed turns, opening explorer
+
+```sh
+node <repo>/tools/analysis-export-smoke.js        # no browser: GIF encoder, typed-turn parser, explorer counts, generator
+(cd docs && python3 -m http.server 8804) &
+firebase emulators:exec --only auth,database --project demo-sigil \
+  'node tools/browser/analysis-export-emulator-test.js http://localhost:8804'
+```
+
+The smoke script checks the GIF encoder against an independent decoder (`gif-decode.js`), the
+typed-turn word parser, and the opening explorer's counting on games replayed by the engine, then
+runs `tools/gen-opening-explorer.js` on a small dump. The browser test, on the emulators: a seeded
+finished room's review downloads a PNG and a GIF (decoded frame by frame) and copies the embed code;
+`embed.html` steps through the game (the canvas shows the right stones), refuses private, unfinished
+and missing games, and draws a position in a `?theme=`; `embed.html?puzzle=` is the Puzzles page's
+embed mode, which writes nothing; typed turns on game.html (an illegal word refused, a word the game
+asks for again reported, a dash turn played and recorded as typed) and analysis.html; `openings.html`
+with the shipped sample and one player's games from `user_games`. Downloads go to a temp dir
+(`SIGIL_TEST_TMP`); `SIGIL_SHOTS=<dir>` saves a screenshot of the puzzle embed.

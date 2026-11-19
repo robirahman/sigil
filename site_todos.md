@@ -110,7 +110,7 @@ Items already listed above are not repeated; chess-only features (opening names,
   Not applicable (Robi, 2026-10-26): both players see the board from the same side on the site, so there is no perspective to flip.
 - [x] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
   The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Done: vacation on account.html (14 days a year, ended early refunds the days not begun) through the `setVacation` function, which pauses every correspondence game of the player (`rooms/{id}/pauses`, server-only); room-clock.js, `flagged` and `expireClocks` add the paused time; "On vacation until …" on the game page and active-games.html.
-- [ ] **Add move input by typed notation**, and optionally by voice.
+- [x] **Add move input by typed notation**, and optionally by voice. Done: "Type a turn" on game.html and analysis.html (typed-turn.js), in the game record's own notation (Export Game / SGN-T input tokens: `a11 dash a1 a2 c10 Bewitch b6 b2 pass`; spells by name in any case, `end` = pass); each word goes through the click path (sendEvent -> GameController), checked against the prompt it answers, stopping at the first illegal word with the legal ones listed. Voice: not done.
 - [x] **Let players draw arrows and circles** on the board during play and analysis.
   Done: board-marks.js. Right-drag arrows, right-click circles, Shift/Alt/Ctrl colours; a pencil draw mode on touch screens; local only, cleared each turn in play, kept per move in review and per tree node in analysis.html; Escape or the ✕ button clears.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
@@ -131,7 +131,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
   Done: a review-panel button on game.html and multiplayer.html opens the player's mistakes as winning-turn puzzles on `puzzles.html?learn=`.
 - [ ] **Add practice-from-position** against the AI with hints.
-- [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
+- [x] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player. Done: openings.html (opening-explorer.js): an opening tree by resulting position (6 turns), spell layouts exact or by spell set, all games / player vs player / one player (from user_games and their rooms, linked from the profile's Insights tab). Site-wide data is docs/static/data/opening-explorer.json, built by tools/gen-opening-explorer.js from a completed_games dump; the shipped file is a synthetic sample until that is run.
 - [x] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase. Done: the Insights tab, win rate by colour, game length and spell on the board (time control is in Stats; game phase needs evals, not stored per game).
 
 ### Puzzles
@@ -193,8 +193,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 - [ ] **Add a public API with OAuth** (sign in to other apps with a site account).
 - [ ] **Add bot accounts** so outside engines can play on the site.
-- [ ] **Add an embeddable board widget** for games and puzzles.
-- [ ] **Add GIF / image export** of games and positions.
+- [x] **Add an embeddable board widget** for games and puzzles. Done: embed.html?game=<room>[&ply=] (step through a finished game), ?sfn= (a position), ?puzzle= (puzzles.html?embed=, solvable, writes no rating or progress), &theme=; "Embed" copies the iframe code in game reviews, on puzzles and on the analysis board.
+- [x] **Add GIF / image export** of games and positions. Done: board-image.js draws the position on a canvas from the site's art in the active theme; "Image" (PNG) on the game, review, analysis and puzzle pages, "GIF" (whole game, gif-encoder.js, in the browser) in game reviews.
 - [ ] **Add a screen-reader mode** and full keyboard control.
 - [ ] **Ship a native mobile app.**
 

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Sigil board</title>
+		<link rel="icon" href="static/images/logo-icon.svg" type="image/svg+xml" />
+		<!--
+			Embeddable board, for an <iframe> on another site (the "Embed"
+			buttons copy the code, board-image.js embedCode):
+
+			  embed.html?game=<room code>[&ply=<n>]   a finished game, step by step, from
+			                                          position n (the Embed button always
+			                                          names the one shown), else the start
+			  embed.html?sfn=<position>               one position
+			  embed.html?puzzle=<puzzle id>           a puzzle to solve (puzzles.html?embed=)
+			  &theme=<frost|parchment|forest|volcanic> optional; else the viewer's theme
+
+			Positions are drawn on a canvas by board-image.js from the site's art.
+			A game is read from its public room (rooms/{code}, as multiplayer.html's
+			review reads it) and rebuilt by the site's replayer (hydrateGameLog);
+			the engine and Firebase are loaded only for that. Solving a puzzle
+			needs the whole game board, so a puzzle frame goes to the Puzzles page's
+			chrome-less embed mode, which records no rating or progress.
+		-->
+		<style>
+			:root {
+				--embed-bg: var(--color-bg-dark, #0d0513);
+				--embed-text: var(--color-text, #dddcdd);
+				--embed-muted: var(--color-text-muted, #999);
+				--embed-btn: var(--color-surface, #1a1a2e);
+				--embed-border: var(--color-border, #555);
+				--embed-accent: var(--color-accent, #8af);
+			}
+			* { box-sizing: border-box; }
+			html, body { margin: 0; height: 100%; }
+			body {
+				background: var(--embed-bg);
+				color: var(--embed-text);
+				font: 14px/1.3 Georgia, "Times New Roman", serif;
+				overflow: hidden;
+			}
+			.embed { display: flex; flex-direction: column; align-items: center; height: 100%; }
+			.embed__board { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+			.embed__board canvas { display: block; max-width: 100%; max-height: 100%; }
+			.embed__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 4px 6px; width: 100%; }
+			.embed__bar[hidden] { display: none; }
+			.embed__btn {
+				background: var(--embed-btn); border: 1px solid var(--embed-border); border-radius: 5px;
+				color: var(--embed-text); cursor: pointer; font: inherit; min-width: 32px; height: 30px; padding: 0 8px;
+			}
+			.embed__btn:disabled { cursor: default; opacity: 0.35; }
+			.embed__btn:focus-visible { outline: 2px solid var(--embed-accent); outline-offset: 1px; }
+			.embed__label { min-width: 7em; text-align: center; }
+			.embed__foot { display: flex; justify-content: space-between; gap: 8px; padding: 2px 8px 6px; width: 100%; color: var(--embed-muted); font-size: 12px; }
+			.embed__foot a { color: var(--embed-accent); }
+			.embed__msg { padding: 24px 16px; text-align: center; }
+			.embed__msg[hidden] { display: none; }
+		</style>
+		<script src="static/scripts/theme-manager.js"></script>
+	</head>
+	<body>
+		<main class="embed">
+			<p class="embed__msg" id="embed-msg" role="status">Loading…</p>
+			<div class="embed__board" id="embed-board-wrap" hidden>
+				<canvas id="embed-board" role="img" aria-label="Sigil board"></canvas>
+			</div>
+			<div class="embed__bar" id="embed-controls" hidden>
+				<button class="embed__btn" type="button" id="embed-first" aria-label="First position" title="First position (Home)">&#x23EE;</button>
+				<button class="embed__btn" type="button" id="embed-prev" aria-label="Previous turn" title="Previous turn (&larr;)">&#x25C0;</button>
+				<span class="embed__label" id="embed-label" aria-live="polite"></span>
+				<button class="embed__btn" type="button" id="embed-next" aria-label="Next turn" title="Next turn (&rarr;)">&#x25B6;</button>
+				<button class="embed__btn" type="button" id="embed-last" aria-label="Last position" title="Last position (End)">&#x23ED;</button>
+				<button class="embed__btn" type="button" id="embed-play" aria-label="Play through the game" title="Play through the game">&#x23EF;</button>
+			</div>
+			<div class="embed__foot" id="embed-foot" hidden>
+				<span id="embed-title"></span>
+				<a id="embed-open" target="_blank" rel="noopener">Open on Sigil &#x2197;</a>
+			</div>
+		</main>
+
+		<script src="static/scripts/engine/constants.js"></script>
+		<script src="static/scripts/engine/notation.js"></script>
+		<script src="static/scripts/board-geometry.js"></script>
+		<script src="static/scripts/board-image.js"></script>
+		<script>
+			(function () {
+				const params = new URLSearchParams(window.location.search);
+				const $ = (id) => document.getElementById(id);
+				const msg = (text) => {
+					$('embed-msg').textContent = text;
+					$('embed-msg').hidden = !text;
+				};
+
+				// A frame's theme: ?theme= when given (not saved: the frame must not
+				// change the viewer's own choice), else the viewer's (theme-manager.js).
+				const theme = params.get('theme');
+				if (theme && typeof THEMES !== 'undefined' && THEMES[theme]) {
+					const root = document.documentElement;
+					for (const t of Object.values(THEMES)) for (const k of Object.keys(t.vars || {})) root.style.removeProperty(k);
+					root.setAttribute('data-theme', theme);
+					for (const [k, v] of Object.entries(THEMES[theme].vars || {})) root.style.setProperty(k, v);
+				}
+
+				function loadScript(src) {
+					return new Promise((resolve, reject) => {
+						const s = document.createElement('script');
+						s.src = src;
+						s.onload = resolve;
+						s.onerror = () => reject(new Error('could not load ' + src));
+						document.head.appendChild(s);
+					});
+				}
+
+				// ---- Drawing ----
+				const view = { sfns: [], labels: [], index: 0, names: { red: 'Red', blue: 'Blue' }, result: '' };
+				let drawing = Promise.resolve();
+				function boardPx() {
+					const wrap = $('embed-board-wrap');
+					const w = wrap.clientWidth || window.innerWidth;
+					const h = wrap.clientHeight || window.innerHeight;
+					// The canvas is the board plus a caption bar (7.5% of its side).
+					return Math.max(120, Math.floor(Math.min(w, h / 1.075)));
+				}
+				function draw() {
+					const i = view.index;
+					const sfn = view.sfns[i];
+					if (!sfn) return drawing;
+					drawing = drawing.then(async () => {
+						const st = BoardImage.stateFromSfn(sfn);
+						if (i > 0) st.lastPlay = BoardImage.newStones(BoardImage.stateFromSfn(view.sfns[i - 1]), st);
+						const css = boardPx();
+						const canvas = $('embed-board');
+						await BoardImage.render(st, {
+							canvas,
+							size: Math.min(1480, Math.round(css * (window.devicePixelRatio || 1))),
+							caption: {
+								left: BoardImage.sideText(view.names.red, st.redSpells, st.variant, st.redBank),
+								right: BoardImage.sideText(view.names.blue, st.blueSpells, st.variant, st.blueBank),
+								centre: view.sfns.length > 1 ? (view.labels[i] || '') : view.result,
+							},
+						});
+						canvas.style.width = css + 'px';
+						canvas.style.height = Math.round(css * canvas.height / canvas.width) + 'px';
+						canvas.setAttribute('aria-label', 'Sigil board' + (view.labels[i] ? ', ' + view.labels[i] : ''));
+						const last = view.sfns.length - 1;
+						$('embed-label').textContent = (view.labels[i] || '') + ' (' + (i + 1) + '/' + view.sfns.length + ')';
+						$('embed-first').disabled = $('embed-prev').disabled = i === 0;
+						$('embed-next').disabled = $('embed-last').disabled = i === last;
+					}).catch((e) => { console.error(e); msg('Could not draw the board.'); });
+					return drawing;
+				}
+				function show() {
+					msg('');
+					$('embed-board-wrap').hidden = false;
+					$('embed-foot').hidden = false;
+					draw();
+				}
+				let resizeTimer = null;
+				window.addEventListener('resize', () => {
+					clearTimeout(resizeTimer);
+					resizeTimer = setTimeout(draw, 120);
+				});
+
+				// ---- Step-through controls (games) ----
+				let playing = false;
+				function go(i) {
+					playing = false;
+					$('embed-play').textContent = '⏯';
+					view.index = Math.max(0, Math.min(view.sfns.length - 1, i));
+					draw();
+				}
+				async function play() {
+					if (playing) { playing = false; $('embed-play').textContent = '⏯'; return; }
+					if (view.index >= view.sfns.length - 1) view.index = 0;
+					playing = true;
+					$('embed-play').textContent = '⏸';
+					while (playing && view.index < view.sfns.length - 1) {
+						await draw();
+						await new Promise((r) => setTimeout(r, 900));
+						if (!playing) break;
+						view.index++;
+					}
+					await draw();
+					playing = false;
+					$('embed-play').textContent = '⏯';
+				}
+				function controls() {
+					$('embed-controls').hidden = false;
+					$('embed-first').onclick = () => go(0);
+					$('embed-prev').onclick = () => go(view.index - 1);
+					$('embed-next').onclick = () => go(view.index + 1);
+					$('embed-last').onclick = () => go(view.sfns.length - 1);
+					$('embed-play').onclick = play;
+					document.addEventListener('keydown', (e) => {
+						if (e.ctrlKey || e.metaKey || e.altKey) return;
+						const k = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+						if (k) { e.preventDefault(); go(view.index + k); }
+						else if (e.key === 'Home') { e.preventDefault(); go(0); }
+						else if (e.key === 'End') { e.preventDefault(); go(view.sfns.length - 1); }
+					});
+				}
+
+				const site = BoardImage.siteBase();
+
+				// ---- A position ----
+				function bootSfn(sfn) {
+					try { sfnToDict(sfn); } catch (e) { msg('This position could not be read.'); return; }
+					view.sfns = [sfn];
+					// A shared position is in the loadable form (Export Position,
+					// analysis.html): the side to move follows its turn counter.
+					const tc = parseInt(sfn.split(/\s+/)[2], 10) || 0;
+					view.result = (tc + 1) % 2 === 1 ? 'Red to move' : 'Blue to move';
+					$('embed-title').textContent = 'Sigil position';
+					$('embed-open').href = site + 'analysis.html?sfn=' + encodeURIComponent(sfn);
+					show();
+				}
+
+				// ---- A finished game ----
+				const ENGINE = ['board.js', 'moves.js', 'spells.js', 'ai-player.js', 'game-controller.js?v=1', 'game-review.js?v=42']
+					.map((f) => 'static/scripts/engine/' + f);
+				const FIREBASE = ['firebase-app-compat.js', 'firebase-database-compat.js']
+					.map((f) => 'https://www.gstatic.com/firebasejs/10.12.2/' + f);
+				async function bootGame(code) {
+					$('embed-open').href = site + 'multiplayer.html?id=' + encodeURIComponent(code);
+					try {
+						for (const src of FIREBASE.concat(ENGINE)) await loadScript(src);
+					} catch (e) {
+						msg('Could not load the game viewer (' + e.message + ').');
+						return;
+					}
+					if (!firebase.apps.length) {
+						firebase.initializeApp({
+							apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+							authDomain: "sigil-js.firebaseapp.com",
+							databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+							projectId: "sigil-js",
+							storageBucket: "sigil-js.firebasestorage.app",
+							messagingSenderId: "174679859896",
+							appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+						});
+					}
+					let room = null;
+					try {
+						room = (await firebase.database().ref('rooms/' + code).once('value')).val();
+					} catch (e) {
+						msg('Could not read the game (' + (e.message || e) + ').');
+						return;
+					}
+					if (!room) { msg('Game not found: ' + code + '.'); return; }
+					if (room.allowSpectators === false) { msg('This game is private.'); return; }
+					if (room.status !== 'finished') {
+						msg('This game is not finished yet.');
+						const a = document.createElement('a');
+						a.href = site + 'multiplayer.html?id=' + encodeURIComponent(code);
+						a.target = '_blank';
+						a.rel = 'noopener';
+						a.textContent = ' Watch it on Sigil ↗';
+						$('embed-msg').appendChild(a);
+						return;
+					}
+					const spellNames = normalizeSpellNames(room.spellNames || []);
+					const variant = normalizeVariant(room.variant);
+					view.names = {
+						red: (room.red && room.red.displayName) || 'Red',
+						blue: (room.blue && room.blue.displayName) || 'Blue',
+					};
+					const winner = room.winner === 'red' ? 'Red wins' : room.winner === 'blue' ? 'Blue wins' : '';
+					view.result = winner;
+					$('embed-title').textContent = view.names.red + ' vs ' + view.names.blue + (winner ? ' · ' + winner : '');
+					try {
+						const log = await hydrateGameLog(spellNames, variant, room.setupSfn || null, room.finalSfn || null,
+							room.gameLog || [], recordEnding(room));
+						if (!log.length) throw new Error('no turns');
+						view.sfns = [log[0].sfnBefore];
+						view.labels = ['Start'];
+						for (const t of log) {
+							view.sfns.push(t.sfnAfter);
+							const n = t.color === 'red' ? Math.floor(t.turnNumber / 2) + 1 : Math.floor(t.turnNumber / 2);
+							view.labels.push((t.color === 'red' ? 'Red ' : 'Blue ') + n);
+						}
+						if (winner) view.labels[view.labels.length - 1] += ' · ' + winner;
+					} catch (e) {
+						console.warn('Game replay failed:', e);
+						if (!room.finalSfn) { msg('This game could not be replayed.'); return; }
+						view.sfns = [room.finalSfn];
+						view.labels = ['Final position'];
+					}
+					const ply = parseInt(params.get('ply'), 10);
+					view.index = Number.isFinite(ply) ? Math.max(0, Math.min(view.sfns.length - 1, ply)) : 0;
+					if (view.sfns.length > 1) controls();
+					show();
+				}
+
+				if (params.get('puzzle')) {
+					// Solving needs the full board: the Puzzles page's embed mode.
+					const q = new URLSearchParams({ embed: params.get('puzzle') });
+					if (theme) q.set('theme', theme);
+					window.location.replace('puzzles.html?' + q.toString());
+				} else if (params.get('game')) {
+					bootGame(params.get('game').trim());
+				} else if (params.get('sfn')) {
+					bootSfn(params.get('sfn').trim());
+				} else {
+					msg('Nothing to show: this page needs ?game=, ?sfn= or ?puzzle=.');
+				}
+			})();
+		</script>
+	</body>
+</html>
