@@ -10,6 +10,9 @@
 | `analyzeGame` | task queue, enqueued by `rateGame` for each rated game | The Rust engine's review of the game (`analysis.js`) at the Quick-review preset, 10 positions per task, re-enqueued until done; writes `game_evals/{roomCode}`, which the review panel reads. Progress in `game_evals_progress/{gameId}` (server-only). Fills and reads the eval cache `position_evals/{key}`. |
 | `evalPositions` | callable (signed in) | Up to 10 positions a browser Quick review searched itself: each is checked (it must read back to itself) and searched again here before it is cached in `position_evals`, so clients cannot poison the cache. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
+| `tournament` | callable (signed in; a full account except for `poke`) | Arenas, Swiss events and simuls (`tournaments.js`): `create`, `join`, `withdraw`, `start`, `cancel`, `kick`, `poke`. The only writer of `tournaments/`, `tournament_players/`, `tournament_pairings/` and the tournament indexes; it creates the games' rooms. |
+| `tournamentGameEnd` | `rooms/{code}/status` → finished / aborted | Scores a tournament room by `rating.js roomResult` (the rating's own check), frees its players and pairs the next games or starts the next Swiss round. Other rooms return at once. |
+| `tournamentTick` | every minute | Starts and ends events on time, catches no-shows (no first move in time: the room is aborted) and scores any game whose trigger was missed. Pages also `poke` when a countdown runs out, so the minute is a backstop. |
 
 ## How a result is checked
 
@@ -27,6 +30,16 @@
 - **Duplicates:** each game is rated once. `rating_claims/` is keyed by room, or by a hash of an AI game's transcript.
 - **Unrated games** are written to `user_games` with `rated: false` and the reason.
 
+## Tournaments
+
+`tournaments.js` decides everything; the clients only ask. Each game is an ordinary room it writes (status `playing`, both seats, the timer, `tournament: { id, kind, name, pairing, berserk }`), so clocks, `recordRoom`, `rateGame`, reviews and the active-games list work unchanged. The rules refuse a client's `tournament` or `extraTime` on a room, an abort, a takeback or a gift in a tournament room, and accept `berserk/{color}` only from that seat, before its first move, when the event allows it.
+
+- **Arena:** free players (joined, not paused, with `tournament.html` open or just out of a game) are paired at once with the nearest in the standings, not their last opponent unless both waited 10 s. A win is 2, 4 after two wins in a row, +1 for a berserk win with at least 4 turns of one's own; a loss 0. A no-show (no first move in 45 s) aborts the room and pauses the player. Games still going at the end count.
+- **Swiss:** each round pairs score groups top half against bottom half by backtracking, with no repeat opponent and no clash of absolute colours unless no pairing avoids them; the odd player out gets a bye (1 point), once each while others have not had one. The next round starts when the last game ends (plus the break). A no-show loses by forfeit and is withdrawn. Ties: Buchholz, Sonneborn-Berger, rating.
+- **Simul:** the host plays every opponent, one room each on the same spells, with `extraTime` on the host's seat (per opponent). Unrated.
+- **Who may do what:** any full account creates casual events (3 open at a time, starting within 7 days); admins (`admins/{uid}`) create rated, scheduled (`official`) and daily / weekly repeating ones. A suspended player cannot join a rated event; a game of a rated event with a suspended player is unrated.
+- **One writer per event:** every change holds `tournament_locks/{tid}` (a 30 s lease), so a player is never paired twice and a game never scored twice.
+
 ## Whose move, and the clocks
 
 `docs/static/scripts/engine/room-clock.js` (`roomTurns`, `sideToMove`, `roomTimeLeft`) is the one rule for whose move it is and how long they have, from the turns' server timestamps. The functions `require()` it (`engine-loader.js requireShared`; copied with the engine at deploy) and the site's active-games list and "Your move" badge load it as a script.
@@ -38,6 +51,9 @@ cd functions && npm ci
 npm test             # rating.js on recorded games, analysis.js with the wasm engine (no emulator)
 npm run test:rules   # database.rules.json on the database emulator
 npm run test:e2e     # rules + functions + auth emulators, through the client SDK
+# tournaments: pairing and scoring (in npm test), tournaments-db.test.js (in test:rules: a full arena,
+# a three-round Swiss and a simul on the database emulator), tournaments-e2e.test.js (in test:e2e:
+# the callable, the trigger and rateGame), and tools/browser/tournament-emulator-test.js (the pages)
 ```
 
 `test/online-game.json` is a complete game of input transcripts. It is produced by `node test/gen-online-fixture.js`.

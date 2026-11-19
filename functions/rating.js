@@ -242,6 +242,31 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 	const why = engine.unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null);
 	if (why) return Object.assign(unrated(why), kindOf);
 
+	const res = await roomResult(engine, room);
+	if (res.reason) return Object.assign(unrated(res.reason), { kind });
+	const verdict = {
+		rated: true,
+		kind,
+		winner: res.winner,
+		claimKey: 'room_' + record.roomCode,
+		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
+	};
+	if (abandonedBy) verdict.abandonedBy = abandonedBy;
+	if (res.overturned) verdict.overturned = true;
+	return verdict;
+}
+
+/**
+ * The result a finished room supports: { winner } when its own result
+ * follows from it, { winner, overturned: true } when it does not (the
+ * player who closed the room with it loses, as if they had resigned), or
+ * { reason } when there is none to give ('transcript-invalid',
+ * 'result-not-verified', 'no-result'). The rating (judgeGame) and the
+ * tournaments (tournaments.js) both score a room by this.
+ */
+async function roomResult(engine, room) {
+	if (!room || room.status !== 'finished' || (room.winner !== 'red' && room.winner !== 'blue')) return { reason: 'no-result' };
+	const loser = other(room.winner);
 	let ok;
 	if (room.forfeitedBy === 'red' || room.forfeitedBy === 'blue') {
 		ok = room.forfeitedBy === loser;
@@ -259,22 +284,12 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		// Either seat can append turns of its own colour, so a broken
 		// transcript may be the other side's doing: unrated, not held
 		// against the player who closed the room.
-		if (!r.valid) return Object.assign(unrated('transcript-invalid'), { kind });
-		ok = r.winner === record.winner;
+		if (!r.valid) return { reason: 'transcript-invalid' };
+		ok = r.winner === room.winner;
 	}
-	const verdict = {
-		rated: true,
-		kind,
-		winner: record.winner,
-		claimKey: 'room_' + record.roomCode,
-		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
-	};
-	if (abandonedBy) verdict.abandonedBy = abandonedBy;
-	if (ok) return verdict;
-	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return Object.assign(unrated('result-not-verified'), { kind });
-	// The player who closed the room with a result that does not follow
-	// from it loses, as if they had resigned.
-	return Object.assign(verdict, { winner: other(room.finishedBy), overturned: true });
+	if (ok) return { winner: room.winner };
+	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return { reason: 'result-not-verified' };
+	return { winner: other(room.finishedBy), overturned: true };
 }
 
 async function _judgeAiGame(engine, record, aiSide, spellNames, variant) {
@@ -399,5 +414,5 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 
 module.exports = {
 	AI_UID, CLOCK_GRACE_MS, ABANDON_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged,
-	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine,
+	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine, roomResult,
 };

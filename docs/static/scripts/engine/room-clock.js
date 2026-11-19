@@ -15,6 +15,15 @@
  *     only). Written by the setVacation function alone, never by a client.
  *   - gifts/{push}: {to, ms, at}, time one player gave the other (realtime
  *     only). The rules let a seat give only to the other seat.
+ *
+ * Two more fields set a seat's clock in tournament rooms (realtime only;
+ * functions/tournaments.js creates those rooms):
+ *   - berserk/{color}: true, the player halved their own clock for a bonus
+ *     point (arena tournaments). The rules accept it only before that seat's
+ *     first move. A berserk clock starts at half the initial time and has no
+ *     increment.
+ *   - extraTime/{color}: ms added to that seat's initial time (a simul's
+ *     host). Written by the server alone.
  */
 
 // The one gift size a client may write, and how many gifts each seat may
@@ -70,6 +79,26 @@ function roomGiftMs(room, color, now) {
 		count++;
 	}
 	return Math.min(count, ROOM_GIFT_MAX) * ROOM_GIFT_MS;
+}
+
+/**
+ * `color`'s initial time in a realtime room (ms): the time control's, plus
+ * the seat's extra time, halved by a berserk.
+ */
+function roomInitialTime(room, color) {
+	const tc = (room && room.timeControl) || {};
+	if (typeof tc.initialTime !== 'number') return null;
+	const extra = room && room.extraTime && typeof room.extraTime[color] === 'number' && room.extraTime[color] > 0
+		? room.extraTime[color] : 0;
+	const t = tc.initialTime + extra;
+	return room && room.berserk && room.berserk[color] === true ? Math.floor(t / 2) : t;
+}
+
+/** `color`'s increment in a realtime room (ms): none after a berserk. */
+function roomIncrement(room, color) {
+	const tc = (room && room.timeControl) || {};
+	if (room && room.berserk && room.berserk[color] === true) return 0;
+	return tc.increment || 0;
 }
 
 /**
@@ -132,9 +161,9 @@ function sideToMove(room) {
  * game (startedAt, server time, written with the join).
  * Correspondence: the deadline is the last turn's timestamp (or startedAt)
  * + moveTimeout, + the time `color` has been paused since.
- * Realtime: initialTime, plus the increment and minus the time used on each
- * of `color`'s turns (the first from startedAt), plus the time given to
- * `color`.
+ * Realtime: the seat's initial time (roomInitialTime), plus the increment
+ * and minus the time used on each of `color`'s turns (the first from
+ * startedAt), plus the time given to `color`.
  */
 function roomTimeLeft(room, color, now) {
 	const tc = (room && room.timeControl) || {};
@@ -148,7 +177,8 @@ function roomTimeLeft(room, color, now) {
 		}
 		if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return null;
 		const gift = roomGiftMs(room, color, now);
-		return (running ? tc.initialTime - (now - room.startedAt) : tc.initialTime) + gift;
+		const initial = roomInitialTime(room, color);
+		return (running ? initial - (now - room.startedAt) : initial) + gift;
 	}
 	const last = turns[turns.length - 1];
 	if (typeof last.timestamp !== 'number') return null;
@@ -158,8 +188,8 @@ function roomTimeLeft(room, color, now) {
 		return last.timestamp + tc.moveTimeout + roomPausedMs(room, color, last.timestamp, now) - now;
 	}
 	if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return null;
-	const inc = tc.increment || 0;
-	let remaining = tc.initialTime;
+	const inc = roomIncrement(room, color);
+	let remaining = roomInitialTime(room, color);
 	let prevTs = null;
 	for (const t of turns) {
 		if (typeof t.timestamp !== 'number') return null;
@@ -198,5 +228,5 @@ function roomTimerView(ts, room, now) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { orderTurnKeys, roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS, ROOM_GIFT_MAX };
+	module.exports = { orderTurnKeys, roomTurns, sideToMove, roomTimeLeft, roomInitialTime, roomIncrement, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS, ROOM_GIFT_MAX };
 }

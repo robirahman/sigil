@@ -28,8 +28,9 @@ class MultiplayerController {
 		this._timerState = { red: 0, blue: 0, activeColor: null, lastUpdated: 0 };
 		this._timeControl = sync.timeControl || { type: 'none' };
 		this._timedOut = false;
-		// The room's pauses (vacations) and gifts of time (room-clock.js).
-		this._clockRec = { pauses: null, gifts: null, startedAt: null };
+		// The room's pauses (vacations), gifts of time, and a tournament
+		// room's berserks and extra time (room-clock.js).
+		this._clockRec = { pauses: null, gifts: null, startedAt: null, berserk: null, extraTime: null };
 
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
@@ -131,6 +132,15 @@ class MultiplayerController {
 				&& !(view && (view.out === opp || view[opp] <= 0))) this.sync.giveTime();
 			return;
 		}
+		if (message === 'berserk') {
+			// Before our first move only (the rules check it too).
+			const mine = (this._gameLog || []).some((t) => t.color === this.myColor)
+				|| Object.values((this.sync && this.sync._turnInfo) || {}).some((t) => t && t.color === this.myColor);
+			if (!mine && !(this.board && this.board.gameover) && this._timeControl.type === 'realtime') {
+				this.sync.berserk().then((ok) => { if (ok) this.emit({ type: 'berserk_done' }); });
+			}
+			return;
+		}
 		if (message === 'claim_win') {
 			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
 			return;
@@ -193,8 +203,10 @@ class MultiplayerController {
 		if (this._timeControl.type === 'realtime') {
 			// The node holds the time without gifts (room-clock.js adds
 			// them, whenever they arrive), so it is not clamped: it may go
-			// below zero by what we were given.
-			const myRemaining = ts[this.myColor] - elapsed + (this._timeControl.increment || 0);
+			// below zero by what we were given. A berserk seat has no
+			// increment (roomIncrement).
+			const inc = typeof roomIncrement === 'function' ? roomIncrement(this._clockRoom(), this.myColor) : (this._timeControl.increment || 0);
+			const myRemaining = ts[this.myColor] - elapsed + inc;
 			return {
 				red: this.myColor === 'red' ? myRemaining : ts.red,
 				blue: this.myColor === 'blue' ? myRemaining : ts.blue,
@@ -224,8 +236,15 @@ class MultiplayerController {
 		});
 		if (typeof this.sync.listenToClockRecords === 'function') {
 			let seen = null;
+			let berserk = null;
 			this.sync.listenToClockRecords((rec) => {
 				this._clockRec = rec;
+				// A tournament room's berserks, for the page's notice.
+				const b = JSON.stringify(rec.berserk || null);
+				if (b !== berserk) {
+					berserk = b;
+					this.emit({ type: 'berserk_state', berserk: rec.berserk || null });
+				}
 				// New gifts, either way, once the first load is in.
 				const keys = Object.keys(rec.gifts || {});
 				if (seen && rec.ready) {

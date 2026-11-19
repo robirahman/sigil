@@ -931,3 +931,93 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+test('tournaments: events, players, pairings and limits are the server\'s; presence is the player\'s own', async () => {
+	await seed({ tournaments: { t1: { kind: 'arena', name: 'Arena', status: 'started' } },
+		tournament_players: { t1: { alice: { score: 2 } } }, tournament_pairings: { t1: { g1: { red: 'alice', blue: 'bob', status: 'playing' } } },
+		tournament_index: { t1: { name: 'Arena', startsAt: 1 } }, tournament_limits: { alice: { t1: 1 } }, user_tournaments: { alice: { t1: { kind: 'arena' } } } });
+	// Anyone reads an event, its players and its pairings; the index is listable, the events are not.
+	for (const p of ['tournaments/t1', 'tournament_players/t1', 'tournament_pairings/t1', 'tournament_index']) {
+		await assertSucceeds(get(ref(db(null), p)));
+	}
+	// A player's own games and events lists name private rooms and events: theirs alone.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_active_games/alice/R1'), { roomCode: 'R1', myColor: 'red' }));
+	await assertSucceeds(get(ref(db('alice'), 'user_active_games/alice')));
+	await assertFails(get(ref(db('bob'), 'user_active_games/alice')));
+	await assertFails(get(ref(db(null), 'user_active_games/alice')));
+	await assertSucceeds(get(ref(db('alice'), 'user_tournaments/alice')));
+	await assertFails(get(ref(db('bob'), 'user_tournaments/alice')));
+	await assertFails(get(ref(db(null), 'user_tournaments/alice')));
+	await assertFails(get(ref(db('alice'), 'tournaments')));
+	await assertFails(get(ref(db('alice'), 'tournament_active')));
+	await assertFails(get(ref(db('alice'), 'tournament_locks/t1')));
+	await assertFails(get(ref(db('alice'), 'tournament_scrubs/alice')));
+	await assertFails(set(ref(db('alice'), 'tournament_scrubs/alice/t1'), 1));
+	await assertSucceeds(get(ref(db('alice'), 'tournament_limits/alice')));
+	await assertFails(get(ref(db('bob'), 'tournament_limits/alice')));
+	// No client writes a result, a pairing, a score or an event.
+	await assertFails(set(ref(db('alice'), 'tournament_players/t1/alice/score'), 99));
+	await assertFails(set(ref(db('alice'), 'tournament_players/t1/bob'), { score: 0 }));
+	await assertFails(set(ref(db('alice'), 'tournament_pairings/t1/g1/winner'), 'red'));
+	await assertFails(set(ref(db('alice'), 'tournament_pairings/t1/g2'), { red: 'alice', blue: 'carol', status: 'playing' }));
+	await assertFails(set(ref(db('alice'), 'tournaments/t1/status'), 'finished'));
+	await assertFails(set(ref(db('alice'), 'tournaments/t2'), { kind: 'arena', name: 'Mine' }));
+	await assertFails(set(ref(db('alice'), 'tournament_index/t2'), { name: 'Mine' }));
+	await assertFails(set(ref(db('alice'), 'tournament_active/t2'), true));
+	await assertFails(set(ref(db('alice'), 'tournament_locks/t1'), null));
+	await assertFails(remove(ref(db('alice'), 'tournament_limits/alice/t1')));
+	await assertFails(set(ref(db('alice'), 'user_tournaments/alice/t9'), { kind: 'arena' }));
+	// Presence: the player's own entry, the server's time, for an event that exists; signed-in accounts only.
+	await assertSucceeds(set(ref(db('alice'), 'tournament_presence/t1/alice/c1'), serverTimestamp()));
+	await assertFails(set(ref(db('alice'), 'tournament_presence/t1/alice/c2'), 12345));
+	await assertFails(set(ref(db('alice'), 'tournament_presence/t1/bob/c1'), serverTimestamp()));
+	await assertFails(set(ref(db('alice'), 'tournament_presence/nope/alice/c1'), serverTimestamp()));
+	const anon = env.authenticatedContext('guest', { firebase: { sign_in_provider: 'anonymous' } }).database();
+	await assertFails(set(ref(anon, 'tournament_presence/t1/guest/c1'), serverTimestamp()));
+	await assertSucceeds(get(ref(db(null), 'tournament_presence/t1')));
+	await assertSucceeds(remove(ref(db('alice'), 'tournament_presence/t1/alice/c1')));
+});
+
+test('tournament rooms: no tie or extra time from a client; no abort, takeback or gift; berserk before the first move', async () => {
+	const tour = { id: 't1', kind: 'arena', name: 'Arena', pairing: 'g1', berserk: true };
+	const live = { type: 'realtime', initialTime: 180000, increment: 2000 };
+	await seed({ rooms: {
+		A1: playingRoom({ tournament: tour, timeControl: live }),
+		A2: playingRoom({ tournament: Object.assign({}, tour, { berserk: false }), timeControl: live }),
+		A3: playingRoom({ tournament: tour, timeControl: live }),
+		N1: playingRoom({ timeControl: live }),
+	} });
+	// A client cannot make a room a tournament's, or give a seat extra time.
+	await assertFails(set(ref(db('alice'), 'rooms/X1'), Object.assign({}, waiting, { tournament: tour })));
+	await assertFails(set(ref(db('alice'), 'rooms/N1/tournament'), tour));
+	await assertFails(set(ref(db('alice'), 'rooms/A1/tournament/berserk'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/A2/tournament/berserk'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/N1/extraTime/red'), 60000));
+	await assertFails(set(ref(db('alice'), 'rooms/X2'), Object.assign({}, waiting, { extraTime: { red: 60000 } })));
+	// Berserk: our own seat, once, in a room whose event allows it, before our first move.
+	await assertFails(set(ref(db('bob'), 'rooms/A1/berserk/red'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/A2/berserk/red'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/N1/berserk/red'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/A1/berserk/red'), false));
+	await assertFails(set(ref(db('alice'), 'rooms/A1/berserk'), { red: true }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/A1'), { 'berserk/red': true, 'timer/red': 90000 }));
+	await assertFails(remove(ref(db('alice'), 'rooms/A1/berserk/red')));
+	await assertSucceeds(move('alice', 'A1', 'a1', 'red'));
+	// Blue has not moved yet: may still berserk; red, having moved, may not (A3).
+	await assertSucceeds(set(ref(db('bob'), 'rooms/A1/berserk/blue'), true));
+	await assertSucceeds(move('alice', 'A3', 'a1', 'red'));
+	await assertSucceeds(move('bob', 'A3', 'b1', 'blue', 'a1'));
+	await assertFails(set(ref(db('alice'), 'rooms/A3/berserk/red'), true));
+	await assertFails(set(ref(db('bob'), 'rooms/A3/berserk/blue'), true));
+	// Turns still clear a takeback node (sendTurn writes takeback: null) ...
+	await assertSucceeds(move('alice', 'A3', 'a2', 'red', 'b1'));
+	// ... but no takeback is asked, no time given, no abort.
+	await assertFails(set(ref(db('bob'), 'rooms/A3/takeback'), { by: 'blue', keys: { b1: true } }));
+	await assertFails(update(ref(db('alice'), 'rooms/A3'), { 'gifts/g1': { to: 'blue', ms: 15000, at: serverTimestamp() }, 'giftAt/red': { key: 'g1', at: serverTimestamp(), n: 1 } }));
+	await assertFails(update(ref(db('alice'), 'rooms/A1'), { abortedBy: 'red', status: 'aborted' }));
+	await assertFails(set(ref(db('alice'), 'rooms/A1/abortedBy'), 'red'));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/N1'), { abortedBy: 'red', status: 'aborted' }));
+	// A resignation finishes a tournament room as any other.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/A3'), { forfeitedBy: 'blue', finishedBy: 'blue', winner: 'red' }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/A3'), { status: 'finished', closedAt: serverTimestamp() }));
+});

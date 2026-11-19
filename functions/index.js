@@ -24,6 +24,13 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   tournament     - arenas, Swiss events and simuls (tournaments.js): create,
+ *                    join, withdraw, start, cancel, kick, poke. The only
+ *                    writer of pairings, scores and rounds.
+ *   tournamentGameEnd - scores a tournament room when it ends and pairs or
+ *                    starts the next games.
+ *   tournamentTick - every minute: starts, ends and moves on every event,
+ *                    and catches no-shows.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -45,6 +52,7 @@ const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const tournaments = require('./tournaments');
 const crypto = require('crypto');
 
 initializeApp();
@@ -407,6 +415,8 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		const claim = await db.ref('usernames/' + key).once('value');
 		if (claim.val() === uid) updates['usernames/' + key] = null;
 	}
+	// Tournaments: the name leaves the standings and pairings; out of events still running.
+	await tournaments.scrubUser(db, uid, updates);
 	// Deleting completed_games children of records that no longer exist
 	// would create stubs: only touch the ones that are there.
 	for (const path of Object.keys(updates)) {
@@ -552,4 +562,52 @@ exports.notifyChallenge = onValueCreated({
 	const db = event.data.ref.root.database;
 	const res = await notifyChallenge(db, event.params.target, event.params.room, fcmSend);
 	if (res && res.sent + res.removed > 0) logger.info('notifyChallenge', Object.assign({ room: event.params.room }, res));
+});
+
+// Tournaments (tournaments.js). One callable for every request; the
+// server decides everything (database.rules.json keeps the tournament
+// nodes server-only). Joining, creating and running an event need a full
+// account; a poke (a page whose countdown ran out) needs only a sign-in.
+exports.tournament = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	const data = request.data || {};
+	const db = database();
+	const now = Date.now();
+	if (data.action !== 'poke' && !(await isFullAccount(auth.uid))) {
+		throw new HttpsError('permission-denied', 'Sign in with an account first.');
+	}
+	const admin = data.action === 'poke' ? false
+		: (await db.ref('admins/' + auth.uid).once('value')).val() === true;
+	try {
+		const res = await tournaments.act(db, auth.uid, data, { admin, now });
+		if (data.action !== 'poke') logger.info('tournament', { uid: auth.uid, action: data.action, id: data.id || (res && res.id) || null });
+		return res;
+	} catch (e) {
+		if (e instanceof tournaments.TournamentError) throw new HttpsError(e.code, e.message);
+		throw e;
+	}
+});
+
+// A tournament room ended: score it and move its event on. On the status,
+// like recordRoom; every other room returns at once.
+exports.tournamentGameEnd = onValueWritten({
+	ref: '/rooms/{code}/status',
+	instance: DB_INSTANCE,
+	region: REGION,
+	// Retried on failure: a scored pairing is never scored again.
+	retry: true,
+}, async (event) => {
+	const after = event.data.after.val();
+	if ((after !== 'finished' && after !== 'aborted') || event.data.before.val() === after) return;
+	const db = event.data.after.ref.root.database;
+	const code = event.params.code;
+	if (!(await db.ref('rooms/' + code + '/tournament/id').once('value')).exists()) return;
+	const g = await tournaments.onRoomEnded(db, code, Date.now());
+	if (g) logger.info('tournamentGameEnd', { code, status: g.status, winner: g.winner || null, how: g.how || null });
+});
+
+exports.tournamentTick = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 240 }, async () => {
+	const res = await tournaments.tick(database(), Date.now());
+	if (res.games) logger.info('tournamentTick', res);
 });
