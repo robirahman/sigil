@@ -262,13 +262,22 @@ async function bootRacer(all, params) {
 	}
 
 	function render() {
+		const racing = !!(R.phase === 'racing' && R.run && !R.run.over && R.run.seq);
+		root.style.display = racing ? 'none' : '';
+		if (!racing) renderPanel();
+		// The track sits above the board while racing, else under the
+		// panel (.main spreads its children over the page's height).
+		if (racing) $('storm-bar').after(track);
+		else root.appendChild(track);
+		renderTrack();
+		if (racing) renderClock();
+	}
+
+	/** The race's lobby, countdown, results (and the spectator's view). */
+	function renderPanel() {
 		const race = R.race;
 		const phase = R.phase;
 		const me = myEntry();
-		const racing = phase === 'racing' && R.run && !R.run.over && R.run.seq;
-		root.style.display = racing ? 'none' : '';
-		renderTrack();
-		if (racing) { renderClock(); return; }
 		const back = '<a class="action-button" href="puzzles.html?tab=racer">Racer lobby</a>';
 		const msg = '<p class="racer-msg" id="racer-msg" role="status">' + racerEsc(R.msg) + '</p>';
 		if (phase === 'missing') {

@@ -1,7 +1,8 @@
 /* Puzzle Racer (puzzles.html?tab=racer, puzzle-racer.js). The race itself
    uses Puzzle Storm's sticky bar (.storm-bar) and the puzzle board. */
 
-.racer { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 8px 16px 16px; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+/* .main is a flex column: auto margins would shrink these to their content. */
+.racer { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 8px 16px 16px; width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
 .racer h2 { font-family: 'Arvo', serif; font-size: 1.35em; margin: 8px 0 4px; }
 .racer h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 18px 0 6px; }
 .racer .action-button { margin: 10px 8px 0 0; }
@@ -30,7 +31,8 @@
 .racer-count { font-size: 1.8em; text-align: center; margin: 24px 0 8px; }
 
 /* The track: one lane per racer, the car moved on by each solve */
-.racer-track { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 6px 16px 8px; max-width: 760px; margin: 0 auto; box-sizing: border-box; }
+.racer-track { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 6px 16px 8px; width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box; }
+.racer .racer-track { padding: 12px 0 0; }
 .racer-track__head { display: flex; justify-content: space-between; color: var(--color-text-muted, #aaa); font-size: 0.8em; margin-bottom: 2px; }
 .racer-lane { display: grid; grid-template-columns: minmax(4.5em, 9em) 1fr; align-items: center; gap: 8px; margin: 3px 0; font-size: 0.85em; }
 .racer-lane__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
