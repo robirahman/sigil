@@ -233,7 +233,7 @@ if (process.env.SIGIL_RACER_POOL) {
 		await pb.waitForFunction(() => window.SIGIL_RACER.phase === 'countdown', { timeout: 10000, polling: 100 }).catch(() => {});
 		t = await text(pb);
 		check('every racer sees the countdown', /The race starts in \d/.test(t), t);
-		check('the puzzles stay hidden during the countdown', Date.now() < r.startAt - 500 ? await tryRead(pb, 'puzzle_race_seq/' + id) === 'denied' : true);
+		check('the puzzles stay hidden during the countdown', Date.now() < r.startAt - 500 ? await tryRead(pb, 'puzzle_race_seq/' + id + '/' + r.seq) === 'denied' : true);
 		await shot(pb, '4-countdown');
 		await pb.waitForFunction(() => window.SIGIL_RACER.phase !== 'countdown' || !!window.SIGIL_PUZZLE_BOARD, { timeout: 20000, polling: 100 }).catch(() => {});
 		const warm = await pb.evaluate(() => ({ phase: window.SIGIL_RACER.phase, board: !!window.SIGIL_PUZZLE_BOARD,
@@ -248,9 +248,9 @@ if (process.env.SIGIL_RACER_POOL) {
 		const since = () => ((Date.now() - r.startAt) / 1000).toFixed(1) + ' s into the race';
 		console.log('  boards up ' + since());
 		const firsts = await Promise.all(racers.map(async (p) => (await R(p)).cur));
-		const seq = await rest('GET', 'puzzle_race_seq/' + id);
+		const seq = (await rest('GET', 'puzzle_race_seq/' + id))[r.seq];
 		check('every board opens on the same first puzzle, the sequence\'s', firsts[0] && firsts.every((f) => f === firsts[0]) && seq && seq[0] === firsts[0], { firsts, seq0: seq && seq[0] });
-		check('the puzzles are readable from the start', await tryRead(pb, 'puzzle_race_seq/' + id) === 'ok');
+		check('the puzzles are readable from the start', await tryRead(pb, 'puzzle_race_seq/' + id + '/' + r.seq) === 'ok');
 		await watcher.waitForFunction(() => /Race in progress/.test(document.getElementById('racer-root').innerText), { timeout: 20000, polling: 250 }).catch(() => {});
 		const tw = await text(watcher);
 		check('someone who is not in the race watches it', /Race in progress/.test(tw) && /You are watching/.test(tw), tw);

@@ -122,6 +122,17 @@ test('leaving a lobby: the host passes on; the last one out closes it', async ()
 	const d2 = db2.dump();
 	assert.deepStrictEqual([d2.puzzle_races[h.id].status, d2.puzzle_races[own.id].status], ['closed', 'lobby']);
 	assert.deepStrictEqual(Object.keys(d2.puzzle_race_lobby), [own.id]);
+	// A lobby handed to someone who hosts another open lobby closes that one.
+	const db4 = fakeDb();
+	const xr = await racer.createRace(db4, bob, { public: true }, T);
+	const yr = await racer.createRace(db4, alice, { public: true }, T);
+	await racer.joinRace(db4, yr.id, bob, T + 1);
+	await racer.joinRace(db4, yr.id, guest(1), T + 2);
+	await racer.leaveRace(db4, yr.id, 'alice');
+	const d4 = db4.dump();
+	assert.deepStrictEqual([d4.puzzle_races[xr.id].status, d4.puzzle_races[yr.id].status, d4.puzzle_races[yr.id].host], ['closed', 'lobby', 'bob']);
+	assert.deepStrictEqual(d4.puzzle_race_hosts, { bob: { [yr.id]: true } });
+	assert.deepStrictEqual(Object.keys(d4.puzzle_race_lobby), [yr.id]);
 	await racer.leaveRace(db, id, 'bob');
 	await racer.leaveRace(db, id, 'anon1');
 	d = db.dump();
@@ -145,14 +156,32 @@ test('the start: the host, two racers at least, the server\'s clock and sequence
 	const r = d.puzzle_races[id];
 	assert.strictEqual(res.startAt, T + 100 + racer.RACE_COUNTDOWN_MS);
 	assert.deepStrictEqual([r.status, r.startAt, r.endAt, r.len], ['racing', res.startAt, res.startAt + racer.RACE_MS, racer.RACE_PUZZLES]);
+	assert.match(r.seq, /^[A-Za-z0-9_-]{12}$/, 'the race names its sequence');
 	assert.deepStrictEqual(Object.keys(r.players).sort(), ['alice', 'bob'], 'a racer who left is dropped');
 	assert.deepStrictEqual(r.players.bob.p, { n: 0, score: 0, at: 0, st: 0 });
 	assert.strictEqual(r.players.bob.gone, false);
-	assert.deepStrictEqual(d.puzzle_race_seq[id], pick(racer.RACE_PUZZLES));
+	assert.deepStrictEqual(d.puzzle_race_seq[id], { [r.seq]: pick(racer.RACE_PUZZLES) }, 'written before the start committed, under its key');
 	assert.ok(!d.puzzle_race_lobby, 'off the lobby list');
 	assert.ok(!d.puzzle_race_hosts, 'and out of the host index');
 	await assert.rejects(racer.startRace(db, id, 'alice', T + 200, pick), reason('started'));
-	assert.deepStrictEqual(db.dump().puzzle_race_seq[id], pick(racer.RACE_PUZZLES), 'a second start keeps the first sequence');
+	assert.deepStrictEqual(db.dump().puzzle_race_seq[id], { [r.seq]: pick(racer.RACE_PUZZLES) }, 'a second start keeps the first sequence');
+	// A start that loses inside the transaction removes its own sequence only.
+	const db3 = fakeDb();
+	const r3 = await racer.createRace(db3, alice, {}, T);
+	await racer.joinRace(db3, r3.id, bob, T);
+	const realRef = db3.ref;
+	db3.ref = (p) => {
+		const x = realRef(p);
+		if (p === 'puzzle_races/' + r3.id) {
+			const tx = x.transaction;
+			x.transaction = async (fn) => { db3.ref = realRef; await racer.startRace(db3, r3.id, 'alice', T + 1, pick); return tx(fn); };
+		}
+		return x;
+	};
+	await assert.rejects(racer.startRace(db3, r3.id, 'alice', T + 2, (n) => Array.from({ length: n }, () => 'other')), reason('started'));
+	const d3 = db3.dump();
+	assert.deepStrictEqual(Object.keys(d3.puzzle_race_seq[r3.id]), [d3.puzzle_races[r3.id].seq]);
+	assert.strictEqual(d3.puzzle_race_seq[r3.id][d3.puzzle_races[r3.id].seq][0], 'p0');
 	await assert.rejects(racer.joinRace(db, id, guest(2), T + 300), reason('started'));
 	await assert.rejects(racer.leaveRace(db, id, 'bob'), reason('started'));
 	// The real pool: sixty distinct puzzles.
@@ -160,7 +189,7 @@ test('the start: the host, two racers at least, the server\'s clock and sequence
 	const r2 = await racer.createRace(db2, alice, {}, T);
 	await racer.joinRace(db2, r2.id, bob, T);
 	await racer.startRace(db2, r2.id, 'alice', T);
-	const seq = db2.dump().puzzle_race_seq[r2.id];
+	const seq = Object.values(db2.dump().puzzle_race_seq[r2.id])[0];
 	assert.strictEqual(new Set(seq).size, racer.RACE_PUZZLES);
 });
 

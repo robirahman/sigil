@@ -944,7 +944,7 @@ test('Puzzle Racer: the server runs the race; a racer only moves their own car o
 			R3: race(now - 200000, now - 10000),
 			L1: { host: 'alice', public: true, status: 'lobby', createdAt: now, max: 10, players: { alice: { name: 'Alice', guest: false, joinedAt: now } } },
 		},
-		puzzle_race_seq: { R1: ['a', 'b', 'c'], R2: ['d', 'e', 'f'] },
+		puzzle_race_seq: { R1: { k1: ['a', 'b', 'c'] }, R2: { k2: ['d', 'e', 'f'] } },
 		puzzle_race_lobby: { L1: { hostName: 'Alice', n: 1, max: 10, createdAt: now } },
 	});
 	const p = (who, r, u) => ref(who, `puzzle_races/${r}/players/${u}/p`);
@@ -960,8 +960,9 @@ test('Puzzle Racer: the server runs the race; a racer only moves their own car o
 	await assertSucceeds(get(ref(db(null), 'puzzle_race_lobby')));
 	await assertFails(get(ref(db('alice'), 'puzzle_races')));
 	// The puzzles are hidden until the start, from the racers too.
-	await assertSucceeds(get(ref(db('bob'), 'puzzle_race_seq/R1')));
+	await assertSucceeds(get(ref(db('bob'), 'puzzle_race_seq/R1/k1')));
 	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/R2')));
+	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/R2/k2')));
 	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/L1')));
 	await assertFails(get(ref(db('bob'), 'puzzle_race_seq')));
 	// Only the server writes the race, its sequence and the lobby.
@@ -970,7 +971,7 @@ test('Puzzle Racer: the server runs the race; a racer only moves their own car o
 	await assertFails(set(ref(db('bob'), 'puzzle_races/L1/players/bob'), { name: 'Bob', guest: false, joinedAt: now }));
 	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/players/alice/name'), 'Queen'));
 	await assertFails(set(ref(db('alice'), 'puzzle_races/NEW'), { host: 'alice', status: 'lobby' }));
-	await assertFails(set(ref(db('alice'), 'puzzle_race_seq/R2'), ['easy']));
+	await assertFails(set(ref(db('alice'), 'puzzle_race_seq/R2/k2'), ['easy']));
 	await assertFails(set(ref(db('alice'), 'puzzle_race_lobby/X'), { hostName: 'A', n: 1, max: 10, createdAt: now }));
 	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/players/alice/p'), { n: 0, score: 0, at: ts, st: 0 }));
 	// A solve: one puzzle on, the score up by one, stamped by the server.

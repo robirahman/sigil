@@ -412,7 +412,7 @@ async function bootRacer(all, params) {
 		// The sequence is readable from startAt by the server's clock: a tab
 		// whose estimate runs a little ahead is refused and tries again.
 		for (let t = 0; t < 40 && !Array.isArray(run.seq); t++) {
-			try { run.seq = (await db.ref('puzzle_race_seq/' + R.id).once('value')).val(); } catch (e) { /* not yet */ }
+			try { run.seq = (await db.ref('puzzle_race_seq/' + R.id + '/' + R.race.seq).once('value')).val(); } catch (e) { /* not yet */ }
 			if (!Array.isArray(run.seq)) await sleep(250);
 		}
 		if (!Array.isArray(run.seq)) { run.seq = null; run.over = true; setMsg('Could not load the race\'s puzzles.'); render(); return; }

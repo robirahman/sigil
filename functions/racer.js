@@ -11,16 +11,16 @@
  *   - the puzzle sequence, picked from the Puzzles set with Puzzle Storm's
  *     ramp (pickStormPuzzle in docs/static/scripts/puzzle-progress.js), and
  *     the start time, a countdown after the start call, by this clock.
- * The sequence is kept at puzzle_race_seq/{id}, which the rules let nobody
+ * The sequence is kept at puzzle_race_seq/{id}/{key}, which the rules let nobody
  * read before startAt. A racer's only writes are their own progress,
  * players/{uid}/p = { n, score, at, st }: one more puzzle a write, the score
  * up by at most one, between startAt and endAt (+3 s for the last write in
  * flight), by the server's clock (database.rules.json).
  *
  *   puzzle_races/{id}        { host, public, status: 'lobby' | 'racing' | 'closed',
- *                              createdAt, startAt, endAt, len, max, next,
+ *                              createdAt, startAt, endAt, len, seq, max, next,
  *                              players: { uid: { name, guest, joinedAt, gone, p } } }
- *   puzzle_race_seq/{id}     [puzzle id, ...]
+ *   puzzle_race_seq/{id}/{seq}  [puzzle id, ...]   the race's `seq` names the start's key
  *   puzzle_race_lobby/{id}   { hostName, n, max, createdAt }   public lobbies
  *   puzzle_race_hosts/{uid}  { raceId: true } the races the account hosts (one open lobby each)
  *
@@ -160,12 +160,21 @@ async function createRace(db, me, opts, now) {
 	const updates = { ['puzzle_races/' + id]: race };
 	if (pub) updates['puzzle_race_lobby/' + id] = lobbyEntry(race);
 	await db.ref().update(updates);
-	let prev = null;
-	await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => { prev = cur; return { [id]: true }; });
-	for (const k of Object.keys(prev && typeof prev === 'object' ? prev : {})) {
-		if (k !== id && ID_RE.test(k)) await closeLobby(db, k, me.uid);
-	}
+	await claimHostIndex(db, me.uid, id);
 	return { id };
+}
+
+/**
+ * Make race `id` the only one in `uid`'s host index, in a transaction, and
+ * close every other lobby the index held (createRace, and a lobby handed
+ * over by leaveRace): one open lobby a host.
+ */
+async function claimHostIndex(db, uid, id) {
+	let prev = null;
+	await db.ref('puzzle_race_hosts/' + uid).transaction((cur) => { prev = cur; return { [id]: true }; });
+	for (const k of Object.keys(prev && typeof prev === 'object' ? prev : {})) {
+		if (k !== id && ID_RE.test(k)) await closeLobby(db, k, uid);
+	}
 }
 
 /** Close a lobby the host has left behind (createRace). */
@@ -201,8 +210,9 @@ async function joinRace(db, id, me, now) {
 }
 
 /**
- * Leave a race still in its lobby; the earliest to join takes over as host,
- * and the race moves to their host index (one open lobby a host).
+ * Leave a race still in its lobby; the earliest to join takes over as host.
+ * The race moves to their host index, closing any other lobby they host
+ * (one open lobby a host).
  */
 async function leaveRace(db, id, uid) {
 	let why = null;
@@ -224,9 +234,8 @@ async function leaveRace(db, id, uid) {
 	if (!race) throw new RaceError('not-found');
 	if (why) throw new RaceError(why);
 	if (committed && wasHost) {
-		const moves = { ['puzzle_race_hosts/' + uid + '/' + id]: null };
-		if (race.status === 'lobby') moves['puzzle_race_hosts/' + race.host + '/' + id] = true;
-		await db.ref().update(moves);
+		await db.ref('puzzle_race_hosts/' + uid + '/' + id).remove();
+		if (race.status === 'lobby') await claimHostIndex(db, race.host, id);
 	}
 	if (race.public) {
 		if (race.status === 'lobby') await db.ref('puzzle_race_lobby/' + id).set(lobbyEntry(race));
@@ -241,8 +250,17 @@ async function leaveRace(db, id, uid) {
  * get their progress (0 of len) and the clock starts RACE_COUNTDOWN_MS on.
  */
 async function startRace(db, id, uid, now, pick) {
+	const before = (await db.ref('puzzle_races/' + id + '/status').once('value')).val();
+	if (before === null) throw new RaceError('not-found');
+	if (before !== 'lobby') throw new RaceError(before === 'racing' ? 'started' : 'closed');
 	const seq = (pick || ((n) => pickRaceSequence(racePool(), n)))(RACE_PUZZLES);
 	if (!Array.isArray(seq) || !seq.length) throw new RaceError('no-puzzles');
+	// The sequence goes in first, under a key of this start's own, so a
+	// race the transaction below starts always has its puzzles (and a start
+	// that loses never touches the winner's). The rules hide it until startAt.
+	const key = newRaceId();
+	const seqRef = db.ref('puzzle_race_seq/' + id + '/' + key);
+	await seqRef.set(seq);
 	let why = null;
 	const startAt = now + RACE_COUNTDOWN_MS;
 	let lobbyHost = null;
@@ -268,16 +286,19 @@ async function startRace(db, id, uid, now, pick) {
 		r.startAt = startAt;
 		r.endAt = startAt + RACE_MS;
 		r.len = seq.length;
+		r.seq = key;
 		return r;
 	});
-	if (!race) throw new RaceError('not-found');
-	if (!committed || race.startAt !== startAt) throw new RaceError(why || 'started');
-	// Only the start that won writes the sequence, well inside the
-	// countdown: the rules hide it until startAt.
-	// No longer a lobby: off the list and out of its host's index.
-	const done = { ['puzzle_race_seq/' + id]: seq, ['puzzle_race_lobby/' + id]: null };
+	if (!race || !committed || race.seq !== key) {
+		await seqRef.remove().catch(() => {});
+		if (!race) throw new RaceError('not-found');
+		throw new RaceError(why || 'started');
+	}
+	// No longer a lobby: off the list and out of its host's index (tidying
+	// only: the race is already playable without these).
+	const done = { ['puzzle_race_lobby/' + id]: null };
 	if (typeof lobbyHost === 'string' && lobbyHost) done['puzzle_race_hosts/' + lobbyHost + '/' + id] = null;
-	await db.ref().update(done);
+	await db.ref().update(done).catch(() => {});
 	return { id, startAt: race.startAt, endAt: race.endAt };
 }
 
