@@ -30,7 +30,7 @@ test.before(async () => {
 });
 
 async function player(name) {
-	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
+	const app = initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'demo-sigil', apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
 	const auth = getAuth(app);
 	connectAuthEmulator(auth, 'http://' + AUTH_HOST, { disableWarnings: true });
 	const db = getDatabase(app);

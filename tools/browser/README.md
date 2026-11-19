@@ -129,3 +129,17 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Bot accounts and the bot API
+
+```sh
+cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
+  'node ../tools/browser/bot-api-emulator-test.js http://localhost:8765'
+```
+
+`bot-api-emulator-test.js` makes a BOT account and its tokens on the account page,
+connects the reference bot (`tools/sigil-bot.js`) with the token, has a human challenge it
+(Rated: their opt-in) from its profile, and plays the game out in the human's page against
+the bot's random turns: the page must end on the server's replayed final position, and the
+game is rated onto the bots' leaderboard. Set `FUNCTIONS_EMULATOR_PORT` for a private
+emulator config (the page's callables and the bot's HTTP calls use it).

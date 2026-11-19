@@ -211,7 +211,7 @@
 					<template x-for="g in yourGames" x-bind:key="g.roomCode">
 						<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-bind:data-room="g.roomCode">
 							<div class="game-card__main">
-								<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
+								<div class="game-card__opp"><span x-text="g.opponentDisplayName || 'Waiting for opponent...'"></span><template x-if="g.opponentBot"><span class="bot-tag">BOT</span></template></div>
 								<div class="game-card__meta">
 									Playing
 									<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
@@ -238,7 +238,7 @@
 					<template x-for="g in waitingGames" x-bind:key="g.roomCode">
 						<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-bind:data-room="g.roomCode">
 							<div class="game-card__main">
-								<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
+								<div class="game-card__opp"><span x-text="g.opponentDisplayName || 'Waiting for opponent...'"></span><template x-if="g.opponentBot"><span class="bot-tag">BOT</span></template></div>
 								<div class="game-card__meta">
 									Playing
 									<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
@@ -457,6 +457,7 @@
 						myColor: entry.myColor,
 						opponentDisplayName: entry.opponentDisplayName || '',
 						opponentUid: entry.opponentUid || null,
+						opponentBot: false,
 						timeControl: { type: tcType },
 						timeControlType: tcType,
 						room: null,
@@ -502,6 +503,8 @@
 
 						g.opponentDisplayName = opp.displayName || g.opponentDisplayName || '';
 						g.opponentUid = opp.uid || g.opponentUid || null;
+						// A bot's seat is written by the bot API (functions/bot-api.js).
+						g.opponentBot = opp.bot === true;
 						g.timeControl = tc;
 						g.timeControlType = tc.type || 'none';
 						g.timeControlLabel = this._formatTimeControl(tc);
