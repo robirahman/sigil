@@ -143,8 +143,8 @@ test('ratingUpdates writes the pool ratings next to an unchanged Elo', async () 
 	near(entry.glicko.change, human.r - 1500, 0.01);
 	// No path is written twice (the entry holds its glicko).
 	assert.ok(!Object.keys(u).some((k) => k.endsWith('/glicko') && k.startsWith('user_games/')));
-	assert.deepStrictEqual(u['pool_leaderboard/' + pool + '/human_player_1'], { displayName: 'P', r: human.r, rd: human.rd, n: 1 });
-	assert.deepStrictEqual(u['pool_leaderboard/' + pool + '/__ai_rust_medium__'], { displayName: 'AI (Medium) (Rust)', r: 1458, rd: 50, n: 1, isAI: true });
+	assert.deepStrictEqual(u['pool_leaderboard/' + pool + '/human_player_1'], { displayName: 'P', r: human.r, rd: human.rd, n: 1, at: now });
+	assert.deepStrictEqual(u['pool_leaderboard/' + pool + '/__ai_rust_medium__'], { displayName: 'AI (Medium) (Rust)', r: 1458, rd: 50, n: 1, at: now, isAI: true });
 	assert.strictEqual(u['completed_games/G1/ratedWinner'], 'red');
 	assert.deepStrictEqual(Object.keys(u['completed_games/G1/glicko']).sort(), ['blue', 'red', 'redExpected']);
 

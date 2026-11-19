@@ -128,7 +128,7 @@ function buildPlan(completed, names, entries) {
 			set['ratings/' + uid + '/' + pool] = rec;
 			const name = names[uid];
 			if (typeof name === 'string' && name.length >= 1 && name.length <= 30) {
-				const row = { displayName: name, r: rec.r, rd: rec.rd, n: rec.n };
+				const row = { displayName: name, r: rec.r, rd: rec.rd, n: rec.n, at: rec.at };
 				if (AI_UID.test(uid)) row.isAI = true;
 				set['pool_leaderboard/' + pool + '/' + uid] = row;
 			}

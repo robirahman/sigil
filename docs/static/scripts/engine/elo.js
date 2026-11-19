@@ -102,11 +102,16 @@ function describeUnratedReason(reason) {
 
 /**
  * One player's rating line for a user_games entry: "Rating: +12 (1456 → 1468)"
- * or "Unrated: <why>".
+ * or "Unrated: <why>". While the site shows the Glicko-2 pool ratings
+ * (rating-display.js), the entry's pool line: "Blitz rating: +15 (1456? → 1471)".
  */
 function describeGameRating(entry) {
 	if (!entry) return '';
 	if (entry.rated !== true || typeof entry.eloChange !== 'number') return describeUnratedReason(entry.unratedReason);
+	if (entry.glicko && typeof SigilRatings !== 'undefined' && SigilRatings.glicko) {
+		const line = SigilRatings.describeChange(entry.glicko);
+		if (line) return line;
+	}
 	const sign = entry.eloChange >= 0 ? '+' : '\u2212';
 	return 'Rating: ' + sign + Math.abs(entry.eloChange) + ' (' + entry.eloBefore + ' \u2192 ' + entry.eloAfter + ')';
 }
@@ -161,5 +166,7 @@ async function awaitGameRating(db, gameId, game, timeoutMs) {
 		points: Math.abs(e.eloChange),
 		newWinnerElo: won ? e.eloAfter : null,
 		newLoserElo: won ? null : e.eloAfter,
+		// The whole entry: its glicko for the pool rating line.
+		entry: e,
 	};
 }

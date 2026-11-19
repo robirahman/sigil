@@ -3245,7 +3245,10 @@ document.addEventListener('alpine:init', () => {
 							const result = mine.eloResult;
 							const youWon = winner === _humanColor;
 							const sign = youWon ? '+' : '-';
-							_this.messageHistory.push('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')');
+							// The pool rating line while the site shows those (rating-display.js).
+							const poolLine = result.entry && result.entry.glicko && typeof SigilRatings !== 'undefined' && SigilRatings.glicko
+								? SigilRatings.describeChange(result.entry.glicko) : '';
+							_this.messageHistory.push(poolLine || ('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')'));
 						}
 
 						// If older offline games rode along on this flush, note that.
