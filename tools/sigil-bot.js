@@ -248,6 +248,8 @@ async function runBot(opts) {
 				g.pending = null;
 				if (g.game.status === 'playing' && g.game.toMove === g.game.you && g.game.moves.length !== g.playedAt) {
 					let sent = false;
+					// The game moved on without us (it ended, or the turn was not ours).
+					let moot = false;
 					for (let attempt = 0; attempt < 5 && !sent; attempt++) {
 						let actions;
 						try {
@@ -262,10 +264,10 @@ async function runBot(opts) {
 							log(code, 'played', actions.join(' '), r.gameOver ? '(game over: ' + r.winner + ' wins)' : '');
 						} catch (e) {
 							log(code, 'turn refused:', e.code, e.message);
-							if (e.code === 'not-your-turn' || e.code === 'not-playing' || e.code === 'conflict') break;
+							if (e.code === 'not-your-turn' || e.code === 'not-playing' || e.code === 'conflict') { moot = true; break; }
 						}
 					}
-					if (!sent && g.game.status === 'playing' && g.playedAt !== g.game.moves.length) {
+					if (!sent && !moot && g.game.status === 'playing' && g.playedAt !== g.game.moves.length) {
 						// Nothing found: resign rather than lose on time without a word.
 						log(code, 'no turn found: resigning');
 						await api.call('POST', '/v1/bot/games/' + code + '/resign').catch(() => {});

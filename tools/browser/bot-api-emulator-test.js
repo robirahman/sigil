@@ -31,8 +31,9 @@ const API = `http://127.0.0.1:${FN_PORT}/${PROJECT}/us-central1/api`;
 const DB = 'http://' + DB_HOST;
 const OWNER = { Authorization: 'Bearer owner' };
 
-// Point the page's Firebase (database, auth, functions) at the emulators.
-function useEmulators(dbPort, authHost, fnPort) {
+// Point the page's Firebase (database, auth, functions) at the emulators,
+// under the emulators' project id (the callables' URLs carry it).
+function useEmulators(dbPort, authHost, fnPort, project) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -40,8 +41,8 @@ function useEmulators(dbPort, authHost, fnPort) {
 		set(v) {
 			fb = v;
 			const init = v.initializeApp.bind(v);
-			v.initializeApp = (...args) => {
-				const app = init(...args);
+			v.initializeApp = (opts, ...rest) => {
+				const app = init(Object.assign({}, opts, { projectId: project }), ...rest);
 				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
 				app.database().useEmulator('127.0.0.1', dbPort);
 				if (typeof app.functions === 'function') app.functions('us-central1').useEmulator('127.0.0.1', fnPort);
@@ -116,7 +117,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		const newPage = async () => {
 			const ctx = await browser.createBrowserContext();
 			const p = await ctx.newPage();
-			await p.evaluateOnNewDocument(useEmulators, Number(DB_HOST.split(':')[1]), AUTH_HOST, FN_PORT);
+			await p.evaluateOnNewDocument(useEmulators, Number(DB_HOST.split(':')[1]), AUTH_HOST, FN_PORT, PROJECT);
 			await p.setBypassServiceWorker(true);
 			await p.setRequestInterception(true);
 			p.on('request', (req) => {
@@ -194,7 +195,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 		await Promise.all([pageH.waitForNavigation({ waitUntil: 'load', timeout: 90000 }), pageH.click('.profile__challenge')]);
 		const lobby = () => pageH.evaluate(() => {
 			const d = Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]'));
-			return { target: d.challengeTarget, casual: d.casualGame, tc: d.tcType, phase: d.phase, code: d.roomCode, error: d.lobbyError };
+			const t = d.challengeTarget;
+			return { target: t ? { uid: t.uid, name: t.name, isBot: !!t.isBot } : null, casual: d.casualGame, tc: d.tcType,
+				phase: d.phase, code: d.roomCode, error: d.lobbyError };
 		});
 		const set = await until(async () => { const l = await lobby(); return l.target && l.target.isBot ? l : null; }, 60000);
 		check('a challenge to a bot: tagged, timed, casual unless chosen', !!set && set.casual === true && set.tc !== 'none'
