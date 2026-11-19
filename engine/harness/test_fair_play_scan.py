@@ -143,6 +143,8 @@ class Report(unittest.TestCase):
         self.assertIsNone(fp.mixed(rows))
         self.assertIn('--depth', fp.mixed(dict(rows, **{'x': {'d': 3, 'engine': 'a'}})))
         self.assertIn('--engine', fp.mixed(dict(rows, **{'x': {'d': 4, 'engine': 'b'}})))
+        self.assertIn('--time-ms', fp.mixed(dict(rows, **{'x': {'d': 4, 'engine': 'a', 't': 500}})))
+        self.assertIsNone(fp.mixed(dict(rows, **{'x': {'d': 4, 'engine': 'a', 't': 0}})))
 
     def test_percentile(self):
         self.assertEqual(fp.percentile([1, 2, 3, 4, 5], 0.5), 3)

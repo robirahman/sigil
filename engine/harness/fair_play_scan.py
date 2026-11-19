@@ -287,7 +287,7 @@ def eval_game(item):
     import sigil_engine as se
     rows = []
     for i in idx:
-        base = {'g': gid, 'i': i, 'mover': game['movers'][i], 'd': depth, 'engine': tag}
+        base = {'g': gid, 'i': i, 'mover': game['movers'][i], 'd': depth, 't': time_ms, 'engine': tag}
         try:
             base.update(analyse_turn(se, game['positions'], i, depth, time_ms))
         except Exception as e:  # noqa: BLE001
@@ -296,7 +296,8 @@ def eval_game(item):
     return gid, rows
 
 
-def _done(path, depth, tag):
+def _done(path, depth, tag, time_ms=0):
+    """(game, index) already searched with this depth, time cap and engine build."""
     done = set()
     if not os.path.exists(path):
         return done
@@ -305,7 +306,7 @@ def _done(path, depth, tag):
             r = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if r.get('d') == depth and r.get('engine') == tag and 'error' not in r:
+        if r.get('d') == depth and r.get('t', 0) == time_ms and r.get('engine') == tag and 'error' not in r:
             done.add((r['g'], r['i']))
     return done
 
@@ -313,7 +314,7 @@ def _done(path, depth, tag):
 def cmd_eval(a):
     lines = json.load(open(a.lines, encoding='utf-8'))
     tag = _engine_tag()
-    done = _done(a.out, a.depth, tag)
+    done = _done(a.out, a.depth, tag, a.time_ms)
     items = []
     for gid, g in sorted(lines.items()):
         n = len(g['positions']) - 1
@@ -341,8 +342,8 @@ def cmd_eval(a):
 
 # ------------------------------------------------------------------ report ---
 
-def load_rows(path, depth=None, engine=None):
-    """The newest row per (game, index), optionally of one depth and engine build."""
+def load_rows(path, depth=None, engine=None, time_ms=None):
+    """The newest row per (game, index), optionally of one depth, engine build and time cap."""
     rows = {}
     for line in open(path, encoding='utf-8'):
         try:
@@ -353,18 +354,23 @@ def load_rows(path, depth=None, engine=None):
             continue
         if engine is not None and r.get('engine') != engine:
             continue
+        if time_ms is not None and r.get('t', 0) != time_ms:
+            continue
         rows[(r['g'], r['i'])] = r
     return rows
 
 
 def mixed(rows):
-    """Why `rows` may not go into one report: they come from several depths or engine
-    builds (a resumed or re-run evals file), which would compare players searched at
-    different strengths. None when they are uniform."""
+    """Why `rows` may not go into one report: they come from several depths, time caps
+    or engine builds (a resumed or re-run evals file), which would compare players
+    searched at different strengths. None when they are uniform."""
     depths = Counter(r.get('d') for r in rows.values())
+    caps = Counter(r.get('t', 0) for r in rows.values())
     engines = Counter(r.get('engine') for r in rows.values())
     if len(depths) > 1:
         return f'rows of several depths {dict(depths)}: pass --depth'
+    if len(caps) > 1:
+        return f'rows of several time caps {dict(caps)}: pass --time-ms'
     if len(engines) > 1:
         return f'rows of several engine builds {dict(engines)}: pass --engine'
     return None
@@ -536,7 +542,7 @@ def build_report(lines, rows, opts):
 
 def cmd_report(a):
     lines = json.load(open(a.lines, encoding='utf-8'))
-    rows = load_rows(a.evals, a.depth, a.engine)
+    rows = load_rows(a.evals, a.depth, a.engine, a.time_ms)
     why = mixed(rows)
     if why:
         sys.exit(f'{a.evals}: {why} (each player must be measured by the same search).')
@@ -551,6 +557,7 @@ def cmd_report(a):
         'run': datetime.fromtimestamp(now / 1000, timezone.utc).strftime('%Y%m%dT%H%M%SZ'),
         'engine': engines.most_common(1)[0][0] if engines else None,
         'depth': depths.most_common(1)[0][0] if depths else None,
+        'timeMs': next(iter({r.get('t', 0) for r in rows.values()}), None),
         'evalName': next((r.get('eval') for r in rows.values() if r.get('eval')), None),
         'params': opts,
         'source': {'games': len(lines), 'rows': len(rows), 'lines': os.path.basename(a.lines)},
@@ -611,6 +618,7 @@ def main():
     r.add_argument('--out', required=True)
     r.add_argument('--depth', type=int, default=None, help='use rows of this depth only (required when the file holds several)')
     r.add_argument('--engine', default=None, help='use rows of this engine build only (required when the file holds several)')
+    r.add_argument('--time-ms', type=int, default=None, help='use rows of this time cap only (required when the file holds several)')
     r.add_argument('--opening-turns', type=int, default=2, help='each side\'s first turns left out')
     r.add_argument('--decided', type=int, default=600, help='|best score| (centistones) at which a position is decided')
     r.add_argument('--cap', type=int, default=600, help='scores clamped to +-cap before the loss')
