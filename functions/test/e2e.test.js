@@ -335,4 +335,41 @@ test('a rated game is analysed by the server, and the eval cache is filled only 
 	}
 });
 
+// Resolves once `path` holds `want` (the name functions write it back).
+function waitForValue(db, path, want, ms = 30000) {
+	return new Promise((resolve, reject) => {
+		const t = setTimeout(() => { off(); reject(new Error('timed out waiting for ' + path + ' = ' + JSON.stringify(want))); }, ms);
+		const off = onValue(ref(db, path), (snap) => {
+			if (snap.val() === want) { clearTimeout(t); off(); resolve(); }
+		});
+	});
+}
+
+test('an offensive name written past the pages is put back to Player by the server', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	// A client that skips the page's check (name-filter.js): the profile,
+	// the leaderboard copy and the usernames/ claim, as updateDisplayName writes them.
+	await update(ref(alice.db), {
+		['users/' + alice.uid + '/displayName']: 'xXfuckerXx',
+		['leaderboard/' + alice.uid + '/displayName']: 'xXfuckerXx',
+		['usernames/xxfuckerxx']: alice.uid,
+	});
+	await waitForValue(alice.db, 'users/' + alice.uid + '/displayName', 'Player');
+	await waitForValue(alice.db, 'leaderboard/' + alice.uid + '/displayName', 'Player');
+	await waitForValue(alice.db, 'usernames/xxfuckerxx', null);
+	// A room seat taken under such a name.
+	const code = 'E2EN' + ++seq;
+	await set(ref(alice.db, 'rooms/' + code), {
+		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
+		red: { uid: alice.uid, displayName: 'b!tch', connected: true }, blue: { connected: false },
+		timeControl: { type: 'none' }, allowSpectators: true, variant: 'standard', seq: true,
+	});
+	await waitForValue(bob.db, 'rooms/' + code + '/red/displayName', 'Player');
+	// Ordinary names stay as written.
+	await set(ref(bob.db, 'users/' + bob.uid + '/displayName'), 'Scunthorpe');
+	await new Promise((r) => setTimeout(r, 3000));
+	assert.strictEqual((await get(ref(bob.db, 'users/' + bob.uid + '/displayName'))).val(), 'Scunthorpe');
+});
+
 test.after(() => setTimeout(() => process.exit(0), 100));

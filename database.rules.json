@@ -37,6 +37,66 @@
         "enablePondering": {
           ".validate": "newData.isBoolean()"
         },
+        "prefs": {
+          ".validate": "auth.uid === $uid && newData.parent().child('displayName').exists()",
+          "theme": {
+            ".validate": "newData.isString() && newData.val().matches(/^[a-z]{1,20}$/)"
+          },
+          "artOnly": {
+            ".validate": "newData.isBoolean()"
+          },
+          "colourblind": {
+            ".validate": "newData.isBoolean()"
+          },
+          "nodeNames": {
+            ".validate": "newData.isBoolean()"
+          },
+          "lastMove": {
+            ".validate": "newData.isBoolean()"
+          },
+          "legalMoves": {
+            ".validate": "newData.isBoolean()"
+          },
+          "soundMoves": {
+            ".validate": "newData.isBoolean()"
+          },
+          "soundSpells": {
+            ".validate": "newData.isBoolean()"
+          },
+          "soundGame": {
+            ".validate": "newData.isBoolean()"
+          },
+          "soundLowTime": {
+            ".validate": "newData.isBoolean()"
+          },
+          "confirmEndTurn": {
+            ".validate": "newData.isBoolean()"
+          },
+          "confirmForfeit": {
+            ".validate": "newData.isBoolean()"
+          },
+          "blind": {
+            ".validate": "newData.isBoolean()"
+          },
+          "showEmotes": {
+            ".validate": "newData.isBoolean()"
+          },
+          "sendEmotes": {
+            ".validate": "newData.isBoolean()"
+          },
+          "motion": {
+            ".validate": "newData.val() === 'system' || newData.val() === 'full' || newData.val() === 'reduced' || newData.val() === 'off'"
+          },
+          "clockTenths": {
+            ".validate": "newData.val() === 'never' || newData.val() === 'low' || newData.val() === 'always'"
+          },
+          "clockLow": {
+            ".validate": "newData.val() === 0 || newData.val() === 10 || newData.val() === 20 || newData.val() === 30 || newData.val() === 60"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
         "isAI": {
           ".validate": "newData.isBoolean() && $uid.matches(/^__ai_[a-z0-9_]+__$/)"
         },

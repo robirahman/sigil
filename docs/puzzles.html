@@ -158,10 +158,11 @@
 			webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
+		<script src="static/scripts/prefs.js"></script>
 		<script src="static/scripts/settings-panel.js?v=35"></script>
 	</head>
 
-	<body>
+	<body class="blind-page">
 		<header>
 			<div class="container">
 				<div class="header-container">
@@ -363,7 +364,7 @@
 												'stone-node--solution': !!puzzleSolutionNodes[node],
 											}"
 											x-bind:id="`stone-node--${node}`"
-											x-on:click="handleNodeClick(node)"></button>
+											x-on:click="handleNodeClick(node)"><span class="stone-node__name" aria-hidden="true" x-text="node"></span></button>
 									</template>
 								</div>
 							</div>
@@ -435,6 +436,7 @@
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js?v=1"></script>
 		<script src="static/scripts/engine/game-review.js?v=42"></script>
+		<script src="static/scripts/engine/name-filter.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js?v=35"></script>
 		<script src="static/scripts/engine/position-rating.js?v=36"></script>
@@ -447,6 +449,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
+		<script src="static/scripts/blind-mode.js"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
 		<script src="static/scripts/game-board-local.js?v=44"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

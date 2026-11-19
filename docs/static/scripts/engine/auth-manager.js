@@ -39,6 +39,8 @@ class AuthManager {
 	 * everything recorded under it (games, active rooms) carry over.
 	 */
 	async signUpWithEmail(email, password, displayName) {
+		// Before any account exists: the rules would refuse the profile.
+		if (!AuthManager.nameAllowed(displayName)) throw new Error(SigilNameFilter.MESSAGE);
 		const guest = this.auth.currentUser;
 		// Read before linking: the linked user is no longer anonymous.
 		const upgrading = !!(guest && guest.isAnonymous);
@@ -353,6 +355,15 @@ class AuthManager {
 	}
 
 	/**
+	 * Not refused by the offensive-name filter (name-filter.js; the
+	 * database rules hold every stored name to the same list). True on a
+	 * page that does not load the filter.
+	 */
+	static nameAllowed(name) {
+		return typeof SigilNameFilter === 'undefined' || SigilNameFilter.allowed(name);
+	}
+
+	/**
 	 * Update the user's display name (Auth profile + RTDB) atomically.
 	 *
 	 * Uses the `usernames/{lowercaseName}` index for cross-user uniqueness:
@@ -366,6 +377,7 @@ class AuthManager {
 		if (!AuthManager.isValidDisplayName(trimmed)) {
 			throw new Error('Display name must be 1-20 characters: letters, digits, underscores, or hyphens.');
 		}
+		if (!AuthManager.nameAllowed(trimmed)) throw new Error(SigilNameFilter.MESSAGE);
 		const uid = this.currentUser.uid;
 		const newKey = trimmed.toLowerCase();
 		const db = firebase.database();
@@ -403,13 +415,14 @@ class AuthManager {
 
 	/**
 	 * True when the account has no real display name yet: either the literal
-	 * placeholder 'Player' (the username-overwrite glitch) or a missing/empty
-	 * displayName. Account UIs should surface a rename prompt when this is true.
+	 * placeholder 'Player' (the username-overwrite glitch), a missing/empty
+	 * displayName, or one the offensive-name filter refuses. Account UIs
+	 * should surface a rename prompt when this is true.
 	 */
 	get needsRename() {
 		if (!this.userProfile) return false;
 		const name = this.userProfile.displayName;
-		return !name || name === 'Player';
+		return !name || name === 'Player' || !AuthManager.nameAllowed(name);
 	}
 
 	/**
@@ -429,8 +442,12 @@ class AuthManager {
 		// Priority: explicit signup arg → existing RTDB record → Auth profile →
 		// a linked provider's name (a Google link whose updateProfile failed)
 		// → 'Player'. 'Player' is reachable only when no name exists anywhere.
-		const authName = this.currentUser.displayName ||
-			(this.currentUser.providerData || []).map(p => p && p.displayName).find(Boolean) || null;
+		// A Google name the offensive-name filter refuses is not used (the
+		// rules would refuse the profile): the account starts as 'Player'
+		// and is asked to choose a name.
+		const authName = [this.currentUser.displayName]
+			.concat((this.currentUser.providerData || []).map(p => p && p.displayName))
+			.find(n => n && AuthManager.nameAllowed(n)) || null;
 		const resolvedName =
 			displayName ||
 			existing.displayName ||
@@ -467,7 +484,7 @@ class AuthManager {
 		const lbSnap = await lbRef.once('value');
 		if (!lbSnap.exists() && this.userProfile.displayName) {
 			await lbRef.set({
-				displayName: this.userProfile.displayName,
+				displayName: AuthManager.nameAllowed(this.userProfile.displayName) ? this.userProfile.displayName : 'Player',
 				elo: this.userProfile.elo || 1000,
 				gamesPlayed: this.userProfile.gamesPlayed || 0,
 			});
@@ -495,6 +512,16 @@ class AuthManager {
 		return 'Guest';
 	}
 
+	/**
+	 * The name to write where others see it (room seats): 'Player' for a
+	 * name the offensive-name filter refuses, so the database takes the
+	 * seat; the account page asks the player to choose another.
+	 */
+	get publicName() {
+		const name = this.displayName;
+		return AuthManager.nameAllowed(name) ? name : 'Player';
+	}
+
 	get elo() {
 		return this.userProfile ? this.userProfile.elo : null;
 	}
@@ -518,7 +545,7 @@ class AuthManager {
 	getUserInfo() {
 		return {
 			uid: this.uid,
-			displayName: this.isAnonymous ? 'Guest' : this.displayName,
+			displayName: this.isAnonymous ? 'Guest' : this.publicName,
 			elo: this.elo,
 			isAnonymous: this.isAnonymous,
 		};

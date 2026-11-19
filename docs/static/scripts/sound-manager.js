@@ -6,7 +6,7 @@ class SoundManager {
 	constructor() {
 		this.muted = false;
 		try { this.muted = localStorage.getItem('sigil_muted') === 'true'; } catch (e) { /* storage blocked */ }
-		// Master volume 0..1, set from the settings panel (settings-panel.js).
+		// Master volume 0..1 and the sound groups, from the settings (prefs.js).
 		this.volume = typeof SigilSettings !== 'undefined' ? SigilSettings.get('volume') : 1;
 		this._ctx = null;
 		this._gain = null;
@@ -34,6 +34,7 @@ class SoundManager {
 
 	play(name) {
 		if (this.muted || !(this.volume > 0)) return;
+		if (typeof SigilSettings !== 'undefined' && !SigilSettings.soundOn(name)) return;
 		try {
 			const fn = this['_snd_' + name];
 			if (fn) fn.call(this);
@@ -138,6 +139,24 @@ class SoundManager {
 		osc2.connect(gain2).connect(this._out(ctx));
 		osc2.start(t);
 		osc2.stop(t + 0.5);
+	}
+
+	// Low time: two short high beeps (the clock passed the low-time mark)
+	_snd_lowTime() {
+		const ctx = this._ensureCtx();
+		const t = ctx.currentTime;
+		[0, 0.18].forEach((d) => {
+			const osc = ctx.createOscillator();
+			const gain = ctx.createGain();
+			osc.type = 'square';
+			osc.frequency.value = 880;
+			gain.gain.setValueAtTime(0, t + d);
+			gain.gain.linearRampToValueAtTime(0.12, t + d + 0.01);
+			gain.gain.exponentialRampToValueAtTime(0.001, t + d + 0.12);
+			osc.connect(gain).connect(this._out(ctx));
+			osc.start(t + d);
+			osc.stop(t + d + 0.13);
+		});
 	}
 
 	// Game start: ascending chime (3 notes)

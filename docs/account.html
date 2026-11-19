@@ -11,6 +11,7 @@
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
 	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
 	<script src="static/scripts/theme-manager.js"></script>
+	<script src="static/scripts/prefs.js"></script>
 	<title>Account - Sigil Online</title>
 	<style>
 		body > .main { padding-top: 80px; }
@@ -335,65 +336,28 @@
 			</div>
 
 			<!-- Rename prompt: surfaces only when the stored displayName is the
-			     literal 'Player' placeholder (the username-overwrite glitch).
-			     Lets the user claim any unique display name. -->
-			<div class="settings-card" x-show="needsRename" x-cloak>
+			     literal 'Player' placeholder (the username-overwrite glitch, or a
+			     name reset by tools/name-filter/audit-names.js) or a name the
+			     offensive-name filter (name-filter.js) refuses. Lets the user
+			     claim any unique display name. -->
+			<div class="settings-card" x-show="needsRename" x-cloak data-testid="rename-card">
 				<div style="font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px;">Choose your display name</div>
 				<div class="settings-card__hint" style="margin-bottom: 10px;">
-					Your account doesn't have a display name yet. Pick a unique name to claim — letters, digits, <code>_</code> and <code>-</code>, up to 20 characters.
+					<span x-text="nameBlocked ? 'Your display name is not allowed on Sigil, so others see you as Player.' : 'Your account doesn\'t have a display name yet.'"></span>
+					Pick a unique name to claim — letters, digits, <code>_</code> and <code>-</code>, up to 20 characters.
 				</div>
 				<input type="text" x-model="renameName" maxlength="20" placeholder="new display name" x-on:keydown.enter="renameUser"
 				       style="display:block;width:100%;padding:10px 12px;border-radius:6px;border:2px solid var(--color-border);background:var(--color-surface-raised);color:var(--color-text-warm);font-family:'Overlock',sans-serif;font-size:1em;box-sizing:border-box;margin-bottom:10px;" />
 				<button class="account-button" x-on:click="renameUser" x-bind:disabled="busy || !renameName.trim()">Save name</button>
 			</div>
 
-			<div class="settings-card">
-				<label class="settings-card__row">
-					<input type="checkbox" x-model="annotationMode" x-on:change="saveAnnotationMode" x-bind:disabled="busy" />
-					<span>Enable game annotation mode</span>
-				</label>
+			<!-- Display, sound, clock, play and AI options are on one page
+			     (preferences.html), stored on the account. -->
+			<div class="settings-card" id="prefs-link-card">
+				<a class="settings-card__row" href="preferences.html" style="text-decoration: none;"><span>Preferences &rarr;</span></a>
 				<div class="settings-card__hint">
-					When on, you can mark your opponent's most recent move as a good move or a bad move during your own turn. Annotations are saved with the game and used to improve future AI training.
-				</div>
-			</div>
-
-			<div class="settings-card">
-				<label class="settings-card__row">
-					<input type="checkbox" x-model="showAiThinkReport" x-on:change="saveShowAiThinkReport" x-bind:disabled="busy" />
-					<span>Show AI think time and search depth</span>
-				</label>
-				<div class="settings-card__hint">
-					When on, after each AI move the game log shows how long the AI thought, the search depth it reached, how many nodes it evaluated, and its evaluation of the position (positive favors the AI; "win"/"loss" means a forced result).
-				</div>
-			</div>
-
-			<div class="settings-card">
-				<label class="settings-card__row">
-					<input type="checkbox" x-model="showAiEval" x-on:change="saveShowAiEval" x-bind:disabled="busy" />
-					<span>Show live AI evaluation</span>
-				</label>
-				<div class="settings-card__hint">
-					When on, the game screen offers an "AI eval" readout that continuously shows the AI's evaluation of the current position (positive favors red). Costs some CPU while enabled.
-				</div>
-			</div>
-
-			<div class="settings-card">
-				<label class="settings-card__row">
-					<input type="checkbox" x-model="showMapControl" x-on:change="saveShowMapControl" x-bind:disabled="busy" />
-					<span>Show map control</span>
-				</label>
-				<div class="settings-card__hint">
-					When on, the game screen shows how many board nodes each side's stones are closer to (red / blue / contested, and the difference). Useful for judging who controls more of the map.
-				</div>
-			</div>
-
-			<div class="settings-card">
-				<label class="settings-card__row">
-					<input type="checkbox" x-model="enablePondering" x-on:change="saveEnablePondering" x-bind:disabled="busy" />
-					<span>Let the AI think during your turn</span>
-				</label>
-				<div class="settings-card__hint">
-					When on, the AI thinks ahead in the background while it's your turn, so its moves come back faster. Costs extra CPU — turn off on low-power devices.
+					Board and stones, sounds, the clock, blind mode, confirmations, emotes, and the AI think report,
+					live evaluation, map control, pondering and annotation mode. They follow your account to every device.
 				</div>
 			</div>
 
@@ -495,6 +459,7 @@
 		});
 	</script>
 
+	<script src="static/scripts/engine/name-filter.js"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/vacation-bank.js?v=35"></script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
@@ -565,11 +530,6 @@
 				error: '',
 				successMsg: '',
 				busy: false,
-				annotationMode: false,
-				showAiThinkReport: false,
-				showAiEval: false,
-				showMapControl: false,
-				enablePondering: false,
 				// Device-level, not account-level: core count is a property of
 				// the device. rust-ai.js reads the same localStorage key.
 				aiMultiCore: (() => { try { return localStorage.getItem('sigil.rustWorkers') === 'auto'; } catch (e) { return false; } })(),
@@ -581,7 +541,12 @@
 				get needsRename() {
 					if (!this.profile) return false;
 					const name = this.profile.displayName;
-					return !name || name === 'Player';
+					return !name || name === 'Player' || this.nameBlocked;
+				},
+				// A name the offensive-name filter refuses (name-filter.js).
+				get nameBlocked() {
+					const name = this.profile && this.profile.displayName;
+					return !!name && typeof SigilNameFilter !== 'undefined' && !SigilNameFilter.allowed(name);
 				},
 
 				init() {
@@ -631,22 +596,11 @@
 						}
 						this.profile = this._authManager.userProfile;
 						this._loadFlags(this.user.uid);
-						this.annotationMode = !!(this.profile && this.profile.annotationMode);
-						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
-						this.showAiEval = !!(this.profile && this.profile.showAiEval);
-						this.showMapControl = !!(this.profile && this.profile.showMapControl);
-						// Default OFF; only explicit true enables.
-						this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
 						this._loadVacation();
 					} else {
 						this.profile = null;
 						this.flags = null;
 						this.isAdmin = false;
-						this.annotationMode = false;
-						this.showAiThinkReport = false;
-						this.showAiEval = false;
-						this.showMapControl = false;
-						this.enablePondering = false;
 					}
 					this.loading = false;
 				},
@@ -701,6 +655,10 @@
 						this.error = 'Display name must be 1-20 characters: letters, digits, _, or -.';
 						return;
 					}
+					if (typeof SigilNameFilter !== 'undefined' && !SigilNameFilter.allowed(name)) {
+						this.error = SigilNameFilter.MESSAGE;
+						return;
+					}
 					this.busy = true;
 					try {
 						const ok = await this._authManager.checkUsernameAvailable(name);
@@ -712,70 +670,6 @@
 						this.renameName = '';
 					} catch (e) {
 						this.error = _friendlyError(e);
-					}
-					this.busy = false;
-				},
-
-				async saveAnnotationMode() {
-					this.error = '';
-					this.successMsg = '';
-					this.busy = true;
-					try {
-						await this._authManager.updateAnnotationMode(this.annotationMode);
-						this.successMsg = this.annotationMode
-							? 'Annotation mode enabled.'
-							: 'Annotation mode disabled.';
-					} catch (e) {
-						this.error = e.message || String(e);
-						this.annotationMode = !this.annotationMode; // revert toggle
-					}
-					this.busy = false;
-				},
-
-				async saveShowAiThinkReport() {
-					this.error = '';
-					this.successMsg = '';
-					this.busy = true;
-					try {
-						await this._authManager.updateShowAiThinkReport(this.showAiThinkReport);
-						this.successMsg = this.showAiThinkReport
-							? 'AI think report enabled.'
-							: 'AI think report disabled.';
-					} catch (e) {
-						this.error = e.message || String(e);
-						this.showAiThinkReport = !this.showAiThinkReport;
-					}
-					this.busy = false;
-				},
-
-				async saveShowAiEval() {
-					this.error = '';
-					this.successMsg = '';
-					this.busy = true;
-					try {
-						await this._authManager.updateShowAiEval(this.showAiEval);
-						this.successMsg = this.showAiEval
-							? 'Live AI evaluation enabled.'
-							: 'Live AI evaluation disabled.';
-					} catch (e) {
-						this.error = e.message || String(e);
-						this.showAiEval = !this.showAiEval;
-					}
-					this.busy = false;
-				},
-
-				async saveShowMapControl() {
-					this.error = '';
-					this.successMsg = '';
-					this.busy = true;
-					try {
-						await this._authManager.updateShowMapControl(this.showMapControl);
-						this.successMsg = this.showMapControl
-							? 'Map control display enabled.'
-							: 'Map control display disabled.';
-					} catch (e) {
-						this.error = e.message || String(e);
-						this.showMapControl = !this.showMapControl;
 					}
 					this.busy = false;
 				},
@@ -792,22 +686,6 @@
 						this.error = 'Could not save on this device: ' + (e.message || e);
 						this.aiMultiCore = !this.aiMultiCore;
 					}
-				},
-
-				async saveEnablePondering() {
-					this.error = '';
-					this.successMsg = '';
-					this.busy = true;
-					try {
-						await this._authManager.updateEnablePondering(this.enablePondering);
-						this.successMsg = this.enablePondering
-							? 'AI pondering enabled.'
-							: 'AI pondering disabled.';
-					} catch (e) {
-						this.error = e.message || String(e);
-						this.enablePondering = !this.enablePondering;
-					}
-					this.busy = false;
 				},
 
 				async forgotPassword() {
@@ -867,6 +745,7 @@
 					this.error = '';
 					if (!this.signupName.trim()) { this.error = 'Display name is required.'; return; }
 					if (this.signupName.trim().length > 20) { this.error = 'Display name must be 20 characters or less.'; return; }
+					if (typeof SigilNameFilter !== 'undefined' && !SigilNameFilter.allowed(this.signupName.trim())) { this.error = SigilNameFilter.MESSAGE; return; }
 					this.successMsg = '';
 					this.linkConflict = '';
 					const wasGuest = this.guest;

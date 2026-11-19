@@ -317,7 +317,9 @@ async function _stormSyncBoard(u) {
 		const best = (await _ptOnce(db.ref(base + '/puzzleStorm/best'))) || 0;
 		if (!best) return;
 		const row = await _ptOnce(db.ref('storm_leaderboard/' + u.uid));
-		const name = String((await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player').slice(0, 30);
+		let name = String((await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player').slice(0, 30);
+		// A name the offensive-name filter refuses shows as 'Player' (the rules refuse it).
+		if (typeof SigilNameFilter !== 'undefined') name = SigilNameFilter.safe(name);
 		if (row && row.score === best && row.displayName === name) return;
 		try {
 			// A run finishing in between may raise the best again: re-read and retry.

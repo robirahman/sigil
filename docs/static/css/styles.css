@@ -2836,6 +2836,118 @@ html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-
 	content: "\25CB\00A0";
 }
 
+/* --- Board preferences (prefs.js): node names, last move, legal moves --- */
+.stone-node__name { display: none; }
+html[data-node-names] .stone-node__name {
+	color: #fff;
+	display: block;
+	font-family: monospace;
+	font-size: clamp(8px, 1vw, 12px);
+	left: 50%;
+	line-height: 1;
+	pointer-events: none;
+	position: absolute;
+	text-shadow: 0 0 2px #000, 0 0 3px #000;
+	top: 100%;
+	transform: translate(-50%, 1px);
+	white-space: nowrap;
+	z-index: 2;
+}
+html[data-no-last-move] .stone-node--last-play {
+	box-shadow: none;
+}
+html[data-no-legal-moves] :is(.stone-node--valid-move-red, .stone-node--valid-move-blue) {
+	box-shadow: none;
+}
+html[data-no-legal-moves] :is(.stone-node--valid-move-red, .stone-node--valid-move-blue)::after,
+html[data-no-legal-moves][data-colourblind] :is(.stone-node--valid-move-red, .stone-node--valid-move-blue):not(.stone-node--red):not(.stone-node--blue)::before {
+	content: none;
+}
+
+/* --- Blind mode (prefs.js, blind-mode.js): html[data-blind] on pages with
+   <body class="blind-page">. Every stone is drawn as an empty node; the
+   nodes still take clicks and keep their accessible names, walls stay, and
+   so do the prompts a turn needs: legal-move glows (unless turned off),
+   the refill choices and the stone being pushed. The score marker is not a
+   board stone. --- */
+html[data-blind] body.blind-page :is(.stone-node--red, .stone-node--blue):not(.stone-node--score):not(.stone-node--refill):not(.stone-node--push-source) {
+	animation: none;
+	background-image: none !important;
+}
+html[data-blind] body.blind-page :is(.stone-node--red, .stone-node--blue).stone-node--last-play::after,
+html[data-blind][data-colourblind] body.blind-page :is(.stone-node--red, .stone-node--blue):not(.stone-node--refill)::before {
+	content: none;
+}
+html[data-blind] body.blind-page .stone-node--crushed {
+	display: none;
+}
+.blind-only { display: none; }
+html[data-blind] body.blind-page .blind-only { display: revert; }
+.blind-panel {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	color: var(--color-text);
+	font-family: 'Overlock', sans-serif;
+	margin: 8px auto;
+	max-width: 640px;
+	padding: 10px 14px;
+}
+.blind-panel[hidden] { display: none; }
+/* Wide screens: beside the board, under the settings buttons. */
+@media (min-width: 1100px) {
+	body[data-blind-float] .blind-panel {
+		margin: 0;
+		max-height: calc(100vh - 80px);
+		overflow-y: auto;
+		position: fixed;
+		right: 12px;
+		top: 60px;
+		width: 240px;
+		z-index: 5;
+	}
+}
+.blind-panel__title {
+	color: var(--color-text-warm);
+	font-family: 'Arvo', serif;
+	font-size: 1rem;
+	margin: 0 0 6px;
+}
+.blind-panel__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 6px 0;
+}
+.blind-panel__position {
+	margin: 6px 0;
+	white-space: pre-line;
+}
+.blind-panel__moves {
+	font-size: 0.9em;
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+}
+.blind-panel__moves li + li { opacity: 0.75; }
+
+/* Section headings in the settings panel and on preferences.html. */
+.settings-panel__heading {
+	color: var(--color-text-warm, #e0d0b0);
+	font-family: 'Arvo', serif;
+	font-size: 1rem;
+	margin: 14px 0 8px;
+}
+.settings-panel__section:first-child .settings-panel__heading { margin-top: 0; }
+.settings-panel__link {
+	align-self: center;
+	color: var(--color-accent, #8cf);
+	margin-right: auto;
+}
+/* Online clocks under the low-time mark (prefs.js). */
+.cb-mark.timer--low.timer--running { animation: game-clock-pulse 1s ease-in-out infinite; font-weight: 700; }
+html:is([data-motion="reduced"], [data-motion="off"]) .cb-mark.timer--low.timer--running { animation: none; text-decoration: underline; }
+
 /* --- game.html (moved from its inline <style>) --- */
 
 /* The header floats over the board, which starts at the top. */

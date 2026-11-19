@@ -166,6 +166,7 @@
 			webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
+		<script src="static/scripts/prefs.js"></script>
 	</head>
 
 	<body>
@@ -547,7 +548,7 @@
 											x-bind:id="`stone-node--${node}`"
 											x-bind:style="nodeStyle(node)"
 											x-on:click="handleNodeClick(node)"
-										></button>
+										><span class="stone-node__name" aria-hidden="true" x-text="node"></span></button>
 									</template>
 								</div>
 							</div>
@@ -832,6 +833,7 @@
 		<script src="static/scripts/engine/game-review.js?v=42"></script>
 		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
 		<script src="static/scripts/engine/firebase-sync.js?v=36"></script>
+		<script src="static/scripts/engine/name-filter.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js?v=35"></script>
 		<script src="static/scripts/engine/position-rating.js?v=36"></script>

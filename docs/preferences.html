@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<script src="static/scripts/prefs.js"></script>
+	<title>Preferences - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.prefs {
+			max-width: 520px;
+			margin: 0 auto;
+			padding: 24px 16px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text);
+		}
+		.prefs h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 8px;
+			text-align: center;
+		}
+		.prefs__status {
+			color: var(--color-text-dim);
+			font-size: 0.9em;
+			margin: 0 0 16px;
+			text-align: center;
+		}
+		.prefs .settings-panel__section {
+			background: var(--color-surface);
+			border-radius: 8px;
+			padding: 14px 20px 4px;
+			margin: 16px 0;
+		}
+		.prefs .settings-panel__heading { margin-top: 0; }
+		.prefs__note {
+			color: var(--color-text-dim);
+			font-size: 0.85em;
+			margin: 0 0 12px;
+		}
+		.prefs__actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			justify-content: space-between;
+			margin: 16px 0;
+		}
+		.prefs__actions a { color: var(--color-accent); }
+		.prefs__msg { min-height: 1.2em; font-size: 0.9em; }
+		.back-link {
+			color: var(--color-accent);
+			display: inline-block;
+			text-decoration: none;
+		}
+		.back-link:hover { text-decoration: underline; }
+		.prefs__msg--error { color: var(--color-error); }
+		.prefs__msg--ok { color: var(--color-success); }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="prefs">
+			<h2>Preferences</h2>
+			<p class="prefs__status" id="prefs-status" role="status">Saved on this device.</p>
+
+			<!-- Every display, sound, clock and play setting (prefs.js renders
+			     the rows; the in-game settings panel shows the same ones). -->
+			<div id="prefs-root"></div>
+
+			<!-- Blind mode, in more words than a hint has room for. -->
+			<div class="settings-panel__section" id="blind-help">
+				<h3 class="settings-panel__heading">About blind mode</h3>
+				<p class="prefs__note">
+					Like blindfold chess: the board shows the nodes and spell circles but no stones. Play by
+					clicking (or tabbing to) a node as usual. A panel beside the board reads out every change
+					(&ldquo;Red on c4; blue off b3&rdquo;), also to screen readers, and <kbd>P</kbd> or its
+					&ldquo;Describe position&rdquo; button lists every stone, wall and spell and whose turn it
+					is. Each node also tells a screen reader what is on it. Turn on &ldquo;Show node
+					names&rdquo; to see the names on the board, and off &ldquo;Show legal moves&rdquo; for a
+					harder game.
+				</p>
+			</div>
+
+			<!-- Account-only options (users/<uid>/<flag>, written by AuthManager). -->
+			<div class="settings-panel__section" id="account-prefs" hidden>
+				<h3 class="settings-panel__heading">AI and analysis (your account)</h3>
+				<div id="account-prefs-rows"></div>
+				<p class="prefs__msg" id="account-prefs-msg" role="status"></p>
+			</div>
+
+			<div class="prefs__actions">
+				<button type="button" class="settings-panel__btn" id="prefs-reset">Reset to defaults</button>
+				<a href="account.html">Account</a>
+			</div>
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<script src="static/scripts/sound-manager.js"></script>
+	<script>
+		SigilPrefsUI.render(document.getElementById('prefs-root'), { emotes: true });
+		document.getElementById('prefs-reset').addEventListener('click', () => {
+			for (const k in SIGIL_PREF_DEFS) SigilSettings.set(k, SIGIL_PREF_DEFS[k].def);
+		});
+	</script>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/engine/name-filter.js"></script>
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script>
+		// The account-only options: AuthManager writes users/<uid>/<flag>.
+		(function () {
+			if (typeof firebase === 'undefined' || typeof AuthManager === 'undefined') return;
+			const ACCOUNT_PREFS = [
+				['annotationMode', 'updateAnnotationMode', 'Enable game annotation mode',
+					'During your own turn, mark your opponent’s most recent move as good or bad. Annotations are saved with the game and used to improve future AI training.'],
+				['showAiThinkReport', 'updateShowAiThinkReport', 'Show AI think time and search depth',
+					'After each AI move the game log shows how long the AI thought, its search depth, the nodes it evaluated and its evaluation of the position.'],
+				['showAiEval', 'updateShowAiEval', 'Show live AI evaluation',
+					'The game screen offers an "AI eval" readout of the current position (positive favours red). Costs some CPU while on.'],
+				['showMapControl', 'updateShowMapControl', 'Show map control',
+					'The game screen shows how many nodes each side’s stones are closer to (red / blue / contested, and the difference).'],
+				['enablePondering', 'updateEnablePondering', 'Let the AI think during your turn',
+					'The AI thinks ahead while it is your turn, so it answers faster. Costs extra CPU; turn it off on low-power devices.'],
+			];
+			const section = document.getElementById('account-prefs');
+			const rows = document.getElementById('account-prefs-rows');
+			const msg = document.getElementById('account-prefs-msg');
+			const status = document.getElementById('prefs-status');
+			const h = SigilPrefsUI._h.bind(SigilPrefsUI);
+			const am = new AuthManager();
+			const boxes = {};
+			for (const [key, method, label, hint] of ACCOUNT_PREFS) {
+				const box = h('input', { type: 'checkbox', 'data-account-setting': key });
+				boxes[key] = box;
+				box.addEventListener('change', async () => {
+					msg.textContent = '';
+					msg.className = 'prefs__msg';
+					box.disabled = true;
+					try {
+						await am[method](box.checked);
+						msg.textContent = 'Saved.';
+						msg.classList.add('prefs__msg--ok');
+					} catch (e) {
+						box.checked = !box.checked;
+						msg.textContent = 'Could not save (' + (e.message || e.code || 'unknown error') + ').';
+						msg.classList.add('prefs__msg--error');
+					}
+					box.disabled = false;
+				});
+				rows.appendChild(h('div', { class: 'settings-panel__row' }, [
+					h('label', {}, [box, h('span', { text: label })]),
+					h('small', { class: 'settings-panel__hint', text: hint }),
+				]));
+			}
+			am.onAuthChanged(async (user) => {
+				if (!user || user.isAnonymous) {
+					section.hidden = true;
+					status.textContent = 'Saved on this device. Sign in to keep them on your account and every device.';
+					return;
+				}
+				status.textContent = 'Signed in: these follow your account to every device (volume and mute stay on this one).';
+				try {
+					await am.loadProfile(firebase.database());
+				} catch (e) { /* offline: show the defaults */ }
+				const p = am.userProfile || {};
+				for (const [key] of ACCOUNT_PREFS) boxes[key].checked = key === 'enablePondering' ? p[key] === true : !!p[key];
+				section.hidden = false;
+			});
+		})();
+	</script>
+</body>
+</html>

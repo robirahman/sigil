@@ -61,10 +61,11 @@
 				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
+		<script src="static/scripts/prefs.js"></script>
 		<script src="static/scripts/settings-panel.js?v=35"></script>
 	</head>
 
-	<body class="game-page zen-page">
+	<body class="game-page zen-page blind-page" data-blind-float>
 		<header>
 			<div class="container">
 				<div class="header-container">
@@ -227,7 +228,7 @@
 								<p>
 									<strong>AI think report</strong><br />
 									Optional account setting: after each AI move, the game log can show the search
-									depth, think time, and node count. Toggle it in <em>Account &rarr; Show AI
+									depth, think time, and node count. Toggle it in <em>Preferences &rarr; Show AI
 									think time and search depth</em>.
 								</p>
 							</div>
@@ -272,12 +273,12 @@
 						     highlighted. Only in clocked games (?clock=M+S). -->
 						<div class="game-clock" x-show="hasClock" x-cloak>
 							<span class="game-clock__side game-clock__side--red"
-								x-bind:class="{ 'game-clock__side--active': clockActive === 'red', 'game-clock__side--low': redClockMs < 10000 }"
-								x-text="'Red ' + formatTimer(Math.ceil(Math.max(redClockMs, 0) / 1000))"></span>
+								x-bind:class="{ 'game-clock__side--active': clockActive === 'red', 'game-clock__side--low': clockIsLow(redClockMs) }"
+								x-text="'Red ' + clockText(redClockMs)"></span>
 							<span class="game-clock__label" x-text="clockLabel"></span>
 							<span class="game-clock__side game-clock__side--blue"
-								x-bind:class="{ 'game-clock__side--active': clockActive === 'blue', 'game-clock__side--low': blueClockMs < 10000 }"
-								x-text="'Blue ' + formatTimer(Math.ceil(Math.max(blueClockMs, 0) / 1000))"></span>
+								x-bind:class="{ 'game-clock__side--active': clockActive === 'blue', 'game-clock__side--low': clockIsLow(blueClockMs) }"
+								x-text="'Blue ' + clockText(blueClockMs)"></span>
 						</div>
 
 						<div class="dev-eval-panel" x-show="canSeeAiEval" x-cloak>
@@ -762,7 +763,7 @@
 										x-bind:id="`stone-node--${node}`"
 										x-bind:style="nodeStyle(node)"
 										x-on:click="handleNodeClick(node)"
-									></button>
+									><span class="stone-node__name" aria-hidden="true" x-text="node"></span></button>
 								</template>
 							</div>
 						</div>
@@ -1062,6 +1063,7 @@
 		<script src="static/scripts/engine/game-review.js?v=42"></script>
 		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
 		<script src="static/scripts/engine/firebase-sync.js?v=36"></script>
+		<script src="static/scripts/engine/name-filter.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js?v=35"></script>
 		<script src="static/scripts/engine/position-rating.js?v=36"></script>
@@ -1072,6 +1074,7 @@
 		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js?v=35"></script>
+		<script src="static/scripts/blind-mode.js"></script>
 		<script src="static/scripts/live-analysis.js?v=1"></script>
 		<script src="static/scripts/game-board-local.js?v=44"></script>
 		<script src="static/scripts/rules-reference.js?v=36"></script>
