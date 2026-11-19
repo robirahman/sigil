@@ -11,6 +11,8 @@
  * The marks are local only: nothing is sent to the opponent or saved. They
  * are kept per key, which the page sets: the play view clears its key at
  * the end of every turn, review keys by move, analysis.html by tree node.
+ * A study (study.js) shares them: it hears every change the viewer makes
+ * through onChange and loads the other editors' with set().
  *
  * Drawn in pixel space from the live node buttons, like drawPushArrows
  * (spell-effects.js), so they fit every board layout and size.
@@ -36,6 +38,8 @@ function boardMarkColour(e) {
  *   clear()    remove the marks of the current key
  *   clearAll() forget every key
  *   list()     the current key's marks [{from, to, colour}] (to === from: circle)
+ *   set(k, l)  replace the marks kept under k (no onChange)
+ *   onChange(fn)  fn(key, list) after the viewer draws, removes or clears
  */
 function attachBoardMarks(wrapper, opts) {
 	if (!wrapper) return null;
@@ -49,6 +53,13 @@ function attachBoardMarks(wrapper, opts) {
 
 	const store = new Map();
 	let key = 'play';
+	const listeners = [];
+	const changed = () => {
+		const list = marks().map(m => Object.assign({}, m));
+		for (const fn of listeners) {
+			try { fn(key, list); } catch (e) { /* a listener's error is its own */ }
+		}
+	};
 	let drag = null;   // {from, colour, pointerId}
 	let preview = null;
 
@@ -123,6 +134,7 @@ function attachBoardMarks(wrapper, opts) {
 		if (list.length) store.set(key, list);
 		else store.delete(key);
 		draw();
+		changed();
 	}
 
 	// --- Draw mode (touch): a pencil toggle and a Clear button on the board.
@@ -234,8 +246,20 @@ function attachBoardMarks(wrapper, opts) {
 			draw();
 		},
 		clear() {
+			const had = store.has(key);
 			store.delete(key);
 			draw();
+			if (had) changed();
+		},
+		set(k, list) {
+			const clean = (Array.isArray(list) ? list : []).filter(m => m && m.from && m.to)
+				.map(m => ({ from: m.from, to: m.to, colour: BOARD_MARK_COLOURS[m.colour] ? m.colour : 'green' }));
+			if (clean.length) store.set(String(k), clean);
+			else store.delete(String(k));
+			if (String(k) === key) draw();
+		},
+		onChange(fn) {
+			if (typeof fn === 'function') listeners.push(fn);
 		},
 		clearAll() {
 			store.clear();

@@ -3309,6 +3309,8 @@ document.addEventListener('alpine:init', () => {
 			// Analysis board state and methods (analysis-board.js), spread
 			// last so its handleNodeClick (the editor) overrides the game's.
 			...((analysis && typeof analysisMixin === 'function') ? analysisMixin() : {}),
+			// Studies (study.js): the shared, chapter-based board on top of it.
+			...((analysis && typeof studyMixin === 'function') ? studyMixin() : {}),
 		})
 	);
 });

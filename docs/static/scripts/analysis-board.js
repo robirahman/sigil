@@ -16,6 +16,11 @@
  *               Rust wasm engine evaluates the selected node in growing
  *               slices, and its best turn can be played on the board.
  *
+ * Annotation symbols (!, ?, !!, ??, !?, ?!) mark a node's turn; on the
+ * plain board they are this page's only. A study (study.js, ?study=<id>)
+ * spreads its mixin after this one and shares the tree, symbols, arrows and
+ * comments live: the _study* hooks below are its, and absent otherwise.
+ *
  * Node SFNs are LOADABLE SFNs: the form Export Position and after-turn
  * records use, which the controller advances to the side to move. The engine
  * searches positionTurnSfn(sfn) (position-rating.js), the side-to-move form.
@@ -25,6 +30,16 @@
 // the table carries over, so later slices start where the last one stopped.
 const ANALYSIS_EVAL_STEPS_MS = [500, 2000, 6000, 15000, 30000];
 const ANALYSIS_TT_BITS = 20;
+
+// Annotation symbols for a turn, best to worst (the chess convention).
+const ANALYSIS_GLYPHS = [
+	{ g: '!!', label: 'Brilliant' },
+	{ g: '!', label: 'Good' },
+	{ g: '!?', label: 'Interesting' },
+	{ g: '?!', label: 'Dubious' },
+	{ g: '?', label: 'Mistake' },
+	{ g: '??', label: 'Blunder' },
+];
 
 const ANALYSIS_AI_TIERS = [
 	{ key: 'rust_easy', label: 'Easy' },
@@ -239,7 +254,7 @@ function analysisMixin() {
 		anaMode: 'analyse',            // 'analyse' | 'edit'
 		// The move tree: nodes by id (index); 0 is the root. A node is
 		// { id, parent, sfn, label, text, turn, children: [ids], lastChild,
-		//   winner, deleted }.
+		//   winner, deleted, glyph } (a study's also { key, local, notes }).
 		anaTree: [],
 		anaCur: 0,
 		// The engine's view of the selected node.
@@ -277,6 +292,10 @@ function analysisMixin() {
 				if (sc && sc.scrollWidth > sc.clientWidth) sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2;
 			}, 300);
 			const params = new URLSearchParams(window.location.search);
+			if (params.get('study') && typeof this._studyInit === 'function') {
+				this._studyInit(params);
+				return;
+			}
 			const sfn = (params.get('sfn') || '').trim();
 			if (params.get('mode') === 'edit' || !sfn) {
 				this.anaMode = 'edit';
@@ -320,6 +339,7 @@ function analysisMixin() {
 					lastChild: k + 1 < sfns.length ? k + 1 : null,
 					winner: null, deleted: false,
 					silenced: analysisSilencedAfter(turn),
+					glyph: '',
 				});
 			});
 			for (const n of tree) {
@@ -433,9 +453,11 @@ function analysisMixin() {
 					winner: (board && board.gameover) ? (board.winner || null) : null,
 					deleted: false,
 					silenced,
+					glyph: '',
 				};
 				this.anaTree.push(child);
 				parent.children.push(child.id);
+				if (this._studyNodeAdded) this._studyNodeAdded(child);
 			}
 			parent.lastChild = child.id;
 			this.anaCur = child.id;
@@ -454,6 +476,7 @@ function analysisMixin() {
 			const node = this._anaNode();
 			if (!node || !ev || node.winner) return;
 			node.winner = ev.winner || null;
+			if (this._studyWinnerFound) this._studyWinnerFound(node);
 			this.anaStartEval();
 		},
 
@@ -490,13 +513,41 @@ function analysisMixin() {
 		/** Delete the selected node and everything after it. */
 		anaDelete() {
 			const node = this._anaNode();
-			if (!node || node.parent === null) return;
+			if (!this.anaCanDelete()) return;
 			const parent = this.anaTree[node.parent];
 			parent.children = parent.children.filter(i => i !== node.id);
 			if (parent.lastChild === node.id) parent.lastChild = parent.children[0] === undefined ? null : parent.children[0];
-			const drop = (n) => { n.deleted = true; n.children.forEach(i => drop(this.anaTree[i])); };
+			const dropped = [];
+			const drop = (n) => { n.deleted = true; dropped.push(n); n.children.forEach(i => drop(this.anaTree[i])); };
 			drop(node);
+			if (this._studyNodesDeleted) this._studyNodesDeleted(dropped);
 			this.anaGoto(parent.id);
+		},
+
+		/** The selected turn can go (a study's shared turns: editors only). */
+		anaCanDelete() {
+			const node = this._anaNode();
+			if (!node || node.parent === null) return false;
+			return !this._studyCanEdit || this._studyCanEdit(node);
+		},
+
+		/** The annotation symbols, best to worst. */
+		anaGlyphs() {
+			return ANALYSIS_GLYPHS;
+		},
+
+		/** Set (or, the same again, clear) the selected turn's symbol. */
+		anaSetGlyph(g) {
+			const node = this._anaNode();
+			if (!node || node.parent === null || !ANALYSIS_GLYPHS.some(x => x.g === g)) return;
+			if (this._studyCanEdit && !this._studyCanEdit(node)) return;
+			node.glyph = node.glyph === g ? '' : g;
+			if (this._studyGlyphChanged) this._studyGlyphChanged(node);
+		},
+
+		anaCurGlyph() {
+			const node = this._anaNode();
+			return (node && node.glyph) || '';
 		},
 
 		anaKey(event) {
@@ -521,7 +572,8 @@ function analysisMixin() {
 			const row = (id, indent, alt) => {
 				const n = T[id];
 				return { id, indent, alt, label: n.label, text: n.text, cur: id === this.anaCur,
-					winner: n.winner, color: n.turn ? n.turn.color : '' };
+					winner: n.winner, color: n.turn ? n.turn.color : '', glyph: n.glyph || '',
+					notes: n.notes || 0, local: !!n.local };
 			};
 			const out = [row(0, 0, false)];
 			const line = (id, indent) => {
@@ -541,6 +593,7 @@ function analysisMixin() {
 		},
 
 		_anaSyncUrl() {
+			if (this._studySyncUrl && this._studySyncUrl()) return;
 			const node = this._anaNode();
 			try {
 				const u = new URL(window.location.href);
@@ -973,8 +1026,17 @@ function analysisMixin() {
 		/** Analyse the edited position (a new tree). */
 		edAnalyse() {
 			if (!this.edSfn || this.edErrors.length) return;
+			// A study opens the edited position as a new chapter.
+			if (this._studyFromEditor && this._studyFromEditor(this.edSfn)) return;
 			this.anaMode = 'analyse';
 			this.anaSetLine([this.edSfn], null, 0);
+		},
+
+		/** The Analyse tab from the editor: a study goes back to its chapter
+		 *  (the edit is dropped); the plain board analyses the edit. */
+		anaLeaveEditor() {
+			if (this._studyBackToChapter && this._studyBackToChapter()) return;
+			this.edAnalyse();
 		},
 
 		// The editor's board clicks; otherwise the game's own handler.

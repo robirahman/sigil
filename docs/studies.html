@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Studies - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.studies { max-width: 760px; margin: 0 auto; padding: 24px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); }
+		.studies h2 { font-family: 'Arvo', serif; text-align: center; margin-bottom: 6px; }
+		.studies h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 22px 0 8px; }
+		.studies__intro { text-align: center; color: var(--color-text-dim); margin: 0 0 16px; }
+		.study-list { display: flex; flex-direction: column; gap: 8px; }
+		.study-card {
+			display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center;
+			padding: 12px 16px; background: var(--color-surface); border: 1px solid var(--color-border);
+			border-radius: 8px; text-decoration: none; color: inherit;
+		}
+		.study-card:hover { background: var(--color-surface-raised); border-color: var(--color-border-hover); }
+		.study-card__title { color: var(--color-text-bright); font-family: 'Arvo', serif; font-size: 1.05em; overflow-wrap: anywhere; }
+		.study-card__meta { color: var(--color-text-dim); font-size: 0.85em; margin-top: 3px; }
+		.study-card__role { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-dim); }
+		.studies__none, .studies__msg { color: var(--color-text-dim); font-size: 0.92em; margin: 0 0 8px; }
+		.studies__msg a, .studies__none a { color: var(--color-accent); }
+		.new-study { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; }
+		.new-study label { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; font-size: 0.92em; }
+		.new-study input, .new-study select {
+			font-family: 'Overlock', sans-serif; font-size: 1em; padding: 6px 8px; border-radius: 4px;
+			border: 1px solid var(--color-border); background: var(--color-surface-raised); color: var(--color-text-light, #f0f0f0);
+		}
+		.btn {
+			appearance: none; padding: 8px 16px; background: var(--color-surface-raised); border: 2px solid var(--color-border);
+			border-radius: 6px; color: var(--color-text-warm); font-family: 'Arvo', serif; font-size: 0.95em; cursor: pointer;
+		}
+		.btn:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+		.studies__error { color: var(--color-error); margin: 6px 0; }
+		.back-link { display: inline-block; margin-top: 20px; color: var(--color-accent); text-decoration: none; }
+		@media (max-width: 480px) { .studies { padding: 16px; } }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="studiesPage()">
+		<div class="studies">
+			<h2>Studies</h2>
+			<p class="studies__intro">Shared analysis boards in chapters, with comments, arrows and annotation symbols, edited live by everyone you invite.</p>
+
+			<p class="studies__msg" x-show="offline">You are offline: studies need a connection.</p>
+
+			<section aria-labelledby="new-study-h">
+				<h3 id="new-study-h">Start a study</h3>
+				<template x-if="signedIn">
+					<div class="new-study">
+						<label>Title <input type="text" maxlength="80" x-model="newTitle" class="new-study-title" placeholder="e.g. Openings with Fireblast" /></label>
+						<label>Who can see it
+							<select x-model="newVisibility" class="new-study-visibility">
+								<option value="unlisted">Unlisted: anyone with the link</option>
+								<option value="public">Public: listed below for everyone</option>
+								<option value="private">Private: only people you invite</option>
+							</select>
+						</label>
+						<button class="btn new-study-create" x-on:click="create()" x-bind:disabled="busy">Create study</button>
+						<p class="studies__none">It starts with one chapter at a new game; add chapters from any position on the board, or save a game's line from the Analysis Board ("Save to a study").</p>
+						<p class="studies__error" x-show="error" x-text="error"></p>
+					</div>
+				</template>
+				<p class="studies__msg" x-show="!signedIn && ready">
+					<a href="account.html">Sign in</a> to create studies. Anyone can follow a public or unlisted study by its link.
+				</p>
+			</section>
+
+			<section aria-labelledby="my-studies-h" x-show="uid">
+				<h3 id="my-studies-h">Your studies</h3>
+				<p class="studies__none" x-show="ready && !mine.length">None yet: studies you create, are invited to or add to your list appear here.</p>
+				<div class="study-list my-studies">
+					<template x-for="s in mine" x-bind:key="s.sid">
+						<a class="study-card" x-bind:href="'analysis.html?study=' + encodeURIComponent(s.sid)" x-bind:data-study="s.sid">
+							<div>
+								<div class="study-card__title" x-text="s.title"></div>
+								<div class="study-card__meta" x-text="s.meta"></div>
+							</div>
+							<div class="study-card__role" x-text="s.role"></div>
+						</a>
+					</template>
+				</div>
+			</section>
+
+			<section aria-labelledby="public-studies-h">
+				<h3 id="public-studies-h">Public studies</h3>
+				<p class="studies__none" x-show="ready && !publicList.length">No public studies yet.</p>
+				<div class="study-list public-studies">
+					<template x-for="s in publicList" x-bind:key="s.sid">
+						<a class="study-card" x-bind:href="'analysis.html?study=' + encodeURIComponent(s.sid)" x-bind:data-study="s.sid">
+							<div>
+								<div class="study-card__title" x-text="s.title"></div>
+								<div class="study-card__meta" x-text="s.meta"></div>
+							</div>
+						</a>
+					</template>
+				</div>
+			</section>
+
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/engine/board.js"></script>
+	<script src="static/scripts/engine/position-rating.js?v=36"></script>
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/study.js"></script>
+	<script>
+		const STUDIES_PUBLIC_MAX = 50;
+
+		function studiesWhen(ms) {
+			if (!ms) return '';
+			const d = Math.round((Date.now() - ms) / 86400000);
+			if (d <= 0) return 'today';
+			if (d === 1) return 'yesterday';
+			if (d < 30) return d + ' days ago';
+			return new Date(ms).toLocaleDateString();
+		}
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('studiesPage', () => ({
+				ready: false,
+				offline: !navigator.onLine,
+				uid: '',
+				signedIn: false,
+				mine: [],
+				publicList: [],
+				newTitle: '',
+				newVisibility: 'unlisted',
+				busy: false,
+				error: '',
+				_user: null,
+
+				async init() {
+					const db = firebase.database();
+					const user = await firebaseAuthSettled();
+					this._user = user;
+					this.uid = user ? user.uid : '';
+					this.signedIn = !!(user && !user.isAnonymous);
+					await Promise.all([this.loadMine(db), this.loadPublic(db)]);
+					this.ready = true;
+				},
+
+				/** The player's list, refreshed from each study's meta (gone or
+				 *  closed to them: dropped from the list). */
+				async loadMine(db) {
+					if (!this.uid) return;
+					let v = {};
+					try { v = (await db.ref('user_studies/' + this.uid).once('value')).val() || {}; } catch (e) { v = {}; }
+					const rows = await Promise.all(Object.keys(v).map(async (sid) => {
+						const e = v[sid] || {};
+						let meta = null;
+						try {
+							const snap = await db.ref('studies/' + sid + '/meta').once('value');
+							if (!snap.exists()) throw new Error('gone');
+							meta = snap.val();
+						} catch (err) {
+							db.ref('user_studies/' + this.uid + '/' + sid).remove().catch(() => {});
+							return null;
+						}
+						const role = meta.owner === this.uid ? 'owner' : (e.role || 'viewer');
+						return {
+							sid, title: meta.title || e.title || 'Study', role, updated: meta.updated || e.at || 0,
+							meta: (role === 'owner' ? '' : 'by ' + (meta.ownerName || 'Player') + ' · ')
+								+ ({ public: 'Public', unlisted: 'Unlisted', private: 'Private' }[meta.visibility] || '')
+								+ ' · changed ' + studiesWhen(meta.updated),
+						};
+					}));
+					this.mine = rows.filter(Boolean).sort((a, b) => b.updated - a.updated);
+				},
+
+				async loadPublic(db) {
+					let v = {};
+					try {
+						v = (await db.ref('study_index').orderByChild('updated').limitToLast(STUDIES_PUBLIC_MAX).once('value')).val() || {};
+					} catch (e) { v = {}; }
+					this.publicList = Object.keys(v).map((sid) => ({
+						sid, title: v[sid].title || 'Study', updated: v[sid].updated || 0,
+						meta: 'by ' + (v[sid].ownerName || 'Player') + ' · ' + (v[sid].chapters || 1) + ((v[sid].chapters || 1) === 1 ? ' chapter' : ' chapters')
+							+ ' · ' + studiesWhen(v[sid].updated),
+					})).sort((a, b) => b.updated - a.updated);
+				},
+
+				async create() {
+					this.error = '';
+					if (!this.signedIn) return;
+					this.busy = true;
+					try {
+						const { sid } = await studyCreate(this._user, { title: this.newTitle || 'Untitled study', visibility: this.newVisibility });
+						window.location.href = 'analysis.html?study=' + encodeURIComponent(sid);
+					} catch (e) {
+						this.error = 'The study was not created: ' + ((e && e.message) || e);
+					} finally {
+						this.busy = false;
+					}
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>
