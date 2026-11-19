@@ -139,6 +139,7 @@ test('teams: the member count, requests, acceptance and roles', async () => {
 		'team_requests/reds/bob': { at: 5, message: 'hi' },
 	});
 	assert.strictEqual(await community.onTeamRequest(db, 'reds', 'bob', 10), 2);
+	assert.strictEqual(await get('team_request_index/bob/reds'), 10);
 	const r = await get('notifications/carol/teamreq-reds');
 	assert.deepStrictEqual([r.event, r.actor, r.teamName], ['request', 'bob', 'Reds']);
 	// Admitted by the leader.
@@ -216,6 +217,14 @@ test('team battles: scored games, the start, the result', async () => {
 	assert.deepStrictEqual(result.standings.map((s) => [s.team, s.score]), [['blues', 2], ['reds', 1]]);
 	const n = await get('notifications/alice/battle-tb1');
 	assert.deepStrictEqual([n.event, n.winner, n.winnerName], ['battle-end', 'blues', 'Blues']);
+	// A close that died part-way (claimed, never finished) is taken up again
+	// once its claim is old.
+	await db.ref('team_battles/tb3').set({ name: 'Stuck', host: 'reds', by: 'alice', created: 1, start: now - 5 * HOUR, end: now - 4 * HOUR, topN: 1,
+		teams: { reds: 'accepted', blues: 'accepted' }, startedAt: now - 5 * HOUR, closing: now + 2 * HOUR - 60000 });
+	assert.deepStrictEqual(await community.battleTick(db, now + 2 * HOUR, null), { started: 0, finished: 0 });
+	assert.deepStrictEqual(await community.battleTick(db, now + 2 * HOUR + 11 * 60000, null), { started: 0, finished: 1 });
+	assert.ok(await get('team_battles/tb3/finished'));
+	assert.ok(await get('team_battles/tb3/result'));
 	// A game that ended in time but was rated after the close still counts,
 	// and the result is rewritten.
 	assert.deepStrictEqual(await community.scoreGame(db, 'bob', 'g8', game('alice', 'win'), now + 3 * HOUR), [{ battle: 'tb1', team: 'blues', win: true }]);
@@ -268,6 +277,13 @@ test('disbanding a team, and deleting an account', async () => {
 		'team_members/blues/carol': { role: 'mod', joined: 5, by: 'carol' },
 		'teams/solo': { name: 'Solo', leader: 'alice', created: 1, open: true },
 		'team_members/solo/alice': { role: 'leader', joined: 1, by: 'alice' },
+		// Solo hosts a battle not yet started: it goes with the team.
+		'team_battles/solo-next': { name: 'Next', host: 'solo', by: 'alice', created: 1, start: now + HOUR, end: now + 3 * HOUR, topN: 3, teams: { solo: 'accepted', blues: 'invited' } },
+		// A request to a closed team, as onTeamRequest indexes it.
+		'teams/closed': { name: 'Closed', leader: 'dave', created: 1, open: false },
+		'team_members/closed/dave': { role: 'leader', joined: 1, by: 'dave' },
+		'team_requests/closed/alice': { at: 5, message: 'let me in' },
+		'team_request_index/alice/closed': 5,
 		'user_teams/alice': { blues: true, solo: true }, 'user_teams/bob/blues': true, 'user_teams/carol/blues': true,
 		'dm_convos/alice_bob': { a: 'alice', b: 'bob', at: 1 },
 		'dm_messages/alice_bob/m1': { from: 'alice', to: 'bob', text: 'hi', at: 1 },
@@ -290,11 +306,13 @@ test('disbanding a team, and deleting an account', async () => {
 	await db.ref().update(updates);
 	for (const p of ['dm_convos/alice_bob', 'dm_messages/alice_bob', 'dm_index/bob/alice_bob', 'dm_index/alice', 'blog_posts/b1', 'blog_comments/b1',
 		'dm_convos/alice_carol', 'dm_messages/alice_carol', 'dm_index/carol/alice_carol',
+		'team_battles/solo-next', 'team_requests/closed/alice', 'team_request_index/alice',
 		'notifications/alice', 'teams/solo', 'team_members/solo', 'user_teams/alice', 'team_members/blues/alice']) assert.strictEqual(await get(p), null, p);
 	// The moderator takes the team over.
 	assert.strictEqual(await get('teams/blues/leader'), 'carol');
 	assert.strictEqual(await get('team_members/blues/carol/role'), 'leader');
 	assert.ok(await get('dm_convos/bob_dave'));
+	assert.ok(await get('teams/closed'));
 	assert.ok(await get('blog_comments/b2/c1'));
 	assert.ok(await get('blog_posts/b2'));
 });

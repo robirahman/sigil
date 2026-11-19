@@ -37,6 +37,8 @@ const BATTLE_NOTIFY_MAX = 300;
 // A battle is closed this long after its end: games that ended in time are
 // still being recorded and rated (recordRoom waits, rateGame queues).
 const BATTLE_GRACE_MS = 10 * 60000;
+// A battleTick step not finished within this long is taken up again.
+const CLAIM_MS = 10 * 60000;
 
 const val = (db, p) => db.ref(p).once('value').then((s) => s.val());
 const human = (uid) => typeof uid === 'string' && uid !== '' && uid !== 'deleted' && !AI_UID.test(uid);
@@ -228,6 +230,8 @@ async function joinRunningBattles(db, tid, uid, joined, now) {
 }
 
 async function onTeamRequest(db, tid, uid, now, send) {
+	// Who asked where (server-only), for account deletion.
+	await db.ref('team_request_index/' + uid + '/' + tid).set(now);
 	const [team, name] = await Promise.all([val(db, 'teams/' + tid), val(db, 'users/' + uid + '/displayName')]);
 	if (!team) return 0;
 	let told = 0;
@@ -290,21 +294,32 @@ async function battleTick(db, now, send) {
 		if (!b || b.finished) continue;
 		const url = 'teams.html?battle=' + encodeURIComponent(bid);
 		if (now >= b.end + BATTLE_GRACE_MS) {
-			const claim = await db.ref('team_battles/' + bid + '/finished').transaction((cur) => (cur ? undefined : now));
-			if (!claim.committed) continue;
+			if (!(await claimStep(db, bid, 'closing', now))) continue;
 			const standings = await writeResult(db, bid, b, now);
 			await announceEnd(db, bid, b, standings, now, send, false);
+			await db.ref('team_battles/' + bid + '/finished').set(now);
 			out.finished++;
 		} else if (now >= b.start && now < b.end && !b.startedAt) {
-			const claim = await db.ref('team_battles/' + bid + '/startedAt').transaction((cur) => (cur ? undefined : now));
-			if (!claim.committed) continue;
+			if (!(await claimStep(db, bid, 'starting', now))) continue;
 			await ensureRoster(db, bid, b, now);
 			await tellBattleTeams(db, bid, b, { type: 'team', event: 'battle-start', battle: bid, name: cut(b.name, 80), at: now },
 				{ title: 'Team battle started', body: '“' + cut(b.name, 60) + '” is on: rated games against the other teams count.', url, tag: 'sigil-battle-' + bid }, send);
+			await db.ref('team_battles/' + bid + '/startedAt').set(now);
 			out.started++;
 		}
 	}
 	return out;
+}
+
+/**
+ * One tick's claim on a battle's start or close (team_battles/{id}/{step}):
+ * the step is marked done (startedAt, finished) only after its writes and
+ * notices, so a tick that fails part-way is retried by a later one once its
+ * claim is CLAIM_MS old.
+ */
+async function claimStep(db, bid, step, now) {
+	const res = await db.ref('team_battles/' + bid + '/' + step).transaction((cur) => (typeof cur === 'number' && cur > now - CLAIM_MS ? undefined : now));
+	return res.committed;
 }
 
 /**
@@ -371,7 +386,7 @@ async function scoreGame(db, uid, gameId, entry, now, send) {
 		});
 		if (!res.committed) continue;
 		scored.push({ battle: bid, team: me.team, win });
-		if (b.finished) {
+		if (b.finished || b.result) {
 			// Closed already: new final standings, and a new end notice if
 			// the winner changed.
 			const before = winnerOf(((await val(db, 'team_battles/' + bid + '/result')) || {}).standings);
@@ -441,19 +456,30 @@ async function disbandTeam(db, tid, uid, now) {
 	if (!team) throw Object.assign(new Error('No such team.'), { code: 'not-found' });
 	if (team.leader !== uid && admin !== true) throw Object.assign(new Error('Only the leader disbands a team.'), { code: 'permission-denied' });
 	const members = Object.keys((await val(db, 'team_members/' + tid)) || {});
-	const updates = {
+	const updates = {};
+	members.forEach((m) => { updates['user_teams/' + m + '/' + tid] = null; });
+	await teamRemoval(db, tid, now, updates);
+	await db.ref().update(updates);
+	return members.length;
+}
+
+/**
+ * Add to `updates` the removal of team `tid`: the team, its members,
+ * requests, bans, forum, and the battles it hosts that have not started.
+ * (The members' user_teams entries are the caller's.)
+ */
+async function teamRemoval(db, tid, now, updates) {
+	Object.assign(updates, {
 		['teams/' + tid]: null,
 		['team_members/' + tid]: null,
 		['team_requests/' + tid]: null,
 		['team_bans/' + tid]: null,
 		['forum_threads/team:' + tid]: null,
 		['forum_posts/team:' + tid]: null,
-	};
-	members.forEach((m) => { updates['user_teams/' + m + '/' + tid] = null; });
+	});
 	const hosted = await db.ref('team_battles').orderByChild('start').startAt(now).once('value');
 	hosted.forEach((c) => { if (c.val() && c.val().host === tid) updates['team_battles/' + c.key] = null; });
-	await db.ref().update(updates);
-	return members.length;
+	return updates;
 }
 
 // ---- Account deletion ----
@@ -496,20 +522,25 @@ async function deletionUpdates(db, uid, updates) {
 	});
 	for (const tid of Object.keys(teams || {})) {
 		const [team, members] = await Promise.all([val(db, 'teams/' + tid), val(db, 'team_members/' + tid)]);
-		updates['team_members/' + tid + '/' + uid] = null;
-		if (!team || team.leader !== uid) continue;
 		const rest = Object.keys(members || {}).filter((m) => m !== uid)
 			.sort((a, b) => ((members[b].role === 'mod') - (members[a].role === 'mod')) || ((members[a].joined || 0) - (members[b].joined || 0)));
-		if (rest.length) {
+		if (team && !rest.length) {
+			// The last member: the team goes, as if disbanded.
+			await teamRemoval(db, tid, Date.now(), updates);
+			continue;
+		}
+		updates['team_members/' + tid + '/' + uid] = null;
+		if (team && team.leader === uid) {
 			updates['teams/' + tid + '/leader'] = rest[0];
 			updates['team_members/' + tid + '/' + rest[0] + '/role'] = 'leader';
-		} else {
-			Object.assign(updates, {
-				['teams/' + tid]: null, ['team_requests/' + tid]: null, ['team_bans/' + tid]: null,
-				['forum_threads/team:' + tid]: null, ['forum_posts/team:' + tid]: null,
-			});
 		}
 	}
+	// Requests to join closed teams (team_request_index, kept by onTeamRequest).
+	const asked = (await val(db, 'team_request_index/' + uid)) || {};
+	Object.keys(asked).forEach((tid) => {
+		if (updates['team_requests/' + tid] !== null) updates['team_requests/' + tid + '/' + uid] = null;
+	});
+	updates['team_request_index/' + uid] = null;
 	return updates;
 }
 
