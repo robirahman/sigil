@@ -3117,8 +3117,10 @@ document.addEventListener('alpine:init', () => {
 						const slimTurns = slimGameLog(gameTurns);
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
+						// The record is public: a name the offensive-name filter refuses
+						// is written as 'Player' (AuthManager.publicName).
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
-						const humanName = isGuest ? 'Guest' : (aiLabel || _aiAuthManager.publicName || 'You');
+						const humanName = isGuest ? 'Guest' : ((aiLabel && AuthManager.nameAllowed(aiLabel) ? aiLabel : null) || _aiAuthManager.publicName || 'You');
 						const aiName = difficulty ? _aiNameFor(difficulty) : humanName;
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param
