@@ -606,8 +606,11 @@
 					const offenses = f.offenses || {};
 					return r && r.rooms ? Object.keys(r.rooms).map((room) => Object.assign({ room, kind: r.rooms[room] }, offenses[room] || {})) : [];
 				},
+				// The appeal of this suspension, or one still open for an earlier
+				// one (the rules take one open appeal at a time).
 				get appealForBan() {
-					return this.appeal && this.flags && this.appeal.banAt === this.flags.at ? this.appeal : null;
+					const a = this.appeal;
+					return a && this.flags && (a.banAt === this.flags.at || a.status === 'open') ? a : null;
 				},
 				get canAppeal() { return this.banActive && typeof this.flags.at === 'number' && !this.isOffline; },
 				// An appeal decided in the last 30 days, shown once the suspension is over.

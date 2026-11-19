@@ -214,7 +214,7 @@
 										<template x-if="banned(a.uid)"><strong x-text="'Suspended ' + banText(a.uid) + (flagsOf(a.uid).auto === true ? ' (automatic)' : '')"></strong></template>
 										<template x-if="!banned(a.uid)"><span>No suspension running now.</span></template>
 										<span x-show="flagsOf(a.uid).reason" x-text="' ' + flagsOf(a.uid).reason"></span>
-										<span x-show="a.banAt !== flagsOf(a.uid).at && a.status === 'open'"> (the suspension appealed has since been changed)</span>
+										<template x-if="staleAppeal(a)"><strong> The suspension appealed has since been replaced: this appeal can only be closed, and the player may then appeal the new one.</strong></template>
 									</p>
 									<template x-if="restrictionGames(a.uid).length">
 										<ul class="report-card__games">
@@ -230,7 +230,10 @@
 									<template x-if="a.status === 'open'">
 										<div>
 											<textarea rows="2" maxlength="1000" placeholder="Note to the player (shown on their account page)" x-model="appealNotes[a.uid]" data-testid="appeal-note"></textarea>
-											<div class="report-card__controls">
+											<div class="report-card__controls" x-show="staleAppeal(a)">
+												<button class="admin__btn" x-on:click="decideAppeal(a, 'kept')" x-bind:disabled="busy" data-testid="appeal-close">Close this appeal</button>
+											</div>
+											<div class="report-card__controls" x-show="!staleAppeal(a)">
 												<button class="admin__btn" x-on:click="decideAppeal(a, 'lifted')" x-bind:disabled="busy" data-testid="appeal-lift">Lift suspension</button>
 												<label x-show="flagsOf(a.uid).auto === true"><input type="checkbox" x-model="appealForgive[a.uid]" /> forgive its games</label>
 												<button class="admin__btn" x-on:click="decideAppeal(a, 'kept')" x-bind:disabled="busy" data-testid="appeal-keep">Keep</button>
@@ -575,13 +578,29 @@
 					}));
 				},
 
+				// An open appeal of a suspension since replaced (another offense,
+				// an admin): deciding it must not touch the new one.
+				staleAppeal(a) { return a.status === 'open' && a.banAt !== this.flagsOf(a.uid).at; },
+
 				// One atomic write: the appeal's decision, and the suspension
 				// lifted (an automatic one overturned, its games forgiven when
-				// ticked), kept, or extended from its current end.
+				// ticked), kept, or extended from its current end. A stale
+				// appeal is only closed (the rules refuse anything else).
 				decideAppeal(a, status) {
 					const TS = firebase.database.ServerValue.TIMESTAMP;
 					const uid = a.uid;
 					const f = this.flagsOf(uid);
+					if (this.staleAppeal(a) && status !== 'kept') {
+						this.error = 'That suspension has been replaced since the appeal: close the appeal instead.';
+						return Promise.resolve();
+					}
+					if (this.staleAppeal(a)) {
+						const ap = 'appeals/' + uid + '/';
+						const note = (this.appealNotes[uid] || '').trim().slice(0, 1000)
+							|| 'This suspension was replaced by a later one before the appeal was decided.';
+						return this._write((db) => db.ref().update({ [ap + 'status']: 'kept', [ap + 'adminNote']: note,
+							[ap + 'resolvedBy']: this.uid, [ap + 'resolvedAt']: TS }));
+					}
 					const ap = 'appeals/' + uid + '/';
 					const fl = 'user_flags/' + uid + '/';
 					const note = (this.appealNotes[uid] || '').trim().slice(0, 1000);

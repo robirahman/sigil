@@ -701,8 +701,12 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 	const ban = { banUntil: Date.now() + 86400000, reason: 'engine use', by: 'root1', at: serverTimestamp() };
 	await assertFails(set(ref(db('bob'), 'user_flags/bob'), ban));
 	await assertFails(set(ref(db('alice'), 'user_flags/bob'), ban));
-	await assertFails(set(ref(db('root1'), 'user_flags/bob'), Object.assign({}, ban, { by: 'alice' })));
-	await assertSucceeds(set(ref(db('root1'), 'user_flags/bob'), ban));
+	await assertFails(update(ref(db('root1'), 'user_flags/bob'), Object.assign({}, ban, { by: 'alice' })));
+	await assertSucceeds(update(ref(db('root1'), 'user_flags/bob'), ban));
+	// Field by field: an admin cannot replace or delete the whole record
+	// (it holds the server's count of abandoned and stalled games).
+	await assertFails(set(ref(db('root1'), 'user_flags/bob'), ban));
+	await assertFails(remove(ref(db('root1'), 'user_flags/bob')));
 	// Only the player and admins see it; the player cannot lift it.
 	await assertSucceeds(get(ref(db('bob'), 'user_flags/bob')));
 	await assertFails(get(ref(db('alice'), 'user_flags/bob')));
@@ -773,7 +777,14 @@ test('automatic suspensions: the record is the server\'s; admins forgive offense
 	await assertFails(set(ref(db('root1'), 'user_flags/bob/restrictions/R9'), { at: t0, until: t0, level: 1 }));
 	await assertFails(set(ref(db('root1'), 'user_flags/bob/restrictions/R2/level'), 3));
 	await assertFails(set(ref(db('root1'), 'user_flags/bob/auto'), true));
-	await assertFails(set(ref(db('root1'), 'user_flags/bob/stalls'), -1));
+	await assertFails(set(ref(db('root1'), 'user_flags/bob/stalls'), 0));
+	await assertFails(set(ref(db('root1'), 'user_flags/bob/abandons'), 0));
+	// ... nor delete one (.validate does not run on a delete: no write is granted there).
+	await assertFails(remove(ref(db('root1'), 'user_flags/bob/offenses/R1')));
+	await assertFails(remove(ref(db('root1'), 'user_flags/bob/offenses')));
+	await assertFails(remove(ref(db('root1'), 'user_flags/bob/restrictions/R2')));
+	await assertFails(update(ref(db('root1'), 'user_flags/bob'), { offenses: null }));
+	await assertFails(set(ref(db('root1'), 'user_flags/bob'), { banUntil: 0 }));
 	// ... but forgives one, overturns a suspension, and lifts it (clearing `auto`).
 	await assertSucceeds(update(ref(db('root1')), {
 		'user_flags/bob/offenses/R1/forgiven': true,
@@ -832,6 +843,12 @@ test('appeals: one per suspension, filed by the suspended player, decided once b
 	await assertFails(set(ref(db('bob'), 'appeals/bob'), appeal()));
 	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'user_flags/bob'), { banUntil: Date.now() + 86400000, at: at + 5000 }));
 	await assertSucceeds(set(ref(db('bob'), 'appeals/bob'), appeal({ banAt: at + 5000 })));
+	// A suspension replaced while its appeal waits (another offense, an
+	// admin): the appeal can only be closed, not lift or extend the new one.
+	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'user_flags/bob'), { banUntil: Date.now() + 3 * 86400000, at: at + 9000 }));
+	await assertFails(decide('root1', { until: 0 }));
+	await assertFails(decide('root1', { status: 'extended', until: Date.now() + 9 * 86400000 }));
+	await assertSucceeds(decide('root1', { status: 'kept' }));
 });
 
 test('fair-play scan reports: read by admins only, written by nobody here', async () => {

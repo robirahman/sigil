@@ -5,7 +5,8 @@
 //   2. A player with one offense in the window sees where they stand.
 //   3. An admin finds the appeal in admin.html's queue with the games, lifts
 //      the suspension and forgives its games; the player sees the decision.
-//   4. An admin's own suspension appealed and extended from its end.
+//   4. An admin's own suspension appealed and extended from its end; an
+//      appeal whose suspension was replaced meanwhile can only be closed.
 //   5. The Engine scan tab shows the latest fairplay_reports/ report, and a
 //      report file opened in the browser.
 //
@@ -81,7 +82,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 	if (put.status !== 200) throw new Error('rules upload: ' + put.status + ' ' + await put.text());
 
 	const stamp = Date.now();
-	const who = ['bob', 'carol', 'dave', 'root'];
+	const who = ['bob', 'carol', 'dave', 'erin', 'root'];
 	const emails = Object.fromEntries(who.map((k) => [k, `fpp${k}${stamp}@example.com`]));
 	const uid = {};
 	for (const k of who) uid[k] = await signUp(emails[k]);
@@ -101,6 +102,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 		['users/' + uid.carol]: profile('Carol'),
 		['users/' + uid.dave]: profile('Dave'),
 		['users/' + uid.root]: profile('Root'),
+		['users/' + uid.erin]: profile('Erin'),
 		['admins/' + uid.root]: true,
 		['user_flags/' + uid.bob]: bobFlags,
 		// Carol: one abandonment this week, no suspension.
@@ -219,6 +221,31 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 		await visible(pd, '[data-testid="appeal-status"]');
 		check('the player sees the extension', /refused and the suspension extended until/.test(await text(pd, '[data-testid="appeal-status"]')));
 		check('... and cannot appeal it again', await pd.evaluate(() => !document.querySelector('[data-testid="appeal-open"]')));
+
+		// Erin appealed a suspension that a later offense replaced before the decision.
+		await rest('PATCH', '', {
+			['appeals/' + uid.erin]: { banAt: now - 7200000, text: 'Please look again.', at: now - 3600000, status: 'open' },
+		});
+		const erinFlags = { banUntil: now + 3 * DAY, reason: 'Automatic: second', auto: true, by: 'auto', at: now - 60000 };
+		await rest('PUT', 'user_flags/' + uid.erin, erinFlags);
+		await pr.reload({ waitUntil: 'load' });
+		await waitIn(pr, () => !!document.querySelector('[data-testid="tab-appeals"]'));
+		await pr.click('[data-testid="tab-appeals"]');
+		await waitIn(pr, () => [...document.querySelectorAll('[data-testid="appeal-card"]')].some((c) => /Please look again/.test(c.textContent)));
+		const stale = await pr.evaluate(() => {
+			const c = [...document.querySelectorAll('[data-testid="appeal-card"]')].find((x) => /Please look again/.test(x.textContent));
+			const shown = (sel) => { const b = c.querySelector(sel); return !!(b && b.offsetParent !== null); };
+			return { text: c.textContent.replace(/\s+/g, ' '), close: shown('[data-testid="appeal-close"]'), lift: shown('[data-testid="appeal-lift"]'), extend: shown('[data-testid="appeal-extend"]') };
+		});
+		check('a replaced suspension\'s appeal can only be closed', stale.close && !stale.lift && !stale.extend && /has since been replaced/.test(stale.text), stale);
+		await pr.evaluate(() => {
+			const c = [...document.querySelectorAll('[data-testid="appeal-card"]')].find((x) => /Please look again/.test(x.textContent));
+			c.querySelector('[data-testid="appeal-close"]').click();
+		});
+		const eAppeal = await poll(async () => { const a = await rest('GET', 'appeals/' + uid.erin); return a && a.status !== 'open' ? a : null; });
+		const eFlags = await rest('GET', 'user_flags/' + uid.erin);
+		check('... closed, the new suspension untouched', eAppeal && eAppeal.status === 'kept' && /replaced by a later one/.test(eAppeal.adminNote)
+			&& eFlags.banUntil === erinFlags.banUntil && eFlags.auto === true && eFlags.at === erinFlags.at, { eAppeal, eFlags });
 
 		// 5. The engine scan: the latest published report, then a file.
 		const report = (run, flag) => ({
