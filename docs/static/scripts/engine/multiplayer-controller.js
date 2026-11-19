@@ -464,8 +464,10 @@ class MultiplayerController {
 		this._emitSfn();
 		await this._delay(500);
 		// A forfeit, flag or abort while the game was being rebuilt has
-		// ended it (and said so) already.
-		if (this.board.gameover) return;
+		// ended it (and said so) already. Not a position that is itself an
+		// end (a reload after the last turn, before the result was written):
+		// the loop announces and records that one.
+		if (this._endedByRoom()) return;
 		this._runGameLoop();
 	}
 
@@ -495,8 +497,8 @@ class MultiplayerController {
 		if (!turns.length || typeof replayRoomHistory !== 'function') return;
 		const h = await replayRoomHistory(this.spellNames, variant, (this.sync && this.sync.startSfn) || null,
 			turns, boardToSfn(this.board), 'Controller');
-		// A forfeit or a flag may have ended the game meanwhile.
-		if (!h || this.board.gameover) return;
+		// A forfeit, flag or abort may have ended the game meanwhile.
+		if (!h || this._endedByRoom()) return;
 		if (h.behind) {
 			this.board.loadFromSfn(h.sfn);
 			this.emit(this.board.getBoardStatePayload());
@@ -508,6 +510,11 @@ class MultiplayerController {
 		})).concat(this._gameLog);
 		this._unseenTurns = 0;
 		this.emit({ type: 'history', sfns: h.sfns });
+	}
+
+	/** The game was ended by the room (a forfeit, a flag, an abandonment, an abort), not on this board. */
+	_endedByRoom() {
+		return !!(this._forfeitHandled || this._timedOut || this._aborted);
 	}
 
 	/**

@@ -24,6 +24,8 @@
  *      game here, on the reference's final position, with nothing written.
  *   5. A modified client closes the room with a win its moves do not show:
  *      the board does not take it, and says the server will judge it.
+ *   6. A reload onto a position that is itself an end (after the last turn,
+ *      before the result was written): the game ends and is recorded.
  */
 'use strict';
 const fs = require('fs');
@@ -208,6 +210,16 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	await until(() => said(forged, /result the moves do not show/), 'the notice');
 	check(!over(forged) && !forged.board.gameover, 'a forged close: the board does not take the result');
 	check(warnings.some((w) => /\[Controller\].*moves do not show/.test(w)) && forged.sync.final === null, 'it is warned of, and nothing is written', warnings);
+
+	// 6. Blue's stones all gone in the room's position (the winning turn is
+	// not among the turns the stub replays: the board keeps that position).
+	warnings.length = 0;
+	const parts = after[5].split(' ');
+	const ended = [parts[0].replace(/^[^/]*/, (st) => st.replace(/b/g, '.'))].concat(parts.slice(1)).join(' ');
+	const last = await open('red', [], ended);
+	await until(() => over(last), 'the loaded end');
+	check(over(last).winner === 'red' && last.sync.final && last.sync.final.winner === 'red', 'a reload onto an ended position: the game ends and is recorded',
+		{ winner: over(last).winner, final: !!last.sync.final });
 
 	process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('TEST FAILED:', e && e.stack || e); process.exit(1); });
