@@ -691,12 +691,15 @@ function applyResult(S, pid, res, room, now) {
  * is past NOSHOW_MS: aborted here (no result, no rating). Returns the
  * no-show's colour, or null when the room was not aborted.
  */
-async function abortNoShow(db, code, color, now) {
+async function abortNoShow(db, code, color, now, unlessLive) {
 	const ref = db.ref('rooms/' + code);
 	const res = await ref.transaction((r) => {
 		if (r === null) return null;
 		if (r.status !== 'playing') return undefined;
 		if (roomTurns(r).length >= 2 || sideToMove(r) !== color) return undefined;
+		// A simul host who came back since the sweep read the room keeps it.
+		const seat = r[color] || {};
+		if (unlessLive && (seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected === true)) return undefined;
 		return Object.assign(r, { status: 'aborted', abortedBy: color, endReason: 'noshow', closedAt: now, finishedAt: now });
 	});
 	const v = res.committed && res.snapshot.val();
@@ -746,7 +749,7 @@ async function sweepGames(S, now, full) {
 			if (typeof seat.disconnectedAt === 'number') since = Math.max(since, seat.disconnectedAt);
 		}
 		if (now - since < noShowMs(t)) continue;
-		const who = await abortNoShow(db, g.room, toMove, now);
+		const who = await abortNoShow(db, g.room, toMove, now, t.kind === 'simul' && room[toMove] && room[toMove].uid === t.host);
 		if (who) applyResult(S, pid, { noShow: who }, room, now);
 	}
 }
@@ -1084,26 +1087,37 @@ async function create(db, uid, input, ctx) {
 		return open;
 	}, undefined, false);
 	if (!lim.committed) fail('resource-exhausted', 'too-many-events');
-	const me = await profile(db, uid);
-	Object.assign(t, { createdBy: uid, createdByName: me.name, createdAt: now, status: 'created', nbPlayers: 0 });
-	if (t.kind === 'simul') Object.assign(t, { host: uid, hostName: me.name, hostRating: me.rating, startsAt: now });
-	const u = {
-		['tournaments/' + tid]: clean(t),
-		['tournament_active/' + tid]: true,
-		['user_tournaments/' + uid + '/' + tid]: { kind: t.kind, name: t.name, at: now, role: t.kind === 'simul' ? 'host' : 'creator' },
-	};
-	if (!t.private) u['tournament_index/' + tid] = indexEntry(t);
-	await db.ref().update(u);
-	// Deleted meanwhile (deleteUserData marks the account before it reads
-	// its events): its scrub may have missed this one, so it goes.
-	if (await isDeleted(db, uid)) {
-		const undo = {};
-		for (const k of Object.keys(u)) undo[k] = null;
-		undo['tournament_limits/' + uid + '/' + tid] = null;
-		await db.ref().update(undo);
-		fail('permission-denied', 'deleted');
+	// The reservation goes again if the event is not written.
+	const release = () => db.ref('tournament_limits/' + uid + '/' + tid).remove().catch(() => {});
+	try {
+		await writeEvent();
+	} catch (e) {
+		await release();
+		throw e;
 	}
 	return { id: tid };
+
+	async function writeEvent() {
+		const me = await profile(db, uid);
+		Object.assign(t, { createdBy: uid, createdByName: me.name, createdAt: now, status: 'created', nbPlayers: 0 });
+		if (t.kind === 'simul') Object.assign(t, { host: uid, hostName: me.name, hostRating: me.rating, startsAt: now });
+		const u = {
+			['tournaments/' + tid]: clean(t),
+			['tournament_active/' + tid]: true,
+			['user_tournaments/' + uid + '/' + tid]: { kind: t.kind, name: t.name, at: now, role: t.kind === 'simul' ? 'host' : 'creator' },
+		};
+		if (!t.private) u['tournament_index/' + tid] = indexEntry(t);
+		await db.ref().update(u);
+		// Deleted meanwhile (deleteUserData marks the account before it reads
+		// its events): its scrub may have missed this one, so it goes.
+		if (await isDeleted(db, uid)) {
+			const undo = {};
+			for (const k of Object.keys(u)) undo[k] = null;
+			undo['tournament_limits/' + uid + '/' + tid] = null;
+			await db.ref().update(undo);
+			fail('permission-denied', 'deleted');
+		}
+	}
 }
 
 async function join(S, uid, now) {

@@ -492,3 +492,27 @@ test('a flag without a move is a no-show; a simul host gone that long forfeits t
 	const t = await val('tournaments/' + sid);
 	assert.deepStrictEqual([t.status, t.final], ['finished', true]);
 });
+
+test('an event that fails to be written gives its creator\'s reservation back; a host back in time keeps the board', async () => {
+	await addUsers({ a: 1000, h: 1000, x: 1000 });
+	// The profile read fails: the reservation taken for the event goes again.
+	const orig = db.ref.bind(db);
+	db.ref = (path) => {
+		if (path === 'users/a') throw new Error('transient');
+		return orig(path);
+	};
+	try {
+		await assert.rejects(T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Unlucky', untimed: true } }, { admin: false, now: Date.now() }), /transient/);
+	} finally {
+		db.ref = orig;
+	}
+	assert.strictEqual(await val('tournament_limits/a'), null);
+	// A host whose seat is live again when the abort runs keeps the board.
+	const { id } = await T.act(db, 'h', { action: 'create', config: { kind: 'simul', name: 'Back in time', untimed: true } }, { admin: false, now: Date.now() });
+	await T.act(db, 'x', { action: 'join', id }, { admin: false, now: Date.now() });
+	await T.act(db, 'h', { action: 'start', id }, { admin: false, now: Date.now() });
+	const [g] = await openPairings(id);
+	await db.ref('rooms/' + g.room + '/red/conns/tab1').set(Date.now());
+	assert.strictEqual(await T.abortNoShow(db, g.room, 'red', Date.now(), true), null);
+	assert.strictEqual((await val('rooms/' + g.room)).status, 'playing');
+});
