@@ -511,6 +511,20 @@ async function save(S) {
 	S.dirtyT = false;
 	S.dirtyPlayers.clear();
 	S.dirtyPairings.clear();
+	// A repeat edition just written for a creator being deleted: the
+	// deletion's scrub may have read their events before this write, so the
+	// edition is cancelled here (deleteUserData marks the account first).
+	const next = S.newEdition;
+	S.newEdition = null;
+	if (next && S.t.createdBy && (await isDeleted(S.db, S.t.createdBy))) {
+		await S.db.ref().update({
+			['tournaments/' + next + '/status']: 'cancelled', ['tournaments/' + next + '/final']: true,
+			['tournaments/' + next + '/repeat']: null, ['tournaments/' + next + '/cancelReason']: 'creator-deleted',
+			['tournaments/' + next + '/createdByName']: DELETED_NAME,
+			['tournament_active/' + next]: null, ['tournament_index/' + next]: null,
+			['user_tournaments/' + S.t.createdBy + '/' + next]: null, ['tournament_limits/' + S.t.createdBy + '/' + next]: null,
+		});
+	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -809,6 +823,7 @@ function repeatEvent(S, now) {
 	if (t.kind === 'arena') Object.assign(next, { durationMs: t.durationMs, endsAt: startsAt + t.durationMs, berserk: !!t.berserk });
 	if (t.kind === 'swiss') Object.assign(next, { rounds: t.rounds, roundGapMs: t.roundGapMs, round: 0 });
 	t.repeatedTo = tid;
+	S.newEdition = tid;
 	S.extra['tournaments/' + tid] = clean(next);
 	S.extra['tournament_active/' + tid] = true;
 	// As create() does: the creator's events list, and their open count.
@@ -1016,6 +1031,7 @@ async function advance(db, tid, now, opts) {
 
 /** Every event not over yet (the minute tick). */
 async function tick(db, now) {
+	await retryScrubs(db).catch(() => 0);
 	const snap = await db.ref('tournament_active').once('value');
 	const ids = Object.keys(snap.val() || {});
 	let n = 0;
@@ -1289,20 +1305,47 @@ async function scrubUser(db, uid, updates) {
 	updates['tournament_limits/' + uid] = null;
 	for (const tid of Object.keys(mine)) {
 		if (!/^[A-Za-z0-9_-]{1,40}$/.test(tid)) continue;
-		// Best effort per event: a busy event must not fail the deletion (the
-		// pairing skips deleted accounts either way).
+		// An event busy for long must not fail the deletion: it is queued
+		// (tournament_scrubs, server-only) and the minute tick retries it.
+		// The pairing skips deleted accounts meanwhile.
+		if (!(await scrubEvent(db, uid, tid, 30000))) updates['tournament_scrubs/' + uid + '/' + tid] = Date.now();
+	}
+}
+
+/** One event's scrub under its lock; false when the event stayed busy. */
+async function scrubEvent(db, uid, tid, waitMs) {
+	try {
 		await withLock(db, tid, async (guard) => {
 			const S = await load(db, tid);
 			if (!S) return;
 			S.guard = guard;
 			await scrubInEvent(S, uid);
 			await save(S);
-		}, 30000).catch((e) => { console.warn('scrubUser', tid, String((e && e.message) || e)); });
+		}, waitMs);
+		return true;
+	} catch (e) {
+		console.warn('scrubEvent', tid, String((e && e.message) || e));
+		return false;
 	}
+}
+
+/** The scrubs a busy event put off (scrubUser), retried by the tick. */
+async function retryScrubs(db) {
+	const pending = (await db.ref('tournament_scrubs').once('value')).val() || {};
+	let done = 0;
+	for (const [uid, tids] of Object.entries(pending)) {
+		for (const tid of Object.keys(tids || {})) {
+			if (await scrubEvent(db, uid, tid, 3000)) {
+				await db.ref('tournament_scrubs/' + uid + '/' + tid).remove();
+				done++;
+			}
+		}
+	}
+	return done;
 }
 
 module.exports = {
 	KINDS, LIMITS, NOSHOW_MS, noShowMs, BERSERK_MIN_TURNS, PRESENCE_GRACE_MS, REMATCH_WAIT_MS, TournamentError,
 	validateCreate, arenaPoints, performance, arenaCompare, assignColors, pairArena, swissPair, swissStandings,
-	withLock, load, save, step, advance, tick, onRoomEnded, act, abortNoShow, scrubUser,
+	withLock, load, save, step, advance, tick, onRoomEnded, act, abortNoShow, scrubUser, retryScrubs,
 };

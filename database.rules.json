@@ -659,6 +659,10 @@
       ".read": false,
       ".write": false
     },
+    "tournament_scrubs": {
+      ".read": false,
+      ".write": false
+    },
     "tournament_limits": {
       "$uid": {
         ".read": "auth !== null && auth.uid === $uid"

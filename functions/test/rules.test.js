@@ -951,6 +951,8 @@ test('tournaments: events, players, pairings and limits are the server\'s; prese
 	await assertFails(get(ref(db('alice'), 'tournaments')));
 	await assertFails(get(ref(db('alice'), 'tournament_active')));
 	await assertFails(get(ref(db('alice'), 'tournament_locks/t1')));
+	await assertFails(get(ref(db('alice'), 'tournament_scrubs/alice')));
+	await assertFails(set(ref(db('alice'), 'tournament_scrubs/alice/t1'), 1));
 	await assertSucceeds(get(ref(db('alice'), 'tournament_limits/alice')));
 	await assertFails(get(ref(db('bob'), 'tournament_limits/alice')));
 	// No client writes a result, a pairing, a score or an event.

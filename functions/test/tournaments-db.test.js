@@ -516,3 +516,35 @@ test('an event that fails to be written gives its creator\'s reservation back; a
 	assert.strictEqual(await T.abortNoShow(db, g.room, 'red', Date.now(), true), null);
 	assert.strictEqual((await val('rooms/' + g.room)).status, 'playing');
 });
+
+test('a scrub put off by a busy event is retried; an edition made during a deletion is cancelled', async () => {
+	await addUsers({ a: 1000, b: 1000, adm: 1000 });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'arena', name: 'Busy', minutes: 3, durationMin: 30,
+		startsAt: Date.now() } }, { admin: false, now: Date.now() });
+	for (const u of ['a', 'b']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
+	// Another writer holds the event for a long time.
+	await db.ref('tournament_locks/' + id).set({ by: 'busy-writer', until: Date.now() + 60000 });
+	await db.ref('deleted_users/a').set(Date.now());
+	const updates = {};
+	const orig = T.scrubUser;
+	await orig(db, 'a', updates).catch(() => {});
+	assert.ok(updates['tournament_scrubs/a/' + id], 'queued');
+	await db.ref().update(updates);
+	assert.strictEqual((await val('tournament_players/' + id + '/a')).name, 'A');
+	await db.ref('tournament_locks/' + id).remove();
+	assert.strictEqual(await T.retryScrubs(db), 1);
+	assert.strictEqual((await val('tournament_players/' + id + '/a')).name, 'Deleted player');
+	assert.strictEqual(await val('tournament_scrubs/a'), null);
+	// A daily arena of a creator marked deleted finishes: its next edition is cancelled.
+	const { id: rid } = await T.act(db, 'adm', { action: 'create', config: { kind: 'arena', name: 'Racing series', minutes: 3, durationMin: 10,
+		startsAt: Date.now() + 3600e3, repeat: 'daily' } }, { admin: true, now: Date.now() });
+	await db.ref('deleted_users/adm').set(Date.now());
+	const t0 = await val('tournaments/' + rid);
+	await T.advance(db, rid, t0.startsAt + 1);
+	await T.advance(db, rid, t0.endsAt + 1);
+	const next = (await val('tournaments/' + rid)).repeatedTo;
+	assert.ok(next);
+	const n = await val('tournaments/' + next);
+	assert.deepStrictEqual([n.status, n.final, n.repeat, n.cancelReason], ['cancelled', true, undefined, 'creator-deleted']);
+	assert.deepStrictEqual([await val('tournament_active/' + next), await val('tournament_index/' + next), await val('user_tournaments/adm/' + next)], [null, null, null]);
+});
