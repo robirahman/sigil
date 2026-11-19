@@ -93,6 +93,8 @@ const UNRATED_REASON_TEXT = {
 	'room-result-mismatch': 'the game record did not match its room.',
 	'same-player': 'both sides were played by one account.',
 	'suspended': 'a player in this game is suspended from rated play.',
+	'bot-opt-in': 'a game against a bot is rated only when the human chose a rated challenge.',
+	'bot-vs-ai': 'a bot account is never rated against the site AI.',
 };
 
 /** "Unrated: <why>" for a reason code. */

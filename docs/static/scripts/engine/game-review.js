@@ -1171,6 +1171,11 @@ function recordEnding(rec) {
  *            allLoopingSnapshotCounts hold the threefold-repetition counts of
  *            every turn-start position (a spectator joining mid-game seeds
  *            its own board with them).
+ *   strict — the transcript's LAST turn is a new turn to check, not a
+ *            record (the bot API, functions/turn-check.js): it is played the
+ *            way live play plays a click (not legacyReplay), and it must use
+ *            every one of its input tokens, or the replay throws. Earlier
+ *            turns replay as recorded.
  */
 async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
@@ -1201,7 +1206,9 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const wasInstant = AI_REPLAY_INSTANT;
 	AI_REPLAY_INSTANT = paceMs === 0;
 	try {
+		const strictTurn = (opts && opts.strict) ? turns[turns.length - 1] : null;
 		for (const t of turns) {
+			gc.legacyReplay = t !== strictTurn;
 			board.takeSnapshot();
 			// Derive the counter from the transcript (not a blind ++): games
 			// exported after starting from an imported position begin at an
@@ -1268,6 +1275,9 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 					return queue.shift();
 				};
 				await gc._takeTurn(t.color, true, true, true, true);
+				if (t === strictTurn && queue.length) {
+					throw new Error('unused actions at turn ' + board.turnCounter + ': the turn ended before ' + JSON.stringify(queue[0]));
+				}
 			}
 
 			gc._eotTriggers(t.color);
