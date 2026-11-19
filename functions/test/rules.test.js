@@ -1013,6 +1013,7 @@ test('tournament rooms: no tie or extra time from a client; no abort, takeback o
 	await assertFails(set(ref(db('bob'), 'rooms/A3/takeback'), { by: 'blue', keys: { b1: true } }));
 	await assertFails(update(ref(db('alice'), 'rooms/A3'), { 'gifts/g1': { to: 'blue', ms: 15000, at: serverTimestamp() }, 'giftAt/red': { key: 'g1', at: serverTimestamp(), n: 1 } }));
 	await assertFails(update(ref(db('alice'), 'rooms/A1'), { abortedBy: 'red', status: 'aborted' }));
+	await assertFails(set(ref(db('alice'), 'rooms/A1/abortedBy'), 'red'));
 	await assertSucceeds(update(ref(db('alice'), 'rooms/N1'), { abortedBy: 'red', status: 'aborted' }));
 	// A resignation finishes a tournament room as any other.
 	await assertSucceeds(update(ref(db('bob'), 'rooms/A3'), { forfeitedBy: 'blue', finishedBy: 'blue', winner: 'red' }));

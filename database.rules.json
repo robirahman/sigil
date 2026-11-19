@@ -238,7 +238,7 @@
           ".validate": "newData.val() === now"
         },
         "abortedBy": {
-          ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
+          ".write": "auth !== null && !data.exists() && !root.child('rooms/' + $roomId + '/tournament').exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
         },
         "startedAt": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",

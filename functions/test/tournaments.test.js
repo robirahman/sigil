@@ -149,3 +149,9 @@ test('settings: players make casual events within limits; admins rated, official
 	// One Core sub-pack has one spell of each size: not enough for a board.
 	bad({ kind: 'arena', name: 'Arena', minutes: 3, durationMin: 30, startsAt: NOW, packs: ['core_growth'] }, false, 'packs');
 });
+
+test('the first-move window: at most half a short clock', () => {
+	const t = (kind, minutes) => ({ kind, timeControl: minutes ? { type: 'realtime', initialTime: minutes * 60000 } : { type: 'none' } });
+	assert.deepStrictEqual([T.noShowMs(t('arena', 1)), T.noShowMs(t('arena', 3)), T.noShowMs(t('swiss', 1)), T.noShowMs(t('swiss', 10)),
+		T.noShowMs(t('simul', 1)), T.noShowMs(t('simul', 0))], [30000, 45000, 30000, 90000, 30000, 300000]);
+});

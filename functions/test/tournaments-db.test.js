@@ -263,8 +263,10 @@ test('a simul: the host against every opponent, extra time, one layout', async (
 	}
 	// Joining after the start is refused.
 	await assert.rejects(T.act(db, 'z', { action: 'join', id }, { admin: false, now: Date.now() }), (e) => e.message === 'closed');
-	// The host's own slow first moves are no no-show; an opponent who
-	// moves first must.
+	// The host's own slow first moves are no no-show while the host is
+	// there (the simul pages hold their seat on every board); an opponent
+	// who moves first must.
+	for (const g of open) await db.ref('rooms/' + g.room + '/' + (g.red === 'h' ? 'red' : 'blue') + '/conns/tab1').set(Date.now());
 	const oppRed = open.find((g) => g.red !== 'h');
 	await useFixture(oppRed.room);
 	await playTurns(oppRed.room, ONLINE.turns.slice(0, 1));
@@ -392,6 +394,8 @@ test('cancelling a running event aborts its open games and frees their players',
 	// A private event: its games are not on Watch Live (live_rooms), nor is it listed.
 	for (const g of open) assert.strictEqual(await val('live_rooms/' + g.room), null);
 	assert.strictEqual(await val('tournament_index/' + id), null);
+	// A planted abortedBy (the rules refuse it now) must not make the cancel a forfeit.
+	await db.ref('rooms/' + open[1].room + '/abortedBy').set('red');
 	// One game ends just before the cancel: it keeps its result.
 	await resign(open[0].room, open[0].red === 'a' ? 'blue' : 'red');
 	await T.act(db, 'a', { action: 'cancel', id }, { admin: false, now: Date.now() });
@@ -458,4 +462,33 @@ test('a deleted player frees their seat before the start; a simul without its ho
 	assert.deepStrictEqual([t.status, t.final, t.hostName, t.cancelReason], ['cancelled', true, 'Deleted player', 'host-deleted']);
 	assert.strictEqual(await val('tournament_active/' + id), null);
 	assert.strictEqual((await val('tournament_index/' + id)).status, 'cancelled');
+});
+
+test('a flag without a move is a no-show; a simul host gone that long forfeits the board', async () => {
+	await addUsers({ a: 1200, b: 1100, h: 1500, x: 1000 });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'swiss', name: 'Bullet Swiss', minutes: 1, rounds: 3,
+		roundGapSec: 0, startsAt: Date.now() + 3600e3 } }, { admin: false, now: Date.now() });
+	for (const u of ['a', 'b']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
+	await T.act(db, 'a', { action: 'start', id }, { admin: false, now: Date.now() });
+	const [g] = await openPairings(id);
+	// Red never moved and its minute ran out before any sweep: blue claims the flag.
+	await db.ref('rooms/' + g.room + '/startedAt').set(Date.now() - 70000);
+	await db.ref('rooms/' + g.room).update({ finishedBy: 'blue', winner: 'blue', endReason: 'time' });
+	await db.ref('rooms/' + g.room).update({ status: 'finished', closedAt: ServerValue.TIMESTAMP });
+	const scored = await T.onRoomEnded(db, g.room, Date.now());
+	assert.deepStrictEqual([scored.status, scored.winner, scored.how], ['done', 'blue', 'noshow']);
+	assert.strictEqual((await val('tournament_players/' + id + '/' + g.red)).withdrawn, true);
+	// An untimed simul: the host's seat went offline before their first move.
+	const { id: sid } = await T.act(db, 'h', { action: 'create', config: { kind: 'simul', name: 'Absent host', untimed: true } }, { admin: false, now: Date.now() });
+	await T.act(db, 'x', { action: 'join', id: sid }, { admin: false, now: Date.now() });
+	await T.act(db, 'h', { action: 'start', id: sid }, { admin: false, now: Date.now() });
+	const [sg] = await openPairings(sid);
+	await db.ref('rooms/' + sg.room + '/red').update({ connected: false, disconnectedAt: Date.now() });
+	await T.advance(db, sid, Date.now() + 60000);
+	assert.strictEqual((await val('rooms/' + sg.room)).status, 'playing');
+	await T.advance(db, sid, Date.now() + T.NOSHOW_MS.simul + 1000);
+	const r = await val('rooms/' + sg.room);
+	assert.deepStrictEqual([r.status, r.abortedBy, r.endReason], ['aborted', 'red', 'noshow']);
+	const t = await val('tournaments/' + sid);
+	assert.deepStrictEqual([t.status, t.final], ['finished', true]);
 });

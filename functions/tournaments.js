@@ -377,6 +377,34 @@ function ownTurns(room, color) {
 	return roomTurns(room).filter((t) => t && t.color === color).length;
 }
 
+/**
+ * How long a player has for their first move: NOSHOW_MS, but at most half
+ * the initial time, so a short clock never runs out first (a flag without
+ * a move is a no-show anyway: scoreOf).
+ */
+function noShowMs(t) {
+	const base = NOSHOW_MS[t.kind];
+	const tc = t.timeControl || {};
+	if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return base;
+	return Math.min(base, Math.max(15000, Math.floor(tc.initialTime / 2)));
+}
+
+/**
+ * What an ended tournament room scores: rating.js roomResult's verdict on a
+ * finished room, except that a loss on time by a player who never moved is
+ * a no-show (their clock beat the sweep); an abort before both first moves
+ * is the no-show of its abortedBy. null for an abort after both moved
+ * (index.js settleAbort finishes it as a forfeit).
+ */
+async function scoreOf(room) {
+	if (room.status === 'aborted') return roomTurns(room).length < 2 ? { noShow: room.abortedBy === 'blue' ? 'blue' : 'red' } : null;
+	const res = await roomResult(freshEngine(), room);
+	if (res.winner && !res.overturned && room.endReason === 'time' && !room.forfeitedBy && ownTurns(room, other(res.winner)) === 0) {
+		return { noShow: other(res.winner), flagged: true };
+	}
+	return res;
+}
+
 /* ------------------------------------------------------------------ */
 /* The lock and the state                                              */
 /* ------------------------------------------------------------------ */
@@ -694,12 +722,9 @@ async function sweepGames(S, now, full) {
 			applyResult(S, pid, { reason: 'no-room' }, null, now);
 			continue;
 		}
-		if (room.status === 'finished') {
-			applyResult(S, pid, await roomResult(freshEngine(), room), room, now);
-			continue;
-		}
-		if (room.status === 'aborted') {
-			if (roomTurns(room).length < 2) applyResult(S, pid, { noShow: room.abortedBy }, room, now);
+		if (room.status === 'finished' || room.status === 'aborted') {
+			const res = await scoreOf(room);
+			if (res) applyResult(S, pid, res, room, now);
 			continue;
 		}
 		if (room.status !== 'playing') continue;
@@ -710,10 +735,17 @@ async function sweepGames(S, now, full) {
 			continue;
 		}
 		const toMove = sideToMove(room);
-		// A simul's host may take their time over the first moves.
-		if (t.kind === 'simul' && room[toMove] && room[toMove].uid === t.host) continue;
-		const since = turns.length ? turns[0].timestamp : room.startedAt;
-		if (typeof since !== 'number' || now - since < NOSHOW_MS[t.kind]) continue;
+		let since = turns.length ? turns[0].timestamp : room.startedAt;
+		if (typeof since !== 'number') continue;
+		// A simul's host may take their time over the first moves while their
+		// seat is live (the simul pages hold it on every board); a host gone
+		// that long is a no-show on this board.
+		if (t.kind === 'simul' && room[toMove] && room[toMove].uid === t.host) {
+			const seat = room[toMove];
+			if (seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected === true) continue;
+			if (typeof seat.disconnectedAt === 'number') since = Math.max(since, seat.disconnectedAt);
+		}
+		if (now - since < noShowMs(t)) continue;
 		const who = await abortNoShow(db, g.room, toMove, now);
 		if (who) applyResult(S, pid, { noShow: who }, room, now);
 	}
@@ -798,14 +830,17 @@ async function cancelEvent(S, now, reason) {
 			const res = await ref.transaction((r) => {
 				if (r === null) return null;
 				if (r.status !== 'playing') return undefined;
+				// No abortedBy (one planted earlier included): index.js
+				// settleAbort would make the abort a forfeit.
+				delete r.abortedBy;
 				return Object.assign(r, { status: 'aborted', endReason: 'cancelled', closedAt: now, finishedAt: now });
 			});
 			// Aborted here, or (the transaction left it) ended first.
 			const v = res.snapshot && res.snapshot.val();
 			if (v && v.status === 'finished') {
 				// It ended first: scored as usual.
-				applyResult(S, pid, await roomResult(freshEngine(), v), v, now);
-				continue;
+				const r = await scoreOf(v);
+				if (r) { applyResult(S, pid, r, v, now); continue; }
 			}
 			S.extra['live_rooms/' + g.room] = null;
 			for (const c of ['red', 'blue']) if (g[c]) S.extra['user_active_games/' + g[c] + '/' + g.room] = null;
@@ -997,17 +1032,11 @@ async function onRoomEnded(db, code, now) {
 	const room = (await db.ref('rooms/' + code).once('value')).val();
 	const tour = room && room.tournament;
 	if (!tour || typeof tour.id !== 'string' || typeof tour.pairing !== 'string') return null;
-	let res;
-	if (room.status === 'finished') {
-		res = await roomResult(freshEngine(), room);
-	} else if (room.status === 'aborted') {
-		// After both first moves an abort is a forfeit (index.js settleAbort
-		// finishes the room, and this runs again).
-		if (roomTurns(room).length >= 2) return null;
-		res = { noShow: room.abortedBy === 'blue' ? 'blue' : 'red' };
-	} else {
-		return null;
-	}
+	if (room.status !== 'finished' && room.status !== 'aborted') return null;
+	// After both first moves an abort is a forfeit (index.js settleAbort
+	// finishes the room, and this runs again): scoreOf gives null.
+	const res = await scoreOf(room);
+	if (!res) return null;
 	return withLock(db, tour.id, async (guard) => {
 		const S = await load(db, tour.id);
 		if (!S) return null;
@@ -1259,7 +1288,7 @@ async function scrubUser(db, uid, updates) {
 }
 
 module.exports = {
-	KINDS, LIMITS, NOSHOW_MS, BERSERK_MIN_TURNS, PRESENCE_GRACE_MS, REMATCH_WAIT_MS, TournamentError,
+	KINDS, LIMITS, NOSHOW_MS, noShowMs, BERSERK_MIN_TURNS, PRESENCE_GRACE_MS, REMATCH_WAIT_MS, TournamentError,
 	validateCreate, arenaPoints, performance, arenaCompare, assignColors, pairArena, swissPair, swissStandings,
 	withLock, load, save, step, advance, tick, onRoomEnded, act, abortNoShow, scrubUser,
 };
