@@ -150,9 +150,9 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Competitions
 
-- [ ] **Add arena tournaments** (scheduled and user-created), with berserk (halve your clock for a bonus point).
-- [ ] **Add Swiss tournaments.**
-- [ ] **Add simultaneous exhibitions** (one player against many).
+- [x] **Add arena tournaments** (scheduled and user-created), with berserk (halve your clock for a bonus point). Done: tournaments.html / tournament.html; functions/tournaments.js pairs free players at once, 2/4 streak points, +1 berserk win, no-shows paused; admins make rated, scheduled and repeating events, any account casual ones.
+- [x] **Add Swiss tournaments.** Done: rounds paired by score group with no repeats and colour balance, byes, Buchholz / Sonneborn-Berger standings, rounds start when the last game ends.
+- [x] **Add simultaneous exhibitions** (one player against many). Done: one room per opponent on the same spells, host extra time per opponent; the event page shows every board and the game page takes the host to the next board waiting.
 - [ ] **Add scheduled site events and announcements.**
 - [ ] **Add broadcasts** relaying games from over-the-board events.
 
