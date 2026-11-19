@@ -140,6 +140,12 @@ test('the first mover\'s opening think counts against their bank', () => {
 	const big = liveRoom([100_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000], 330_000);
 	const ev = stalled(big, 'red', big.last + 290_000 + 3000);
 	assert.deepStrictEqual([ev && ev.leftMs, ev && ev.medianMs, ev && ev.turns], [190_000, 10_000, 5]);
+	// A quick first move under a large increment adds to the bank instead.
+	const inc = liveRoom([1_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000], 100_000);
+	inc.timeControl.increment = 20_000;
+	// The flag rule: 100 + 4 x (20 - 10) = 140 s; really 19 s more (the first move's increment less 1 s).
+	const evi = stalled(inc, 'red', inc.last + 140_000 + 3000);
+	assert.strictEqual(evi && evi.leftMs, 159_000);
 });
 
 test('not a stall: time trouble, a slow player, too few turns, other clocks', () => {
