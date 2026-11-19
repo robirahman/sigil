@@ -139,6 +139,8 @@
 			cursor: pointer;
 		}
 		.profile__social button:hover, .profile__social a.profile__btn:hover { background: var(--color-surface-hover); }
+		.profile__community a { color: var(--color-accent); text-decoration: none; }
+		.profile__community a:hover { text-decoration: underline; }
 		.profile__social button:disabled { opacity: 0.5; cursor: default; }
 		.profile__social .profile__btn--primary { border-color: var(--color-accent); color: var(--color-text-bright); }
 		.profile__online { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-success, #4caf50); margin-left: 0.4em; vertical-align: middle; }
@@ -298,11 +300,23 @@
 						<template x-if="social.canAct">
 							<span style="display: contents;">
 								<a class="profile__btn profile__btn--primary profile__challenge" x-show="!social.blocked && !social.blockedMe" x-bind:href="'multiplayer.html?challenge=' + encodeURIComponent(user.uid)">Challenge</a>
+								<a class="profile__btn profile__message" x-show="!social.blocked && !social.blockedMe" x-bind:href="'inbox.html?tab=messages&to=' + encodeURIComponent(user.uid)">Message</a>
 								<button type="button" class="profile__follow" x-show="!social.blocked && !social.blockedMe" x-bind:disabled="social.busy" x-on:click="toggleFollow()" x-text="social.following ? 'Unfollow' : 'Follow'"></button>
 								<button type="button" class="profile__block" x-bind:disabled="social.busy" x-on:click="toggleBlock()" x-text="social.blocked ? 'Unblock' : 'Block'"></button>
 							</span>
 						</template>
 						<span class="profile__social-error" x-show="social.error" x-text="social.error"></span>
+					</div>
+					<!-- Blog and teams (blog.html, teams.html). -->
+					<div class="profile__social profile__community" x-show="!user.isAI" x-cloak x-data="{ teams: [] }"
+						x-init="firebase.database().ref('user_teams/' + user.uid).once('value')
+							.then((s) => Promise.all(Object.keys(s.val() || {}).slice(0, 12).map((t) => firebase.database().ref('teams/' + t + '/name').once('value').then((n) => ({ id: t, name: n.val() || t })))))
+							.then((list) => { teams = list; }, () => {})">
+						<a x-bind:href="'blog.html?u=' + encodeURIComponent(user.uid)">Blog</a>
+						<template x-if="teams.length"><span>&middot; Teams:</span></template>
+						<template x-for="t in teams" x-bind:key="t.id">
+							<a class="profile__team" x-bind:href="'teams.html?id=' + encodeURIComponent(t.id)" x-text="window.SigilTextFilter ? SigilTextFilter.mask(t.name) : t.name"></a>
+						</template>
 					</div>
 
 					<div class="profile-tabs" role="tablist">
@@ -598,6 +612,7 @@
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 	<script src="static/scripts/report-dialog.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
 
 	<script src="static/scripts/engine/constants.js"></script>
 	<script src="static/scripts/engine/notation.js"></script>

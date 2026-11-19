@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="robots" content="noindex" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/community.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Inbox - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="inboxPage()">
+		<div class="cm">
+			<h2>Inbox</h2>
+			<p class="cm-msg" x-show="state === 'loading'">Loading...</p>
+			<p class="cm-msg" x-show="state === 'signed-out'" x-cloak data-testid="inbox-signed-out">Messages and notifications are for signed-in players. <a href="account.html">Sign in or create an account</a>; guests can still play.</p>
+
+			<template x-if="state === 'ready'">
+				<div>
+					<div class="cm-tabs" role="tablist">
+						<button class="cm-tab" role="tab" x-bind:aria-selected="tab === 'notes'" x-bind:class="{ 'cm-tab--active': tab === 'notes' }" x-on:click="setTab('notes')" x-text="'Notifications' + (unreadNotes ? ' (' + unreadNotes + ')' : '')" data-testid="tab-notes"></button>
+						<button class="cm-tab" role="tab" x-bind:aria-selected="tab === 'messages'" x-bind:class="{ 'cm-tab--active': tab === 'messages' }" x-on:click="setTab('messages')" x-text="'Messages' + (unreadConvos ? ' (' + unreadConvos + ')' : '')" data-testid="tab-messages"></button>
+						<button class="cm-tab" role="tab" x-bind:aria-selected="tab === 'settings'" x-bind:class="{ 'cm-tab--active': tab === 'settings' }" x-on:click="setTab('settings')">Settings</button>
+					</div>
+
+					<!-- Notifications -->
+					<section x-show="tab === 'notes'" role="tabpanel">
+						<div class="cm-row" style="margin-bottom: 8px;">
+							<span class="cm-note" x-text="notes.length ? 'The latest ' + notes.length + '.' : ''"></span>
+							<span class="cm-spacer"></span>
+							<button class="cm-btn" x-show="unreadNotes > 0" x-on:click="markAllRead()" data-testid="mark-all-read">Mark all read</button>
+							<button class="cm-btn" x-show="notes.length > 0" x-on:click="clearAll()">Clear all</button>
+						</div>
+						<p class="cm-msg" x-show="notes.length === 0">Nothing yet. Challenges, new followers, replies to your forum threads, comments on your blog, team news and correspondence results show up here.</p>
+						<template x-for="n in notes" x-bind:key="n.id">
+							<div class="cm-card" x-bind:class="{ 'cm-card--unread': !n.read }" data-testid="note">
+								<div class="cm-row">
+									<a x-bind:href="noteLink(n)" x-on:click="markRead(n)" x-text="noteText(n)" style="text-decoration: none; color: var(--color-text-warm);"></a>
+									<span class="cm-spacer"></span>
+									<span class="cm-meta" x-text="when(n.at)" x-bind:title="fullTime(n.at)"></span>
+									<button class="cm-link" x-show="!n.read" x-on:click="markRead(n)">Mark read</button>
+									<button class="cm-link" x-on:click="removeNote(n)" aria-label="Remove">Remove</button>
+								</div>
+							</div>
+						</template>
+					</section>
+
+					<!-- Messages -->
+					<section x-show="tab === 'messages'" role="tabpanel">
+						<div class="dm" x-bind:class="{ 'dm--open': !!active }">
+							<div class="dm__list" data-testid="convo-list">
+								<p class="cm-msg" style="padding: 12px;" x-show="convos.length === 0 && !active">No conversations yet. Start one from a player's profile ("Message").</p>
+								<template x-for="c in convos" x-bind:key="c.cid">
+									<button type="button" class="dm__item" x-bind:class="{ 'dm__item--active': active && active.cid === c.cid, 'dm__item--unread': isUnread(c) }" x-on:click="openConvo(c.cid, c.with)" x-bind:data-cid="c.cid" data-testid="convo">
+										<div class="dm__who" x-text="mask(names[c.with] || '…')"></div>
+										<div class="cm-meta" x-text="(c.lastFrom === uid ? 'You · ' : '') + when(c.last)"></div>
+									</button>
+								</template>
+							</div>
+							<div class="dm__pane" x-show="active" x-cloak>
+								<template x-if="active">
+									<div style="display: contents;">
+										<div class="dm__head cm-row">
+											<button class="cm-link" x-on:click="closeConvo()" aria-label="Back to the conversations">&larr;</button>
+											<a class="cm-title" x-bind:href="'profile.html?uid=' + encodeURIComponent(active.with)" x-text="mask(names[active.with] || '…')"></a>
+											<span class="cm-spacer"></span>
+											<button class="cm-link" x-show="active.exists" x-on:click="hideConvo()">Remove from list</button>
+											<button class="cm-link" x-on:click="blockOther()" x-text="activeBlocked ? 'Blocked' : 'Block'" x-bind:disabled="activeBlocked"></button>
+										</div>
+										<div class="dm__msgs" x-ref="msgs" data-testid="messages">
+											<p class="cm-msg" x-show="!messages.length" x-text="active.exists ? 'Loading…' : 'Say hello. Messages are private between the two of you; admins read a conversation only when one of you reports a message in it.'"></p>
+											<template x-for="m in messages" x-bind:key="m.id">
+												<div class="dm__msg" x-bind:class="{ 'dm__msg--mine': m.from === uid }" data-testid="message">
+													<div x-text="mask(m.text)"></div>
+													<div class="dm__time">
+														<span x-text="when(m.at)" x-bind:title="fullTime(m.at)"></span>
+														<template x-if="m.from !== uid">
+															<button class="cm-link" style="font-size: 1em; margin-left: 6px;" x-on:click="reportMessage(m)">Report</button>
+														</template>
+													</div>
+												</div>
+											</template>
+										</div>
+										<p class="cm-error" style="padding: 0 12px;" x-show="sendError" x-text="sendError" data-testid="send-error"></p>
+										<div class="dm__compose" x-show="!activeBlocked">
+											<textarea class="cm-textarea" rows="2" maxlength="2000" placeholder="Write a message" aria-label="Message" x-model="draft"
+												x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send(); }" data-testid="compose"></textarea>
+											<button class="cm-btn cm-btn--primary" x-on:click="send()" x-bind:disabled="sending || !draft.trim()" data-testid="send">Send</button>
+										</div>
+									</div>
+								</template>
+							</div>
+						</div>
+					</section>
+
+					<!-- Settings -->
+					<section x-show="tab === 'settings'" role="tabpanel">
+						<h3>Who may message you</h3>
+						<div class="cm-form" role="radiogroup" aria-label="Who may message you">
+							<label class="cm-check"><input type="radio" name="dm-pref" value="all" x-model="dmPref" x-on:change="saveDmPref()" /> Any signed-in player</label>
+							<label class="cm-check"><input type="radio" name="dm-pref" value="follows" x-model="dmPref" x-on:change="saveDmPref()" /> Only players I follow (and conversations already started)</label>
+							<label class="cm-check"><input type="radio" name="dm-pref" value="none" x-model="dmPref" x-on:change="saveDmPref()" /> Nobody</label>
+						</div>
+						<p class="cm-note">Blocking a player (on their profile or in a conversation) also stops their messages and comments.</p>
+
+						<h3>Push notifications</h3>
+						<template x-if="!pushAvailable">
+							<p class="cm-note">This browser cannot receive push notifications from the site.</p>
+						</template>
+						<template x-if="pushAvailable">
+							<div>
+								<p class="cm-note" x-show="!siteInboxPush">Pushes for messages and inbox news are switched off on the site for now; "Your move" pushes for your games work as before.</p>
+								<div class="cm-row" style="margin: 8px 0;">
+									<span x-text="pushOn ? 'Push notifications are on in this browser.' : 'Push notifications are off in this browser.'"></span>
+									<button class="cm-btn" x-on:click="togglePush(!pushOn)" x-bind:disabled="pushBusy" x-text="pushOn ? 'Turn off' : 'Turn on'"></button>
+								</div>
+								<p class="cm-error" x-show="pushError" x-text="pushError"></p>
+							</div>
+						</template>
+						<p class="cm-note">Pushed to your browsers (when on) for:</p>
+						<div class="cm-form">
+							<template x-for="t in pushTypes" x-bind:key="t.id">
+								<label class="cm-check"><input type="checkbox" x-bind:checked="notifyPrefs[t.id] !== false" x-on:change="saveNotifyPref(t.id, $event.target.checked)" /> <span x-text="t.label"></span></label>
+							</template>
+						</div>
+						<p class="cm-ok" x-show="savedMsg" x-text="savedMsg"></p>
+						<p class="cm-error" x-show="settingsError" x-text="settingsError"></p>
+					</section>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<!-- Web push (turn-notify.js holds the token code). -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
+	<script src="static/scripts/markdown-lite.js?v=35"></script>
+	<script src="static/scripts/community.js?v=35"></script>
+
+	<script>
+		// The inbox: notifications/{uid} (server-written, functions/community.js),
+		// private messages (dm_convos, dm_messages, dm_index: database.rules.json)
+		// and the settings for both (community_prefs, notify_prefs).
+		//   inbox.html?tab=messages&to={uid}   opens (or starts) a conversation
+		//   inbox.html?tab=messages&c={a_b}    opens one (a push's link)
+		document.addEventListener('alpine:init', () => {
+			const C = window.SigilCommunity;
+			const params = new URLSearchParams(location.search);
+			const TEAM_ROLE = { leader: 'the leader', mod: 'a moderator', member: 'a member' };
+			// Firebase listeners stay out of Alpine's reactive state: a
+			// proxied Reference breaks the SDK's internals.
+			Alpine.data('inboxPage', () => { const live = { refs: [], msgRef: null, unwatchBlock: null }; return {
+				state: 'loading',
+				tab: ['messages', 'settings'].includes(params.get('tab')) ? params.get('tab') : 'notes',
+				uid: null,
+				names: {},
+				notes: [],
+				convos: [],
+				active: null,          // { cid, with, exists }
+				activeBlocked: false,
+				messages: [],
+				draft: '',
+				sending: false,
+				sendError: '',
+				dmPref: 'all',
+				notifyPrefs: {},
+				pushTypes: [
+					{ id: 'message', label: 'Private messages' },
+					{ id: 'follow', label: 'New followers' },
+					{ id: 'forum', label: 'Replies to your forum threads and posts' },
+					{ id: 'blog', label: 'Comments on your blog posts' },
+					{ id: 'team', label: 'Team news and team battles' },
+					{ id: 'game', label: 'Results of your correspondence games' },
+				],
+				pushAvailable: false,
+				pushOn: false,
+				pushBusy: false,
+				pushError: '',
+				siteInboxPush: false,
+				savedMsg: '',
+				settingsError: '',
+
+				get unreadNotes() { return this.notes.filter((n) => !n.read).length; },
+				get unreadConvos() { return this.convos.filter((c) => this.isUnread(c)).length; },
+
+				init() {
+					C.onUser((u) => this._start(u));
+				},
+
+				_stop() {
+					live.refs.forEach((r) => r.off());
+					live.refs = [];
+					this.closeConvo();
+				},
+
+				async _start(u) {
+					this._stop();
+					if (!u) { this.state = 'signed-out'; return; }
+					this.uid = u.uid;
+					const db = firebase.database();
+					const notesRef = db.ref('notifications/' + u.uid).orderByChild('at').limitToLast(50);
+					notesRef.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						list.sort((a, b) => (b.at || 0) - (a.at || 0));
+						this.notes = list;
+						C.fillNames(list.map((n) => n.actor), this.names);
+					}, (e) => console.warn('[Inbox] notifications:', e));
+					const convoRef = db.ref('dm_index/' + u.uid).orderByChild('last').limitToLast(100);
+					convoRef.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ cid: c.key }, c.val())); });
+						list.sort((a, b) => (b.last || 0) - (a.last || 0));
+						this.convos = list;
+						C.fillNames(list.map((c) => c.with), this.names);
+						if (this.active) {
+							const mine = list.find((c) => c.cid === this.active.cid);
+							if (mine) this.active.exists = true;
+							if (mine && this.isUnread(mine) && this.tab === 'messages') this._markConvoRead();
+						}
+					}, (e) => console.warn('[Inbox] conversations:', e));
+					live.refs = [notesRef, convoRef];
+					db.ref('community_prefs/' + u.uid + '/dm').once('value').then((s) => { this.dmPref = s.val() || 'all'; }, () => {});
+					db.ref('notify_prefs/' + u.uid).once('value').then((s) => { this.notifyPrefs = s.val() || {}; }, () => {});
+					db.ref('community_config/push').once('value').then((s) => { this.siteInboxPush = s.val() === true; }, () => {});
+					this._refreshPushState();
+					this.state = 'ready';
+					// A link to a conversation: with a player, or by id.
+					const to = params.get('to');
+					const cid = params.get('c');
+					if (to && to !== u.uid) { this.tab = 'messages'; this.openConvo(this._cid(to), to); }
+					else if (cid && cid.split('_').includes(u.uid)) { this.tab = 'messages'; this.openConvo(cid, cid.split('_').find((x) => x !== u.uid)); }
+				},
+
+				setTab(t) {
+					this.tab = t;
+					const url = new URL(location.href);
+					url.searchParams.set('tab', t);
+					if (t !== 'messages') { url.searchParams.delete('to'); url.searchParams.delete('c'); }
+					history.replaceState(null, '', url);
+					if (t === 'messages' && this.active) this._markConvoRead();
+				},
+
+				when: (ts) => C.when(ts),
+				fullTime: (ts) => C.fullTime(ts),
+				mask: (s) => C.mask(s),
+				isUnread(c) { return window.SigilInbox ? SigilInbox.isUnread(c, this.uid) : (c.lastFrom !== this.uid && !(c.read >= c.last)); },
+
+				// ---- Notifications ----
+
+				noteText(n) {
+					const who = this.mask(this.names[n.actor] || (n.actor ? '…' : 'Someone'));
+					const more = n.n > 1 ? ' and ' + (n.n - 1) + ' more' : '';
+					const title = '“' + this.mask(n.title || '') + '”';
+					switch (n.type) {
+						case 'follow': return who + ' started following you.';
+						case 'challenge': return who + ' challenged you to a game.';
+						case 'forum': return who + more + ' replied in ' + title + '.';
+						case 'blog': return who + more + ' commented on ' + title + '.';
+						case 'game': return 'You ' + (n.result === 'win' ? 'won against ' : 'lost to ') + this.mask(n.opponent || 'your opponent')
+							+ (typeof n.eloChange === 'number' ? ' (' + (n.eloChange >= 0 ? '+' : '') + n.eloChange + ')' : '') + '.';
+						case 'team': {
+							const team = this.mask(n.teamName || n.team || 'your team');
+							const battle = '“' + this.mask(n.name || '') + '”';
+							if (n.event === 'request') return (n.n > 1 ? n.n + ' players ask' : who + ' asks') + ' to join ' + team + '.';
+							if (n.event === 'accepted') return 'You joined ' + team + '.';
+							if (n.event === 'role') return 'You are now ' + (TEAM_ROLE[n.role] || n.role) + ' of ' + team + '.';
+							if (n.event === 'invite') return this.mask(n.hostName || 'A team') + ' invites your team to the battle ' + battle + '.';
+							if (n.event === 'battle-start') return 'The team battle ' + battle + ' has started.';
+							if (n.event === 'battle-end') return 'The team battle ' + battle + ' is over: ' + (n.winnerName ? this.mask(n.winnerName) + ' won.' : 'a tie.');
+							return 'News from ' + team + '.';
+						}
+						default: return 'Notification';
+					}
+				},
+
+				noteLink(n) {
+					const e = encodeURIComponent;
+					switch (n.type) {
+						case 'follow': return 'profile.html?uid=' + e(n.actor || '');
+						case 'challenge': return 'multiplayer.html?id=' + e(n.room || '');
+						case 'forum': return 'forum.html?c=' + e(n.cat || '') + '&t=' + e(n.thread || '') + (n.post ? '#p-' + e(n.post) : '');
+						case 'blog': return 'blog.html?p=' + e(n.post || '') + '#comments';
+						case 'game': return 'multiplayer.html?id=' + e(n.room || '');
+						case 'team': return n.battle ? 'teams.html?battle=' + e(n.battle) : 'teams.html?id=' + e(n.team || '') + (n.event === 'request' ? '#requests' : '');
+						default: return 'inbox.html';
+					}
+				},
+
+				markRead(n) {
+					if (n.read) return;
+					n.read = true;
+					firebase.database().ref('notifications/' + this.uid + '/' + n.id + '/read').set(true).catch(() => {});
+				},
+
+				markAllRead() {
+					const u = {};
+					this.notes.forEach((n) => { if (!n.read) u['notifications/' + this.uid + '/' + n.id + '/read'] = true; });
+					if (Object.keys(u).length) firebase.database().ref().update(u).catch((e) => console.warn('[Inbox] mark read:', e));
+				},
+
+				removeNote(n) {
+					firebase.database().ref('notifications/' + this.uid + '/' + n.id).remove().catch(() => {});
+				},
+
+				clearAll() {
+					if (!confirm('Remove all your notifications?')) return;
+					firebase.database().ref('notifications/' + this.uid).remove().catch(() => {});
+				},
+
+				// ---- Messages ----
+
+				_cid(other) { return this.uid < other ? this.uid + '_' + other : other + '_' + this.uid; },
+
+				async openConvo(cid, other) {
+					this.closeConvo();
+					if (!other || other === this.uid || other.includes('_')) return;
+					this.active = { cid, with: other, exists: this.convos.some((c) => c.cid === cid) };
+					C.fillNames([other], this.names);
+					this.sendError = '';
+					const url = new URL(location.href);
+					url.searchParams.set('tab', 'messages');
+					url.searchParams.set('c', cid);
+					url.searchParams.delete('to');
+					history.replaceState(null, '', url);
+					const db = firebase.database();
+					// Readable only once it exists and we are in it: a refusal
+					// here just means "not started yet".
+					const ref = db.ref('dm_messages/' + cid).limitToLast(200);
+					live.msgRef = ref;
+					ref.on('value', (s) => {
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						this.messages = list;
+						if (list.length) this.active.exists = true;
+						this._markConvoRead();
+						this.$nextTick(() => { const el = this.$refs.msgs; if (el) el.scrollTop = el.scrollHeight; });
+					}, () => { this.messages = []; });
+					if (window.SigilFriends || await this._friends()) {
+						live.unwatchBlock = SigilFriends.watchBlockedEither(other, (b) => { this.activeBlocked = b; });
+					}
+				},
+
+				async _friends() {
+					for (let i = 0; i < 50 && !window.SigilFriends; i++) await new Promise((r) => setTimeout(r, 100));
+					return window.SigilFriends || null;
+				},
+
+				closeConvo() {
+					if (live.msgRef) live.msgRef.off();
+					live.msgRef = null;
+					if (live.unwatchBlock) live.unwatchBlock();
+					live.unwatchBlock = null;
+					this.active = null;
+					this.activeBlocked = false;
+					this.messages = [];
+				},
+
+				_markConvoRead() {
+					if (!this.active || document.hidden || this.tab !== 'messages') return;
+					const c = this.convos.find((x) => x.cid === this.active.cid);
+					if (!c || !this.isUnread(c)) return;
+					firebase.database().ref('dm_index/' + this.uid + '/' + c.cid + '/read').set(C.TS()).catch(() => {});
+				},
+
+				/** Why we may not write to `other`, or ''. */
+				async _refusal(other, isNew) {
+					const db = firebase.database();
+					const [pref, follows, deleted] = await Promise.all([
+						db.ref('community_prefs/' + other + '/dm').once('value').then((s) => s.val(), () => null),
+						db.ref('follows/' + other + '/' + this.uid).once('value').then((s) => s.val() === true, () => false),
+						db.ref('users/' + other + '/displayName').once('value').then((s) => !s.exists(), () => false),
+					]);
+					const name = this.names[other] || 'This player';
+					if (deleted) return 'This account no longer exists.';
+					if (this.activeBlocked) return 'One of you has blocked the other.';
+					if (pref === 'none') return name + ' does not accept messages.';
+					if (pref === 'follows' && isNew && !follows) return name + ' accepts messages only from players they follow.';
+					return '';
+				},
+
+				async send() {
+					const text = this.draft.trim();
+					if (!text || !this.active || this.sending) return;
+					if (text.length > 2000) { this.sendError = 'A message is at most 2000 characters.'; return; }
+					this.sending = true;
+					this.sendError = '';
+					const { cid, with: to } = this.active;
+					const me = this.uid;
+					const db = firebase.database();
+					try {
+						// Is the conversation there (and ours)? Unreadable means not yet.
+						const isNew = !(await db.ref('dm_convos/' + cid).once('value').then((s) => s.exists(), () => false));
+						const refusal = await this._refusal(to, isNew);
+						if (refusal) throw Object.assign(new Error(refusal), { friendly: true });
+						const mid = C.newKey('dm_messages/' + cid);
+						const u = {
+							['dm_messages/' + cid + '/' + mid]: { from: me, to, text, at: C.TS() },
+							['dm_index/' + me + '/' + cid + '/with']: to,
+							['dm_index/' + me + '/' + cid + '/last']: C.TS(),
+							['dm_index/' + me + '/' + cid + '/lastFrom']: me,
+							['dm_index/' + me + '/' + cid + '/lastMsg']: mid,
+							['dm_index/' + me + '/' + cid + '/read']: C.TS(),
+							['dm_index/' + to + '/' + cid + '/with']: me,
+							['dm_index/' + to + '/' + cid + '/last']: C.TS(),
+							['dm_index/' + to + '/' + cid + '/lastFrom']: me,
+							['dm_index/' + to + '/' + cid + '/lastMsg']: mid,
+						};
+						if (isNew) u['dm_convos/' + cid] = { a: me < to ? me : to, b: me < to ? to : me, at: C.TS() };
+						await C.commit(isNew ? ['dm', 'dmnew'] : 'dm', u);
+						this.draft = '';
+						if (isNew) {
+							// The messages listener was refused before the conversation existed.
+							const keep = this.active;
+							this.openConvo(keep.cid, keep.with);
+						}
+					} catch (e) {
+						console.warn('[Inbox] send:', e);
+						this.sendError = e.friendly ? e.message : C.errorText(e);
+					}
+					this.sending = false;
+				},
+
+				reportMessage(m) {
+					C.report({ kind: 'dm', target: m.from, conv: this.active.cid, msg: m.id, what: 'this message' });
+				},
+
+				async blockOther() {
+					if (!this.active || this.activeBlocked) return;
+					const other = this.active.with;
+					if (!confirm('Block ' + (this.names[other] || 'this player') + '? Neither of you can message the other, and they cannot challenge you or comment on your blog.')) return;
+					try {
+						const f = window.SigilFriends || await this._friends();
+						await f.block(other);
+						this.activeBlocked = true;
+					} catch (e) {
+						this.sendError = C.errorText(e);
+					}
+				},
+
+				hideConvo() {
+					if (!this.active) return;
+					const cid = this.active.cid;
+					this.closeConvo();
+					firebase.database().ref('dm_index/' + this.uid + '/' + cid).remove().catch(() => {});
+				},
+
+				// ---- Settings ----
+
+				async _saved(p) {
+					this.savedMsg = '';
+					this.settingsError = '';
+					try {
+						await p;
+						this.savedMsg = 'Saved.';
+						setTimeout(() => { this.savedMsg = ''; }, 2000);
+					} catch (e) {
+						this.settingsError = C.errorText(e);
+					}
+				},
+
+				saveDmPref() {
+					return this._saved(firebase.database().ref('community_prefs/' + this.uid + '/dm').set(this.dmPref));
+				},
+
+				saveNotifyPref(type, on) {
+					this.notifyPrefs[type] = on;
+					return this._saved(firebase.database().ref('notify_prefs/' + this.uid + '/' + type).set(on));
+				},
+
+				async _refreshPushState() {
+					for (let i = 0; i < 50 && !window.SigilTurns; i++) await new Promise((r) => setTimeout(r, 100));
+					if (!window.SigilTurns) return;
+					this.pushAvailable = SigilTurns.pushSupported();
+					this.pushOn = this.pushAvailable ? await SigilTurns.pushEnabled() : false;
+				},
+
+				async togglePush(on) {
+					this.pushBusy = true;
+					this.pushError = '';
+					try {
+						if (on) {
+							this.pushOn = await SigilTurns.enablePush();
+							if (!this.pushOn) this.pushError = 'Notifications were not allowed.';
+						} else {
+							await SigilTurns.disablePush();
+							this.pushOn = false;
+						}
+					} catch (e) {
+						console.warn('[Inbox] push toggle:', e);
+						this.pushError = 'Could not turn notifications ' + (on ? 'on' : 'off') + '.';
+					}
+					this.pushBusy = false;
+				},
+			}; });
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

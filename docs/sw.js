@@ -49,6 +49,11 @@ const SAME_ORIGIN_PRECACHE = [
 	'./packs/index.html',
 	'./strategy-guide.html',
 	'./admin.html',
+	'./admin-community.html',
+	'./inbox.html',
+	'./forum.html',
+	'./blog.html',
+	'./teams.html',
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
@@ -196,6 +201,13 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
+	// The community pages: messages and the inbox, forums, blogs, teams.
+	'./static/scripts/inbox.js?v=35',
+	'./static/scripts/community.js?v=35',
+	'./static/scripts/markdown-lite.js?v=35',
+	'./static/scripts/text-filter.js?v=35',
+	'./static/scripts/engine/team-battle.js?v=35',
+	'./static/css/community.css?v=35',
 	// Spell art is added by spellArtUrls() below.
 ];
 

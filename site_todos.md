@@ -160,11 +160,11 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 - [x] **Add blocking** alongside the friends / follow list. Done: Block on profile.html; the rules refuse a blocked player's challenge, follow and seat in the blocker's rooms, and the lobby hides their open games.
 - [ ] **Add an activity feed / timeline** ("X won a game", "X joined a tournament").
-- [ ] **Add private messaging.**
-- [ ] **Add a notifications inbox** plus web push.
-- [ ] **Add teams** with team tournaments and team battles.
-- [ ] **Add forums.**
-- [ ] **Add user blogs and a site blog.**
+- [x] **Add private messaging.** Done: inbox.html Messages (from a profile's "Message"); signed-in accounts only, rules-checked (members read, blocks, the recipient's "who may message me", mutes, 1/s and 200/h, 30 new conversations a day); "Report" on a message lets the admins read that conversation on admin-community.html.
+- [x] **Add a notifications inbox** plus web push. Done: notifications/{uid} written by functions/community.js (follows, challenges, forum replies, blog comments, team requests/admissions/roles, battle invitations/start/end, correspondence results), "Inbox (N)" in the header, read/unread/clear; pushes reuse the existing FCM setup (turn-notify.js VAPID key, sw.js) behind community_config/push (admin switch) and per-type notify_prefs.
+- [x] **Add teams** with team tournaments and team battles. Done: teams.html (open or by-request teams, leader/moderators, bans, a team forum, disbandTeam); team battles between invited teams: rated games between members of different teams score, top-N per team (engine/team-battle.js); no arena system yet, so a battle is its own match format and arenas can feed the same standings later.
+- [x] **Add forums.** Done: forum.html, fixed categories + announcements + team forums; threads, Markdown posts, edit/remove own, Quote, Report; moderators (forum_mods, admins, team staff) pin/lock/delete; rate limits; profanity masked on render (text-filter.js, new: there was no filter).
+- [x] **Add user blogs and a site blog.** Done: blog.html, Markdown posts (markdown-lite.js: no HTML, http(s)/site links only), comments (author can close them), the site blog = admin posts with site: true.
 - [ ] **Add private notes on players** and bookmarking games.
 - [ ] **Add a streamer listing.**
 - [ ] **Add Sigil TV** showing the top-rated live game.

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="robots" content="noindex" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/community.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Community moderation - Sigil Online</title>
+	<style>
+		.mod-quote { background: var(--color-bg-mid); border-radius: 6px; margin: 8px 0; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
+		.mod-quote--hit { outline: 2px solid var(--color-error); }
+		.mod-convo { max-height: 360px; overflow-y: auto; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="communityAdmin()">
+		<div class="cm">
+			<div class="cm-crumbs"><a href="admin.html">Admin</a> &rsaquo; Community</div>
+			<h2>Community moderation</h2>
+			<p class="cm-msg" x-show="state === 'loading'">Loading...</p>
+			<p class="cm-msg" x-show="state === 'signed-out'" x-cloak>Sign in on the <a href="account.html">account page</a> first.</p>
+			<p class="cm-msg" x-show="state === 'denied'" x-cloak data-testid="community-admin-denied">This page is for site admins.</p>
+			<p class="cm-error" x-show="error" x-cloak x-text="error"></p>
+
+			<template x-if="state === 'ready'">
+				<div>
+					<div class="cm-tabs" role="tablist">
+						<button class="cm-tab" role="tab" x-bind:class="{ 'cm-tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + ')'"></button>
+						<button class="cm-tab" role="tab" x-bind:class="{ 'cm-tab--active': view === 'all' }" x-on:click="view = 'all'" x-text="'All reports (' + reports.length + ')'"></button>
+						<button class="cm-tab" role="tab" x-bind:class="{ 'cm-tab--active': view === 'people' }" x-on:click="view = 'people'">Mutes and moderators</button>
+						<button class="cm-tab" role="tab" x-bind:class="{ 'cm-tab--active': view === 'settings' }" x-on:click="view = 'settings'">Settings</button>
+					</div>
+
+					<template x-if="view === 'open' || view === 'all'">
+						<div>
+							<p class="cm-msg" x-show="shown.length === 0">No reports here.</p>
+							<template x-for="r in shown" x-bind:key="r.id">
+								<div class="cm-card" x-bind:class="{ 'cm-card--unread': !r.resolved }" data-testid="content-report-card">
+									<div class="cm-row">
+										<strong x-text="kindText(r.kind) + ': ' + reasonText(r.reason)"></strong>
+										<span>by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(r.target)" x-text="names[r.target] || r.target"></a></span>
+										<span class="cm-spacer"></span>
+										<span class="cm-meta">reported by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(r.by)" x-text="names[r.by] || r.by"></a> &middot; <span x-text="fullTime(r.at)"></span></span>
+									</div>
+									<p class="cm-note" x-show="r.note" x-text="'Note: ' + r.note"></p>
+									<template x-if="r.kind !== 'dm'">
+										<div>
+											<div class="mod-quote" x-text="previews[r.id] === undefined ? 'Loading…' : (previews[r.id] || '(gone: already removed)')" data-testid="report-preview"></div>
+											<a x-bind:href="linkOf(r)" target="_blank" rel="noopener">Open it</a>
+										</div>
+									</template>
+									<template x-if="r.kind === 'dm'">
+										<div>
+											<button class="cm-btn" x-show="!convos[r.conv]" x-on:click="loadConvo(r)" data-testid="show-conversation">Show the conversation</button>
+											<template x-if="convos[r.conv]">
+												<div class="mod-convo" data-testid="conversation">
+													<template x-for="m in convos[r.conv]" x-bind:key="m.id">
+														<div class="mod-quote" x-bind:class="{ 'mod-quote--hit': m.id === r.msg }">
+															<span class="cm-meta" x-text="(names[m.from] || m.from) + ' · ' + fullTime(m.at)"></span>
+															<div x-text="m.text"></div>
+														</div>
+													</template>
+													<button class="cm-link" x-on:click="endAccess(r)">End admin access to this conversation</button>
+												</div>
+											</template>
+										</div>
+									</template>
+									<template x-if="r.resolved">
+										<p class="cm-meta" x-text="'Resolved ' + fullTime(r.resolvedAt) + (r.action && r.action !== 'none' ? ' (' + r.action + ')' : '') + (r.adminNote ? ': ' + r.adminNote : '')"></p>
+									</template>
+									<template x-if="!r.resolved">
+										<div class="cm-form">
+											<textarea class="cm-textarea" rows="2" maxlength="1000" placeholder="Admin note (kept with the report)" x-model="drafts[r.id]" style="min-height: 3em;"></textarea>
+											<div class="cm-row">
+												<button class="cm-btn" x-on:click="resolve(r, 'none')" x-bind:disabled="busy" data-testid="resolve-content">Resolve, no action</button>
+												<button class="cm-btn cm-btn--danger" x-show="r.kind !== 'dm'" x-on:click="removeContent(r)" x-bind:disabled="busy" data-testid="remove-content" x-text="r.kind === 'team' ? 'Disband the team' : 'Remove it and resolve'"></button>
+												<select class="cm-select" x-model="muteDays[r.target]" aria-label="Mute length">
+													<option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option><option value="forever">Indefinitely</option>
+												</select>
+												<button class="cm-btn cm-btn--danger" x-on:click="mute(r)" x-bind:disabled="busy" data-testid="mute">Mute the writer and resolve</button>
+											</div>
+										</div>
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<template x-if="view === 'people'">
+						<div>
+							<h3>Muted players</h3>
+							<p class="cm-note">A muted player cannot post in the forums, blog, comment, message anyone or change teams until the mute ends.</p>
+							<p class="cm-msg" x-show="muteRows.length === 0">Nobody is muted.</p>
+							<table class="cm-table" x-show="muteRows.length > 0">
+								<tbody>
+									<template x-for="m in muteRows" x-bind:key="m.uid">
+										<tr>
+											<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(m.uid)" x-text="names[m.uid] || m.uid"></a></td>
+											<td x-text="m.until >= FOREVER ? 'indefinitely' : 'until ' + fullTime(m.until)"></td>
+											<td class="cm-meta" x-text="m.reason || ''"></td>
+											<td><button class="cm-btn" x-on:click="unmute(m.uid)" x-bind:disabled="busy">Lift</button></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+							<h3>Forum moderators</h3>
+							<p class="cm-note">Moderators pin, lock and delete threads, remove forum posts and blog comments. Admins are moderators already.</p>
+							<template x-for="uid in modList" x-bind:key="uid">
+								<div class="cm-row" style="margin-bottom: 4px;">
+									<a x-bind:href="'profile.html?uid=' + encodeURIComponent(uid)" x-text="names[uid] || uid"></a>
+									<button class="cm-link" x-on:click="setMod(uid, false)">Remove</button>
+								</div>
+							</template>
+							<div class="cm-row">
+								<input class="cm-input" style="flex: 1 1 200px;" placeholder="Display name or user id" x-model="newMod" aria-label="New moderator" />
+								<button class="cm-btn" x-on:click="addMod()" x-bind:disabled="busy || !newMod.trim()">Add moderator</button>
+							</div>
+						</div>
+					</template>
+
+					<template x-if="view === 'settings'">
+						<div>
+							<h3>Inbox pushes</h3>
+							<p class="cm-note">Web pushes for messages, follows, forum replies, blog comments, team news and correspondence results (functions/community.js). "Your move" and challenge pushes do not depend on this switch. Players turn single kinds off in their inbox settings.</p>
+							<label class="cm-check"><input type="checkbox" x-bind:checked="pushOn" x-on:change="setPush($event.target.checked)" data-testid="push-switch" /> Send inbox pushes</label>
+						</div>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
+	<script src="static/scripts/markdown-lite.js?v=35"></script>
+	<script src="static/scripts/community.js?v=35"></script>
+
+	<script>
+		// Reports of messages, forum posts, blog posts, comments and teams
+		// (content_reports/, readable by admins), mutes (community_mutes/),
+		// forum moderators (forum_mods/) and the inbox push switch
+		// (community_config/push). A reported message's conversation is
+		// readable here because its recipient flagged it (dm_flags/).
+		// Previews show the text as written: no profanity mask, no Markdown.
+		document.addEventListener('alpine:init', () => {
+			const C = window.SigilCommunity;
+			const db = () => firebase.database();
+			const FOREVER = Date.UTC(2200, 0, 1);
+			const KINDS = { dm: 'Message', forum: 'Forum post', blog: 'Blog post', comment: 'Comment', team: 'Team' };
+			Alpine.data('communityAdmin', () => ({
+				FOREVER,
+				state: 'loading',
+				error: '',
+				busy: false,
+				uid: null,
+				view: 'open',
+				reports: [],
+				names: {},
+				previews: {},
+				convos: {},
+				drafts: {},
+				muteDays: {},
+				mutes: {},
+				mods: {},
+				newMod: '',
+				pushOn: false,
+
+				get openCount() { return this.reports.filter((r) => !r.resolved).length; },
+				get shown() { return this.view === 'open' ? this.reports.filter((r) => !r.resolved) : this.reports; },
+				get muteRows() { return Object.keys(this.mutes).map((uid) => Object.assign({ uid }, this.mutes[uid])).filter((m) => m.until > Date.now()); },
+				get modList() { return Object.keys(this.mods).filter((u) => this.mods[u] === true); },
+
+				init() {
+					C.onUser((u) => this._start(u));
+				},
+
+				async _start(u) {
+					this.error = '';
+					if (!u) { this.state = 'signed-out'; return; }
+					this.uid = u.uid;
+					const roles = await C.roles();
+					if (!roles.admin) { this.state = 'denied'; return; }
+					try {
+						await this.reload();
+						this.state = 'ready';
+					} catch (e) {
+						console.error('[Community admin] load failed:', e);
+						this.error = 'Could not load: ' + (e.message || e);
+						this.state = 'denied';
+					}
+				},
+
+				async reload() {
+					const [open, recent, mutes, mods, push] = await Promise.all([
+						db().ref('content_reports').orderByChild('resolved').equalTo(null).limitToFirst(500).once('value'),
+						db().ref('content_reports').orderByChild('at').limitToLast(300).once('value'),
+						db().ref('community_mutes').once('value'),
+						db().ref('forum_mods').once('value'),
+						db().ref('community_config/push').once('value'),
+					]);
+					const byId = new Map();
+					for (const s of [open, recent]) s.forEach((c) => { byId.set(c.key, Object.assign({ id: c.key }, c.val())); });
+					this.reports = Array.from(byId.values()).sort((a, b) => (b.at || 0) - (a.at || 0));
+					this.mutes = mutes.val() || {};
+					this.mods = mods.val() || {};
+					this.pushOn = push.val() === true;
+					this.reports.forEach((r) => { if (!(r.target in this.muteDays)) this.muteDays[r.target] = '7'; });
+					const uids = this.reports.flatMap((r) => [r.by, r.target]).concat(Object.keys(this.mutes), Object.keys(this.mods));
+					await C.fillNames(uids, this.names);
+					this.reports.forEach((r) => { if (r.kind !== 'dm' && !(r.id in this.previews)) this.loadPreview(r); });
+				},
+
+				kindText: (k) => KINDS[k] || k,
+				reasonText(code) {
+					const hit = C.REASONS.find((r) => r[0] === code);
+					return hit ? hit[1] : code;
+				},
+				fullTime: (ts) => C.fullTime(ts),
+
+				linkOf(r) {
+					const e = encodeURIComponent;
+					if (r.kind === 'forum') return 'forum.html?c=' + e(r.cat) + '&t=' + e(r.thread) + '#p-' + e(r.post);
+					if (r.kind === 'blog') return 'blog.html?p=' + e(r.post);
+					if (r.kind === 'comment') return 'blog.html?p=' + e(r.post) + '#comments';
+					if (r.kind === 'team') return 'teams.html?id=' + e(r.team);
+					return '#';
+				},
+
+				async loadPreview(r) {
+					const val = (p) => db().ref(p).once('value').then((s) => s.val(), () => null);
+					let text = '';
+					if (r.kind === 'forum') { const p = await val('forum_posts/' + r.cat + '/' + r.thread + '/' + r.post); text = p && p.text; }
+					else if (r.kind === 'blog') { const p = await val('blog_posts/' + r.post); text = p && (p.title + '\n\n' + p.body); }
+					else if (r.kind === 'comment') { const p = await val('blog_comments/' + r.post + '/' + r.comment); text = p && p.text; }
+					else if (r.kind === 'team') { const t = await val('teams/' + r.team); text = t && (t.name + '\n\n' + (t.description || '')); }
+					this.previews[r.id] = text ? String(text).slice(0, 4000) : '';
+				},
+
+				async loadConvo(r) {
+					try {
+						const s = await db().ref('dm_messages/' + r.conv).limitToLast(200).once('value');
+						const list = [];
+						s.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						await C.fillNames(list.map((m) => m.from), this.names);
+						this.convos[r.conv] = list;
+					} catch (e) {
+						this.error = 'The conversation is not readable (its flag was removed, or it was deleted).';
+					}
+				},
+
+				async _write(fn) {
+					this.busy = true;
+					this.error = '';
+					try {
+						await fn();
+						await this.reload();
+					} catch (e) {
+						console.error('[Community admin] write failed:', e);
+						this.error = 'That change was refused: ' + (e.message || e);
+					}
+					this.busy = false;
+				},
+
+				_resolution(r, action) {
+					const note = (this.drafts[r.id] || '').trim().slice(0, 1000);
+					return Object.assign({ resolved: true, resolvedBy: this.uid, resolvedAt: C.TS(), action }, note ? { adminNote: note } : {});
+				},
+
+				resolve(r, action) {
+					return this._write(() => db().ref('content_reports/' + r.id).update(this._resolution(r, action)));
+				},
+
+				removeContent(r) {
+					if (!confirm(r.kind === 'team' ? 'Disband this team?' : 'Remove this ' + this.kindText(r.kind).toLowerCase() + '?')) return;
+					return this._write(async () => {
+						if (r.kind === 'forum') {
+							await db().ref('forum_posts/' + r.cat + '/' + r.thread + '/' + r.post).update({ text: null, editedAt: null, removed: { by: this.uid, at: C.TS() } });
+						} else if (r.kind === 'blog') {
+							await db().ref().update({ ['blog_posts/' + r.post]: null, ['blog_comments/' + r.post]: null });
+						} else if (r.kind === 'comment') {
+							await db().ref('blog_comments/' + r.post + '/' + r.comment).remove();
+						} else if (r.kind === 'team') {
+							await firebase.functions().httpsCallable('disbandTeam')({ team: r.team });
+						}
+						await db().ref('content_reports/' + r.id).update(this._resolution(r, 'removed'));
+					});
+				},
+
+				mute(r) {
+					const d = this.muteDays[r.target] || '7';
+					const until = d === 'forever' ? FOREVER : Date.now() + Number(d) * 86400000;
+					const reason = (this.drafts[r.id] || '').trim().slice(0, 500);
+					return this._write(async () => {
+						await db().ref('community_mutes/' + r.target).set(Object.assign({ until, by: this.uid, at: C.TS() }, reason ? { reason } : {}));
+						await db().ref('content_reports/' + r.id).update(this._resolution(r, 'muted'));
+					});
+				},
+
+				unmute(uid) {
+					return this._write(() => db().ref('community_mutes/' + uid).remove());
+				},
+
+				endAccess(r) {
+					return this._write(async () => {
+						await db().ref('dm_flags/' + r.conv).remove();
+						delete this.convos[r.conv];
+					});
+				},
+
+				setMod(uid, on) {
+					return this._write(() => db().ref('forum_mods/' + uid).set(on ? true : null));
+				},
+
+				async addMod() {
+					const q = this.newMod.trim();
+					let uid = q;
+					// A display name: usernames/{lower-case name} holds its uid.
+					if (/^[A-Za-z0-9_-]{1,20}$/.test(q)) {
+						const s = await db().ref('usernames/' + q.toLowerCase()).once('value').catch(() => null);
+						if (s && typeof s.val() === 'string') uid = s.val();
+					}
+					const exists = await db().ref('users/' + uid + '/displayName').once('value').then((s) => s.exists(), () => false);
+					if (!exists) { this.error = 'No player called ' + q + '.'; return; }
+					this.newMod = '';
+					return this.setMod(uid, true);
+				},
+
+				setPush(on) {
+					return this._write(() => db().ref('community_config/push').set(!!on));
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

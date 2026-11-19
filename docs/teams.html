@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/community.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Teams - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="teamsPage()">
+		<div class="cm">
+			<div class="cm-crumbs">
+				<a href="teams.html">Teams</a>
+				<template x-if="view === 'battle' && battle"><span> &rsaquo; <a x-bind:href="'teams.html?id=' + encodeURIComponent(battle.host)" x-text="mask(teamNames[battle.host] || battle.host)"></a></span></template>
+			</div>
+			<p class="cm-error" x-show="error" x-text="error" x-cloak data-testid="error"></p>
+			<p class="cm-ok" x-show="okMsg" x-text="okMsg" x-cloak></p>
+
+			<!-- All teams -->
+			<template x-if="view === 'list'">
+				<div>
+					<div class="cm-row">
+						<h2>Teams</h2>
+						<span class="cm-spacer"></span>
+						<button class="cm-btn cm-btn--primary" x-show="account && !creating" x-on:click="creating = true" data-testid="create-team">Create a team</button>
+					</div>
+					<p class="cm-note">Play for a team: join one, talk in its forum, and take on other teams in team battles, where every rated game between members of different teams scores for the winner's team.</p>
+
+					<template x-if="creating">
+						<div class="cm-card">
+							<div class="cm-form">
+								<label for="team-name">Name</label>
+								<input id="team-name" class="cm-input" maxlength="40" x-model="form.name" x-on:input="if (!form.idEdited) form.id = slug(form.name)" data-testid="team-name" />
+								<label for="team-id">Address (letters, digits and dashes; cannot be changed)</label>
+								<input id="team-id" class="cm-input" maxlength="30" x-model="form.id" x-on:input="form.idEdited = true" data-testid="team-id" />
+								<span class="cm-note" x-text="'teams.html?id=' + (form.id || '…')"></span>
+								<label for="team-about">About the team (optional)</label>
+								<textarea id="team-about" class="cm-textarea" rows="4" maxlength="4000" x-model="form.description"></textarea>
+								<label class="cm-check"><input type="checkbox" x-model="form.open" /> Anyone may join (otherwise players ask, and you or your moderators admit them)</label>
+								<div class="cm-row">
+									<button class="cm-btn cm-btn--primary" x-on:click="createTeam()" x-bind:disabled="busy || form.name.trim().length < 3 || !validId(form.id)" data-testid="save-team">Create</button>
+									<button class="cm-btn" x-on:click="creating = false">Cancel</button>
+								</div>
+							</div>
+						</div>
+					</template>
+
+					<template x-if="myTeams.length">
+						<div>
+							<h3>Your teams</h3>
+							<div class="cm-row">
+								<template x-for="t in myTeams" x-bind:key="t">
+									<a class="cm-btn" x-bind:href="'teams.html?id=' + encodeURIComponent(t)" x-text="mask(teamNames[t] || t)"></a>
+								</template>
+							</div>
+						</div>
+					</template>
+
+					<template x-if="battles.length">
+						<div>
+							<h3>Team battles</h3>
+							<template x-for="b in battles" x-bind:key="b.id">
+								<div class="cm-card">
+									<a class="cm-title" x-bind:href="'teams.html?battle=' + encodeURIComponent(b.id)" x-text="mask(b.name)"></a>
+									<span class="cm-badge" x-text="stateText(b)"></span>
+									<div class="cm-meta" x-text="battleTeamsText(b)"></div>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<h3>All teams</h3>
+					<input class="cm-input" type="search" placeholder="Find a team" aria-label="Find a team" x-model="search" style="margin-bottom: 8px;" />
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && shownTeams.length === 0">No teams yet.</p>
+					<table class="cm-table" x-show="shownTeams.length > 0">
+						<thead><tr><th>Team</th><th class="cm-num">Members</th><th></th></tr></thead>
+						<tbody>
+							<template x-for="t in shownTeams" x-bind:key="t.id">
+								<tr data-testid="team-row">
+									<td><a x-bind:href="'teams.html?id=' + encodeURIComponent(t.id)" x-text="mask(t.name)"></a></td>
+									<td class="cm-num" x-text="t.memberCount || 1"></td>
+									<td class="cm-meta" x-text="t.open ? 'Open' : 'By request'"></td>
+								</tr>
+							</template>
+						</tbody>
+					</table>
+				</div>
+			</template>
+
+			<!-- One team -->
+			<template x-if="view === 'team'">
+				<div>
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && !team" x-cloak>There is no team here (any more). <a href="teams.html">All teams</a></p>
+					<template x-if="team">
+						<div>
+							<div class="cm-row">
+								<h2 x-text="mask(team.name)" data-testid="team-heading"></h2>
+								<span class="cm-badge" x-text="team.open ? 'Open' : 'By request'"></span>
+								<span class="cm-spacer"></span>
+								<span class="cm-meta" x-text="memberList.length + (memberList.length === 1 ? ' member' : ' members')"></span>
+							</div>
+							<div class="cm-row" style="margin: 8px 0;">
+								<template x-if="account && !myRole && !banned">
+									<span class="cm-row">
+										<button class="cm-btn cm-btn--primary" x-show="team.open" x-on:click="join()" x-bind:disabled="busy" data-testid="join">Join</button>
+										<button class="cm-btn cm-btn--primary" x-show="!team.open && !myRequest && !asking" x-on:click="asking = true" data-testid="ask">Ask to join</button>
+										<span class="cm-note" x-show="!team.open && myRequest">You asked to join. <button class="cm-link" x-on:click="cancelRequest()">Withdraw</button></span>
+									</span>
+								</template>
+								<button class="cm-btn" x-show="myRole && myRole !== 'leader'" x-on:click="leave()" x-bind:disabled="busy" data-testid="leave">Leave</button>
+								<a class="cm-btn" x-bind:href="'forum.html?c=' + encodeURIComponent('team:' + teamId)">Team forum</a>
+								<span class="cm-note" x-show="!account"><a href="account.html">Sign in</a> to join.</span>
+								<span class="cm-note" x-show="banned">You cannot join this team.</span>
+								<span class="cm-spacer"></span>
+								<button class="cm-link" x-show="account && myRole !== 'leader'" x-on:click="reportTeam()">Report this team</button>
+							</div>
+							<template x-if="asking">
+								<div class="cm-form">
+									<label for="ask-msg">A note for the team's staff (optional)</label>
+									<textarea id="ask-msg" class="cm-textarea" rows="2" maxlength="300" x-model="askMessage"></textarea>
+									<div class="cm-row">
+										<button class="cm-btn cm-btn--primary" x-on:click="askToJoin()" x-bind:disabled="busy" data-testid="send-ask">Send request</button>
+										<button class="cm-btn" x-on:click="asking = false">Cancel</button>
+									</div>
+								</div>
+							</template>
+
+							<div class="md cm-card" x-show="team.description && !editingTeam" x-effect="md($el, team.description)" data-testid="team-about"></div>
+
+							<template x-if="isStaff">
+								<div class="mod-bar">
+									<button class="cm-btn" x-show="!editingTeam" x-on:click="startEdit()">Edit team</button>
+									<template x-if="myRole === 'leader'">
+										<button class="cm-btn cm-btn--danger" x-on:click="disband()" x-bind:disabled="busy">Disband</button>
+									</template>
+								</div>
+							</template>
+							<template x-if="editingTeam">
+								<div class="cm-card cm-form">
+									<label for="edit-name">Name</label>
+									<input id="edit-name" class="cm-input" maxlength="40" x-model="form.name" />
+									<label for="edit-about">About the team</label>
+									<textarea id="edit-about" class="cm-textarea" rows="6" maxlength="4000" x-model="form.description"></textarea>
+									<label class="cm-check"><input type="checkbox" x-model="form.open" /> Anyone may join</label>
+									<div class="cm-row">
+										<button class="cm-btn cm-btn--primary" x-on:click="saveTeam()" x-bind:disabled="busy || form.name.trim().length < 3">Save</button>
+										<button class="cm-btn" x-on:click="editingTeam = false">Cancel</button>
+									</div>
+								</div>
+							</template>
+
+							<template x-if="isStaff && requestList.length">
+								<div id="requests">
+									<h3 x-text="'Asking to join (' + requestList.length + ')'"></h3>
+									<template x-for="r in requestList" x-bind:key="r.uid">
+										<div class="cm-card" data-testid="request">
+											<div class="cm-row">
+												<a x-bind:href="'profile.html?uid=' + encodeURIComponent(r.uid)" x-text="mask(names[r.uid] || '…')"></a>
+												<span class="cm-meta" x-text="when(r.at)"></span>
+												<span class="cm-spacer"></span>
+												<button class="cm-btn cm-btn--primary" x-on:click="admit(r)" x-bind:disabled="busy" data-testid="admit">Admit</button>
+												<button class="cm-btn" x-on:click="decline(r)" x-bind:disabled="busy">Decline</button>
+											</div>
+											<p class="cm-note" x-show="r.message" x-text="mask(r.message)"></p>
+										</div>
+									</template>
+								</div>
+							</template>
+
+							<h3>Team battles</h3>
+							<template x-for="b in teamBattles" x-bind:key="b.id">
+								<div class="cm-card" data-testid="battle-row">
+									<div class="cm-row">
+										<a class="cm-title" x-bind:href="'teams.html?battle=' + encodeURIComponent(b.id)" x-text="mask(b.name)"></a>
+										<span class="cm-badge" x-text="stateText(b)"></span>
+										<span class="cm-spacer"></span>
+										<template x-if="b.teams[teamId] === 'invited' && myRole === 'leader' && b.start > now()">
+											<span class="cm-row">
+												<button class="cm-btn cm-btn--primary" x-on:click="answerBattle(b.id, teamId, 'accepted')" x-bind:disabled="busy" data-testid="accept-battle">Accept</button>
+												<button class="cm-btn" x-on:click="answerBattle(b.id, teamId, 'declined')" x-bind:disabled="busy">Decline</button>
+											</span>
+										</template>
+									</div>
+									<div class="cm-meta" x-text="battleTeamsText(b)"></div>
+								</div>
+							</template>
+							<p class="cm-msg" x-show="teamBattles.length === 0">None yet.</p>
+							<button class="cm-btn" x-show="myRole === 'leader' && !planning" x-on:click="planBattle()" data-testid="plan-battle">Plan a team battle</button>
+							<template x-if="planning">
+								<div class="cm-card cm-form">
+									<label for="battle-name">Name</label>
+									<input id="battle-name" class="cm-input" maxlength="80" x-model="battleForm.name" data-testid="battle-name" />
+									<label for="battle-teams">Teams to invite (their addresses, separated by commas)</label>
+									<input id="battle-teams" class="cm-input" x-model="battleForm.teams" placeholder="the-blue-stones, night-owls" data-testid="battle-teams" />
+									<div class="cm-row">
+										<label for="battle-start">Starts</label>
+										<input id="battle-start" class="cm-input" style="width: auto;" type="datetime-local" x-model="battleForm.start" data-testid="battle-start" />
+										<label for="battle-hours">Lasts</label>
+										<select id="battle-hours" class="cm-select" x-model="battleForm.hours">
+											<option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option>
+											<option value="6">6 hours</option><option value="12">12 hours</option><option value="24">1 day</option>
+											<option value="72">3 days</option><option value="168">1 week</option><option value="336">2 weeks</option>
+										</select>
+										<label for="battle-top">Players counted per team</label>
+										<input id="battle-top" class="cm-input" style="width: 5em;" type="number" min="1" max="20" x-model.number="battleForm.topN" />
+									</div>
+									<label for="battle-about">Notes (optional)</label>
+									<textarea id="battle-about" class="cm-textarea" rows="2" maxlength="1000" x-model="battleForm.description"></textarea>
+									<p class="cm-note">Each invited team's leader accepts or declines before the start. While it runs, every rated online game between members of two different accepted teams scores 1 point for the winner; a team's score is its best players' points.</p>
+									<div class="cm-row">
+										<button class="cm-btn cm-btn--primary" x-on:click="createBattle()" x-bind:disabled="busy" data-testid="save-battle">Send invitations</button>
+										<button class="cm-btn" x-on:click="planning = false">Cancel</button>
+									</div>
+								</div>
+							</template>
+
+							<h3>Members</h3>
+							<table class="cm-table">
+								<tbody>
+									<template x-for="m in memberList" x-bind:key="m.uid">
+										<tr data-testid="member-row" x-bind:data-uid="m.uid">
+											<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(m.uid)" x-text="mask(names[m.uid] || '…')"></a></td>
+											<td class="team-roles" x-text="m.role === 'mod' ? 'moderator' : m.role"></td>
+											<td class="cm-meta" x-text="'joined ' + when(m.joined)"></td>
+											<td class="cm-num">
+												<template x-if="myRole === 'leader' && m.uid !== account.uid">
+													<span class="cm-row" style="justify-content: flex-end;">
+														<button class="cm-link" x-on:click="setRole(m, m.role === 'mod' ? 'member' : 'mod')" x-text="m.role === 'mod' ? 'Make member' : 'Make moderator'" data-testid="toggle-mod"></button>
+														<button class="cm-link" x-on:click="makeLeader(m)">Make leader</button>
+													</span>
+												</template>
+												<template x-if="canRemove(m)">
+													<span class="cm-row" style="justify-content: flex-end;">
+														<button class="cm-link" x-on:click="removeMember(m, false)" data-testid="remove-member">Remove</button>
+														<button class="cm-link" x-on:click="removeMember(m, true)">Remove and ban</button>
+													</span>
+												</template>
+											</td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<!-- One team battle -->
+			<template x-if="view === 'battle'">
+				<div>
+					<p class="cm-msg" x-show="loading">Loading...</p>
+					<p class="cm-msg" x-show="!loading && !battle" x-cloak>There is no battle here (any more).</p>
+					<template x-if="battle">
+						<div>
+							<div class="cm-row">
+								<h2 x-text="mask(battle.name)" data-testid="battle-heading"></h2>
+								<span class="cm-badge" x-text="stateText(battle)" data-testid="battle-state"></span>
+							</div>
+							<p class="cm-meta" x-text="battleTimes(battle)"></p>
+							<p class="cm-note" x-show="battle.description" x-text="mask(battle.description)"></p>
+							<p class="cm-note" x-text="'Every rated online game between members of two different accepted teams scores 1 point for the winner. Each team counts its ' + battle.topN + ' best player' + (battle.topN === 1 ? '' : 's') + '. The teams are fixed at the start (players who join a team during the battle play for it from then on).'"></p>
+							<template x-if="canCancel">
+								<button class="cm-btn cm-btn--danger" x-on:click="cancelBattle()" x-bind:disabled="busy">Cancel the battle</button>
+							</template>
+							<h3>Teams</h3>
+							<table class="cm-table" data-testid="standings">
+								<thead><tr><th>#</th><th>Team</th><th class="cm-num">Score</th><th class="cm-num">Points</th><th>Best players</th></tr></thead>
+								<tbody>
+									<template x-for="(s, i) in standings" x-bind:key="s.team">
+										<tr data-testid="standing">
+											<td x-text="i + 1"></td>
+											<td><a x-bind:href="'teams.html?id=' + encodeURIComponent(s.team)" x-text="mask(teamNames[s.team] || s.team)"></a></td>
+											<td class="cm-num battle-score" x-text="s.score"></td>
+											<td class="cm-num" x-text="s.points"></td>
+											<td class="cm-meta" x-text="s.players.slice(0, battle.topN).map((p) => mask(names[p.uid] || '…') + ' ' + p.points).join(', ') || '—'"></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+							<template x-if="otherTeams.length">
+								<div>
+									<h3>Invited</h3>
+									<template x-for="t in otherTeams" x-bind:key="t.id">
+										<div class="cm-row" style="margin-bottom: 6px;">
+											<a x-bind:href="'teams.html?id=' + encodeURIComponent(t.id)" x-text="mask(teamNames[t.id] || t.id)"></a>
+											<span class="cm-meta" x-text="t.status"></span>
+											<template x-if="t.status === 'invited' && leaderOf[t.id] && battle.start > now()">
+												<span class="cm-row">
+													<button class="cm-btn cm-btn--primary" x-on:click="answerBattle(battleId, t.id, 'accepted')" x-bind:disabled="busy">Accept</button>
+													<button class="cm-btn" x-on:click="answerBattle(battleId, t.id, 'declined')" x-bind:disabled="busy">Decline</button>
+												</span>
+											</template>
+										</div>
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<!-- Disbanding a team is the server's (functions/community.js disbandTeam). -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/text-filter.js?v=35"></script>
+	<script src="static/scripts/markdown-lite.js?v=35"></script>
+	<script src="static/scripts/community.js?v=35"></script>
+	<script src="static/scripts/engine/team-battle.js?v=35"></script>
+
+	<script>
+		// Teams: teams/{id}, team_members/{id}/{uid} ({role, joined, by}) with
+		// user_teams/{uid}/{id}, team_requests, team_bans; team battles:
+		// team_battles/{id} and team_battle_scores/{id}/players (written by the
+		// server, functions/community.js; scored by engine/team-battle.js).
+		//   teams.html             all teams, yours, the battles
+		//   teams.html?id={team}   a team
+		//   teams.html?battle={id} a battle's standings
+		document.addEventListener('alpine:init', () => {
+			const C = window.SigilCommunity;
+			const params = new URLSearchParams(location.search);
+			const db = () => firebase.database();
+			const ID_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+			// Firebase listeners stay out of Alpine's reactive state (a
+			// proxied Reference breaks the SDK).
+			Alpine.data('teamsPage', () => { const live = { refs: [], reqRef: null }; return {
+				view: params.get('battle') ? 'battle' : params.get('id') ? 'team' : 'list',
+				teamId: params.get('id') || '',
+				battleId: params.get('battle') || '',
+				account: null,
+				roles: { admin: false, forumMod: false, mutedUntil: 0 },
+				names: {},
+				teamNames: {},
+				loading: true,
+				busy: false,
+				error: '',
+				okMsg: '',
+				// List
+				teams: [],
+				myTeams: [],
+				battles: [],
+				search: '',
+				creating: false,
+				form: { name: '', id: '', idEdited: false, description: '', open: true },
+				// Team
+				team: null,
+				members: {},
+				requests: {},
+				myRequest: null,
+				banned: false,
+				asking: false,
+				askMessage: '',
+				editingTeam: false,
+				teamBattles: [],
+				planning: false,
+				battleForm: { name: '', teams: '', start: '', hours: '3', topN: 5, description: '' },
+				// Battle
+				battle: null,
+				scores: {},
+				leaderOf: {},
+				_tick: 0,
+
+				get myRole() { return this.account && this.members[this.account.uid] ? this.members[this.account.uid].role : null; },
+				get isStaff() { return this.myRole === 'leader' || this.myRole === 'mod'; },
+				get memberList() {
+					const order = { leader: 0, mod: 1, member: 2 };
+					return Object.keys(this.members).map((uid) => Object.assign({ uid }, this.members[uid]))
+						.sort((a, b) => (order[a.role] - order[b.role]) || ((a.joined || 0) - (b.joined || 0)));
+				},
+				get requestList() { return Object.keys(this.requests).map((uid) => Object.assign({ uid }, this.requests[uid])).sort((a, b) => a.at - b.at); },
+				get shownTeams() {
+					const q = this.search.trim().toLowerCase();
+					return this.teams.filter((t) => !q || String(t.name).toLowerCase().includes(q) || t.id.includes(q));
+				},
+				get standings() {
+					this._tick;
+					return this.battle ? teamBattleStandings(this.battle, this.scores) : [];
+				},
+				get otherTeams() {
+					const t = (this.battle && this.battle.teams) || {};
+					return Object.keys(t).filter((id) => t[id] !== 'accepted').map((id) => ({ id, status: t[id] }));
+				},
+				get canCancel() {
+					return !!this.battle && this.battle.start > this.now() && (this.roles.admin || this.leaderOf[this.battle.host]);
+				},
+
+				init() {
+					C.onUser(async (u) => {
+						this.account = u;
+						this.roles = await C.roles();
+						if (this.view === 'list') this.loadMine();
+						if (this.view === 'team') { this.loadMyRequest(); this.loadRequests(); }
+						if (this.view === 'battle') this.loadLeaderships();
+					});
+					if (this.view === 'list') this.loadList();
+					else if (this.view === 'team') this.loadTeam();
+					else this.loadBattle();
+					// Battle states change with the clock.
+					setInterval(() => { this._tick++; }, 30000);
+				},
+
+				md(el, text) { C.md(el, text); },
+				mask: (s) => C.mask(s),
+				when: (ts) => C.when(ts),
+				now: () => C.serverNow(),
+				slug: (s) => C.slugify(s),
+				validId: (id) => ID_RE.test(id || ''),
+
+				async _teamName(id) {
+					if (!(id in this.teamNames)) {
+						this.teamNames[id] = id;
+						const s = await db().ref('teams/' + id + '/name').once('value').catch(() => null);
+						this.teamNames[id] = s && s.val() ? s.val() : id;
+					}
+					return this.teamNames[id];
+				},
+
+				stateText(b) {
+					this._tick;
+					const s = battleState(b, this.now());
+					if (s === 'upcoming') return 'starts ' + new Date(b.start).toLocaleString();
+					if (s === 'running') return 'on now, until ' + new Date(b.end).toLocaleString();
+					return 'finished';
+				},
+				battleTimes(b) { return new Date(b.start).toLocaleString() + ' to ' + new Date(b.end).toLocaleString(); },
+				battleTeamsText(b) {
+					const t = b.teams || {};
+					return Object.keys(t).filter((id) => t[id] === 'accepted').map((id) => this.mask(this.teamNames[id] || id)).join(' vs ');
+				},
+
+				async _run(fn, ok) {
+					this.busy = true;
+					this.error = '';
+					this.okMsg = '';
+					try {
+						await fn();
+						if (ok) this.okMsg = ok;
+						return true;
+					} catch (e) {
+						console.warn('[Teams]', e);
+						this.error = e.friendly ? e.message : C.errorText(e);
+						return false;
+					} finally {
+						this.busy = false;
+					}
+				},
+
+				// ---- The list ----
+
+				async loadList() {
+					try {
+						const [teams, battles] = await Promise.all([
+							db().ref('teams').orderByChild('memberCount').limitToLast(200).once('value'),
+							db().ref('team_battles').orderByChild('end').startAt(this.now() - 3 * 86400000).limitToFirst(30).once('value'),
+						]);
+						const list = [];
+						teams.forEach((c) => { list.push(Object.assign({ id: c.key }, c.val())); });
+						list.sort((a, b) => (b.memberCount || 1) - (a.memberCount || 1) || String(a.name).localeCompare(String(b.name)));
+						this.teams = list;
+						list.forEach((t) => { this.teamNames[t.id] = t.name; });
+						const bl = [];
+						battles.forEach((c) => { bl.push(Object.assign({ id: c.key }, c.val())); });
+						this.battles = bl.sort((a, b) => a.start - b.start);
+						bl.forEach((b) => Object.keys(b.teams || {}).forEach((t) => this._teamName(t)));
+					} catch (e) { this.error = C.errorText(e); }
+					this.loading = false;
+				},
+
+				async loadMine() {
+					this.myTeams = [];
+					if (!this.account) return;
+					const s = await db().ref('user_teams/' + this.account.uid).once('value').catch(() => null);
+					this.myTeams = Object.keys((s && s.val()) || {});
+					this.myTeams.forEach((t) => this._teamName(t));
+				},
+
+				async createTeam() {
+					const name = this.form.name.trim();
+					const id = this.form.id.trim();
+					if (name.length < 3 || !ID_RE.test(id)) return;
+					const me = this.account.uid;
+					const ok = await this._run(async () => {
+						const taken = await db().ref('teams/' + id).once('value');
+						if (taken.exists()) throw Object.assign(new Error('That address is taken; pick another.'), { friendly: true });
+						const team = { name, leader: me, created: C.TS(), open: !!this.form.open };
+						if (this.form.description.trim()) team.description = this.form.description.trim().slice(0, 4000);
+						await C.commit('team', {
+							['teams/' + id]: team,
+							['team_members/' + id + '/' + me]: { role: 'leader', joined: C.TS(), by: me },
+							['user_teams/' + me + '/' + id]: true,
+						});
+					});
+					if (ok) location.href = 'teams.html?id=' + encodeURIComponent(id);
+				},
+
+				// ---- A team ----
+
+				loadTeam() {
+					const tRef = db().ref('teams/' + this.teamId);
+					const mRef = db().ref('team_members/' + this.teamId);
+					tRef.on('value', (s) => {
+						this.team = s.val();
+						this.loading = false;
+						if (this.team) {
+							this.teamNames[this.teamId] = this.team.name;
+							document.title = C.mask(this.team.name) + ' - Teams - Sigil Online';
+						}
+					}, (e) => { this.error = C.errorText(e); this.loading = false; });
+					mRef.on('value', (s) => {
+						this.members = s.val() || {};
+						C.fillNames(Object.keys(this.members), this.names);
+						this.loadRequests();
+					}, () => {});
+					live.refs.push(tRef, mRef);
+					this.loadTeamBattles();
+				},
+
+				async loadMyRequest() {
+					this.myRequest = null;
+					this.banned = false;
+					if (!this.account || this.view !== 'team') return;
+					const r = await db().ref('team_requests/' + this.teamId + '/' + this.account.uid).once('value').catch(() => null);
+					this.myRequest = r && r.val();
+				},
+
+				loadRequests() {
+					if (!this.isStaff || live.reqRef) return;
+					live.reqRef = db().ref('team_requests/' + this.teamId);
+					live.reqRef.on('value', (s) => {
+						this.requests = s.val() || {};
+						C.fillNames(Object.keys(this.requests), this.names);
+						if (location.hash === '#requests') this.$nextTick(() => { const el = document.getElementById('requests'); if (el) el.scrollIntoView(); });
+					}, () => { live.reqRef = null; });
+				},
+
+				async loadTeamBattles() {
+					const s = await db().ref('team_battles').orderByChild('end').startAt(this.now() - 30 * 86400000).once('value').catch(() => null);
+					const list = [];
+					if (s) s.forEach((c) => { const b = c.val(); if (b && b.teams && b.teams[this.teamId]) list.push(Object.assign({ id: c.key }, b)); });
+					this.teamBattles = list.sort((a, b) => b.start - a.start);
+					list.forEach((b) => Object.keys(b.teams).forEach((t) => this._teamName(t)));
+				},
+
+				join() {
+					const me = this.account.uid;
+					return this._run(() => db().ref().update({
+						['team_members/' + this.teamId + '/' + me]: { role: 'member', joined: C.TS(), by: me },
+						['user_teams/' + me + '/' + this.teamId]: true,
+					}).catch(async (e) => {
+						const b = await db().ref('team_bans/' + this.teamId + '/' + me).once('value').catch(() => null);
+						if (b && b.exists()) { this.banned = true; throw Object.assign(new Error('You cannot join this team.'), { friendly: true }); }
+						throw e;
+					}), 'Welcome to the team.');
+				},
+
+				async askToJoin() {
+					const me = this.account.uid;
+					const req = { at: C.TS() };
+					if (this.askMessage.trim()) req.message = this.askMessage.trim().slice(0, 300);
+					const ok = await this._run(() => C.commit('team', { ['team_requests/' + this.teamId + '/' + me]: req }), 'Request sent.');
+					if (ok) { this.asking = false; this.loadMyRequest(); }
+				},
+
+				async cancelRequest() {
+					const ok = await this._run(() => db().ref('team_requests/' + this.teamId + '/' + this.account.uid).remove());
+					if (ok) this.myRequest = null;
+				},
+
+				leave() {
+					if (!confirm('Leave ' + this.team.name + '?')) return;
+					const me = this.account.uid;
+					return this._run(() => db().ref().update({
+						['team_members/' + this.teamId + '/' + me]: null,
+						['user_teams/' + me + '/' + this.teamId]: null,
+					}), 'You left the team.');
+				},
+
+				admit(r) {
+					return this._run(() => db().ref().update({
+						['team_members/' + this.teamId + '/' + r.uid]: { role: 'member', joined: C.TS(), by: this.account.uid },
+						['user_teams/' + r.uid + '/' + this.teamId]: true,
+						['team_requests/' + this.teamId + '/' + r.uid]: null,
+					}));
+				},
+
+				decline(r) {
+					return this._run(() => db().ref('team_requests/' + this.teamId + '/' + r.uid).remove());
+				},
+
+				canRemove(m) {
+					if (!this.account || m.uid === this.account.uid || m.role === 'leader') return false;
+					return this.myRole === 'leader' || (this.myRole === 'mod' && m.role === 'member');
+				},
+
+				removeMember(m, ban) {
+					if (!confirm((ban ? 'Remove and ban ' : 'Remove ') + (this.names[m.uid] || 'this player') + '?')) return;
+					const u = {
+						['team_members/' + this.teamId + '/' + m.uid]: null,
+						['user_teams/' + m.uid + '/' + this.teamId]: null,
+					};
+					if (ban) u['team_bans/' + this.teamId + '/' + m.uid] = C.TS();
+					return this._run(() => db().ref().update(u));
+				},
+
+				setRole(m, role) {
+					return this._run(() => db().ref('team_members/' + this.teamId + '/' + m.uid + '/role').set(role));
+				},
+
+				makeLeader(m) {
+					if (!confirm('Make ' + (this.names[m.uid] || 'this player') + ' the leader? You become a moderator.')) return;
+					return this._run(() => db().ref().update({
+						['teams/' + this.teamId + '/leader']: m.uid,
+						['team_members/' + this.teamId + '/' + m.uid + '/role']: 'leader',
+						['team_members/' + this.teamId + '/' + this.account.uid + '/role']: 'mod',
+					}));
+				},
+
+				startEdit() {
+					this.form = { name: this.team.name, id: this.teamId, idEdited: true, description: this.team.description || '', open: !!this.team.open };
+					this.editingTeam = true;
+				},
+
+				async saveTeam() {
+					const ok = await this._run(() => db().ref('teams/' + this.teamId).update({
+						name: this.form.name.trim().slice(0, 40),
+						description: this.form.description.trim().slice(0, 4000),
+						open: !!this.form.open,
+					}));
+					if (ok) this.editingTeam = false;
+				},
+
+				async disband() {
+					if (!confirm('Disband ' + this.team.name + '? Its members, forum and future battles are removed. This cannot be undone.')) return;
+					const ok = await this._run(() => firebase.functions().httpsCallable('disbandTeam')({ team: this.teamId }));
+					if (ok) location.href = 'teams.html';
+				},
+
+				reportTeam() {
+					C.report({ kind: 'team', target: this.team.leader, team: this.teamId, what: 'this team' });
+				},
+
+				planBattle() {
+					const t = new Date(this.now() + 86400000);
+					t.setMinutes(0, 0, 0);
+					const local = new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+					this.battleForm = { name: this.team.name + ' team battle', teams: '', start: local, hours: '3', topN: 5, description: '' };
+					this.planning = true;
+				},
+
+				async createBattle() {
+					const f = this.battleForm;
+					const ok = await this._run(async () => {
+						const fail = (m) => { throw Object.assign(new Error(m), { friendly: true }); };
+						const name = f.name.trim();
+						if (name.length < 3 || name.length > 80) fail('Give the battle a name (3 to 80 characters).');
+						const start = new Date(f.start).getTime();
+						if (!(start > this.now() - 60000)) fail('Pick a start time in the future.');
+						if (start > this.now() + 30 * 86400000) fail('A battle starts within 30 days.');
+						const topN = Math.floor(Number(f.topN));
+						if (!(topN >= 1 && topN <= 20)) fail('Count 1 to 20 players per team.');
+						const invited = [...new Set(f.teams.split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean))].filter((t) => t !== this.teamId);
+						if (!invited.length) fail('Invite at least one other team.');
+						if (invited.length > 9) fail('Invite at most 9 teams.');
+						const exist = await Promise.all(invited.map((t) => ID_RE.test(t) ? db().ref('teams/' + t + '/name').once('value').then((s) => s.exists()) : false));
+						const missing = invited.filter((t, i) => !exist[i]);
+						if (missing.length) fail('No such team: ' + missing.join(', ') + '.');
+						const teams = { [this.teamId]: 'accepted' };
+						invited.forEach((t) => { teams[t] = 'invited'; });
+						const battle = { name, host: this.teamId, by: this.account.uid, created: C.TS(), start, end: start + Number(f.hours) * 3600000, topN, teams };
+						if (f.description.trim()) battle.description = f.description.trim().slice(0, 1000);
+						await C.commit('team', { ['team_battles/' + C.newKey('team_battles')]: battle });
+					}, 'Invitations sent.');
+					if (ok) { this.planning = false; this.loadTeamBattles(); }
+				},
+
+				async answerBattle(bid, team, answer) {
+					const ok = await this._run(() => db().ref('team_battles/' + bid + '/teams/' + team).set(answer));
+					if (ok && this.view === 'team') this.loadTeamBattles();
+				},
+
+				// ---- A battle ----
+
+				loadBattle() {
+					const bRef = db().ref('team_battles/' + this.battleId);
+					const sRef = db().ref('team_battle_scores/' + this.battleId + '/players');
+					bRef.on('value', (s) => {
+						this.battle = s.val();
+						this.loading = false;
+						if (this.battle) {
+							Object.keys(this.battle.teams || {}).forEach((t) => this._teamName(t));
+							document.title = C.mask(this.battle.name) + ' - Team battle - Sigil Online';
+							this.loadLeaderships();
+						}
+					}, (e) => { this.error = C.errorText(e); this.loading = false; });
+					sRef.on('value', (s) => {
+						this.scores = s.val() || {};
+						C.fillNames(Object.keys(this.scores), this.names);
+					}, () => {});
+					live.refs.push(bRef, sRef);
+				},
+
+				async loadLeaderships() {
+					if (!this.account || !this.battle) { this.leaderOf = {}; return; }
+					const me = this.account.uid;
+					const out = {};
+					await Promise.all(Object.keys(this.battle.teams || {}).map(async (t) => {
+						const r = await db().ref('team_members/' + t + '/' + me + '/role').once('value').catch(() => null);
+						out[t] = !!r && r.val() === 'leader';
+					}));
+					this.leaderOf = out;
+				},
+
+				async cancelBattle() {
+					if (!confirm('Cancel this battle?')) return;
+					const host = this.battle.host;
+					const ok = await this._run(() => db().ref('team_battles/' + this.battleId).remove());
+					if (ok) location.href = 'teams.html?id=' + encodeURIComponent(host);
+				},
+			}; });
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>
