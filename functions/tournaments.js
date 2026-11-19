@@ -1209,7 +1209,10 @@ async function scrubInEvent(S, uid) {
 	const all = (await db.ref('tournament_pairings/' + tid).once('value')).val() || {};
 	Object.assign(S.pairings, Object.fromEntries(Object.entries(all).filter(([pid]) => !S.pairings[pid])));
 	const p = S.players[uid];
-	if (p) {
+	if (p && t.status === 'created') {
+		// Before the start the seat is simply freed (as a withdrawal).
+		leave(S, uid);
+	} else if (p) {
 		Object.assign(p, { name: DELETED_NAME, withdrawn: true, waitingSince: null });
 		if (t.kind === 'arena') p.active = false;
 		touchP(S, uid);
@@ -1222,6 +1225,8 @@ async function scrubInEvent(S, uid) {
 	if (t.createdBy === uid) { t.createdByName = DELETED_NAME; t.repeat = null; touchT(S); }
 	if (t.host === uid) { t.hostName = DELETED_NAME; touchT(S); }
 	for (const x of t.podium || []) if (x && x.uid === uid) { x.name = DELETED_NAME; touchT(S); }
+	// Nobody else can start a simul: without its host it is cancelled.
+	if (t.kind === 'simul' && t.host === uid && t.status === 'created') await cancelEvent(S, Date.now(), 'host-deleted');
 	S.extra['tournament_presence/' + tid + '/' + uid] = null;
 	S.extra['user_tournaments/' + uid + '/' + tid] = null;
 }

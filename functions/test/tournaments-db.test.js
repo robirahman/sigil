@@ -441,3 +441,21 @@ test('a repeating series ends when its creator is deleted', async () => {
 	const t1 = await val('tournaments/' + id);
 	assert.deepStrictEqual([t1.status, t1.final, t1.repeatedTo], ['finished', true, undefined]);
 });
+
+test('a deleted player frees their seat before the start; a simul without its host is cancelled', async () => {
+	await addUsers({ h: 1000, x: 1000, y: 1000 });
+	const { id } = await T.act(db, 'h', { action: 'create', config: { kind: 'simul', name: 'One seat', untimed: true, maxPlayers: 1 } }, { admin: false, now: Date.now() });
+	await T.act(db, 'x', { action: 'join', id }, { admin: false, now: Date.now() });
+	await assert.rejects(T.act(db, 'y', { action: 'join', id }, { admin: false, now: Date.now() }), (e) => e.code === 'resource-exhausted');
+	await db.ref('deleted_users/x').set(Date.now());
+	await T.scrubUser(db, 'x', {});
+	assert.strictEqual(await val('tournament_players/' + id + '/x'), null);
+	assert.strictEqual((await val('tournaments/' + id)).nbPlayers, 0);
+	await T.act(db, 'y', { action: 'join', id }, { admin: false, now: Date.now() });
+	await db.ref('deleted_users/h').set(Date.now());
+	await T.scrubUser(db, 'h', {});
+	const t = await val('tournaments/' + id);
+	assert.deepStrictEqual([t.status, t.final, t.hostName, t.cancelReason], ['cancelled', true, 'Deleted player', 'host-deleted']);
+	assert.strictEqual(await val('tournament_active/' + id), null);
+	assert.strictEqual((await val('tournament_index/' + id)).status, 'cancelled');
+});
