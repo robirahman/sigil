@@ -136,8 +136,14 @@ function stalled(room, loser, now) {
 	const mid = sorted.length >> 1;
 	const medianMs = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 	const last = turns[turns.length - 1].timestamp;
-	const leftMs = roomTimeLeft(room, loser, last);
-	if (typeof leftMs !== 'number' || leftMs < FAIR_PLAY.STALL_MIN_MS) return null;
+	// The clock the final turn began with. roomTimeLeft does not charge the
+	// game's first move to its mover (the flag rule): their real bank was
+	// smaller by that think, less its increment, so a first mover in time
+	// trouble is not taken for a staller.
+	let leftMs = roomTimeLeft(room, loser, last);
+	if (typeof leftMs !== 'number') return null;
+	if (turns[0].color === loser) leftMs -= Math.max(0, (turns[0].timestamp - room.startedAt) - (tc.increment || 0));
+	if (leftMs < FAIR_PLAY.STALL_MIN_MS) return null;
 	if (leftMs < FAIR_PLAY.STALL_FACTOR * Math.max(medianMs, 1000)) return null;
 	return { satMs: now - last, leftMs, medianMs: Math.round(medianMs), turns: thinks.length };
 }

@@ -138,6 +138,12 @@ class Report(unittest.TestCase):
         self.assertIsNone(m({'over': True}, OPTS))
         self.assertIsNone(m(None, OPTS))
 
+    def test_mixed_rows_refused(self):
+        rows = {(1, 0): {'d': 4, 'engine': 'a'}, (1, 1): {'d': 4, 'engine': 'a'}}
+        self.assertIsNone(fp.mixed(rows))
+        self.assertIn('--depth', fp.mixed(dict(rows, **{'x': {'d': 3, 'engine': 'a'}})))
+        self.assertIn('--engine', fp.mixed(dict(rows, **{'x': {'d': 4, 'engine': 'b'}})))
+
     def test_percentile(self):
         self.assertEqual(fp.percentile([1, 2, 3, 4, 5], 0.5), 3)
         self.assertAlmostEqual(fp.percentile([1, 2, 3, 4], 0.95), 3.85)

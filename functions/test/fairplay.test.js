@@ -130,6 +130,18 @@ test('a stall: a healthy clock run out without moving', () => {
 	assert.strictEqual(stalled(room, 'red', flagAt), null);
 });
 
+test('the first mover\'s opening think counts against their bank', () => {
+	// Red (first to move) spent 100 s on the first turn, then 10 s a turn;
+	// the flag rule leaves the first turn uncharged (230 - 40 = 190 s at the
+	// final turn), but the real bank was 90 s: time trouble, not a stall.
+	const room = liveRoom([100_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000], 230_000);
+	assert.strictEqual(stalled(room, 'red', room.last + 190_000 + 3000), null);
+	// With 330 s on the clock the real bank was 190 s: a stall, reported as such.
+	const big = liveRoom([100_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000], 330_000);
+	const ev = stalled(big, 'red', big.last + 290_000 + 3000);
+	assert.deepStrictEqual([ev && ev.leftMs, ev && ev.medianMs, ev && ev.turns], [190_000, 10_000, 5]);
+});
+
 test('not a stall: time trouble, a slow player, too few turns, other clocks', () => {
 	// Under two minutes left at the start of the final turn: time trouble.
 	const scramble = liveRoom(Array(9).fill(10_000), 150_000);

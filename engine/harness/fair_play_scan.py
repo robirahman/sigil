@@ -341,8 +341,8 @@ def cmd_eval(a):
 
 # ------------------------------------------------------------------ report ---
 
-def load_rows(path, depth=None):
-    """The newest row per (game, index), optionally of one depth."""
+def load_rows(path, depth=None, engine=None):
+    """The newest row per (game, index), optionally of one depth and engine build."""
     rows = {}
     for line in open(path, encoding='utf-8'):
         try:
@@ -351,8 +351,23 @@ def load_rows(path, depth=None):
             continue
         if depth is not None and r.get('d') != depth:
             continue
+        if engine is not None and r.get('engine') != engine:
+            continue
         rows[(r['g'], r['i'])] = r
     return rows
+
+
+def mixed(rows):
+    """Why `rows` may not go into one report: they come from several depths or engine
+    builds (a resumed or re-run evals file), which would compare players searched at
+    different strengths. None when they are uniform."""
+    depths = Counter(r.get('d') for r in rows.values())
+    engines = Counter(r.get('engine') for r in rows.values())
+    if len(depths) > 1:
+        return f'rows of several depths {dict(depths)}: pass --depth'
+    if len(engines) > 1:
+        return f'rows of several engine builds {dict(engines)}: pass --engine'
+    return None
 
 
 def turn_measure(row, opts):
@@ -521,7 +536,10 @@ def build_report(lines, rows, opts):
 
 def cmd_report(a):
     lines = json.load(open(a.lines, encoding='utf-8'))
-    rows = load_rows(a.evals, a.depth)
+    rows = load_rows(a.evals, a.depth, a.engine)
+    why = mixed(rows)
+    if why:
+        sys.exit(f'{a.evals}: {why} (each player must be measured by the same search).')
     opts = dict(opening_turns=a.opening_turns, decided=a.decided, cap=a.cap, close=a.close, band=a.band,
                 min_peers=a.min_peers, min_games=a.min_games, min_turns=a.min_turns, bootstrap=a.bootstrap)
     players, anchors = build_report(lines, rows, opts)
@@ -591,7 +609,8 @@ def main():
     r.add_argument('--lines', required=True)
     r.add_argument('--evals', required=True)
     r.add_argument('--out', required=True)
-    r.add_argument('--depth', type=int, default=None, help='use rows of this depth only')
+    r.add_argument('--depth', type=int, default=None, help='use rows of this depth only (required when the file holds several)')
+    r.add_argument('--engine', default=None, help='use rows of this engine build only (required when the file holds several)')
     r.add_argument('--opening-turns', type=int, default=2, help='each side\'s first turns left out')
     r.add_argument('--decided', type=int, default=600, help='|best score| (centistones) at which a position is decided')
     r.add_argument('--cap', type=int, default=600, help='scores clamped to +-cap before the loss')
