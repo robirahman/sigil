@@ -213,3 +213,17 @@ Target: Haiku-tier models below 10% while keeping mate-in-1.
   - The Fissure fix ships as its own PR (#69).
   - Winning-turn puzzles use a two-stage root table.
   - `bench/gcp/jobs/dev2verify.sh` finishes certifying dev v2's answer key.
+- **2026-11-08: winning-turn definitions (Robi).**
+  - One solution = one idea: the same placement nodes (regular move, dash moves, Providence) and the same spells cast. Sacrifices, keeps, pushes and spell resolutions are execution details.
+  - Execution matters: executions of the winning idea that do not win are wrong answers, and such puzzles are among the best; they are kept and favoured.
+  - Playout rule: the key idea's executions win at least 85% of Very Hard 10 s playouts and every played alternative at most 50% (`bench/tools/win_select.py`).
+  - Winning-turn puzzles stay at 30% of the set or more.
+- **2026-11-08/09: mining results.** Mate pool: 13,509 m1 / 5,427 m2 / 1,701 m3 from 3,273 self-play shards; mate-in-4 chain 474, mate-in-5 chain 158. Winning turns over 35,886 self-play games: 36 passed the table stage, 12 the playout rule (7 where execution matters), about 1 per 3,000 games, so all of round 6 would give about 125 of the 330 needed.
+- **2026-11-09: certificate checker fix.** 7 valid mate certificates were rejected because a position can recur at different turn counts and both checkers kept one hint per position; both now try every hint (each tried line is checked in full, so the check stays sound).
+- **2026-11-18: decisions (Robi): (a) near misses admitted by playouts, (b) more self-play, (d) human games.**
+  - (a) `win_select.py`: a position the table rejected only for a short lead ("no gap" with one idea and an idea gap of at least 0.10, or "unstable across depths") is a puzzle when 12 playouts per turn give the key at least 85% and every alternative at most 1/3 (stricter than the table puzzles' 50%). Recorded as `admission: playouts`.
+  - (b) All of round 6 is mined, including the self-play games that started from a human position (their candidates come at least 4 plies after the start; their source for the dev/test split is the start position), and a round-7 self-play run with engine v36 adds fresh games.
+  - (d) Human games (3,120 games in the hydrated dumps to 2026-11-03), with candidates within 2 plies of a published puzzle position dropped.
+  - Cost: a depth-4 shipped-net prefilter skips the full table when 2+ ideas already win at P >= 0.9 (on the earlier 3,471 tables: 66% of positions skipped, none of the 53 table-passing or playout-separated positions lost). Shards run on Spot VMs kept alive by `bench/gcp/winmine_fleet.py`.
+  - Grading: winning-turn answers are judged by key lookup on a COMPLETE answer key (`bench/tools/complete_keys.py`: every child executing the key idea searched at the table's depth and net), with `bench_grade` "w" as the fallback; the nnue_mt256 calibration is pinned in `bench/data/` because the site's copy follows the shipped net (nnue_r6 from engine v36).
+  - Mate-in-4 shortest-mate proofs ("no win within 3") show many chained mates in 4 are really mates in 3, so a second mate-mining pass (`matemine_v3.sh`) runs on 13 more shards to refill mates in 4 and 5.
