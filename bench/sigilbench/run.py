@@ -212,6 +212,10 @@ def main():
         secs = round(time.time() - t0, 1)
         if err:
             g = {'status': 'api_error', 'correct': False, 'detail': err}
+        elif ans.get('after_sfn') and p.get('kind') == 'win':
+            # engine baseline on a winning-turn puzzle: graded by its action list when it gave one
+            g = (grader.grade(p, ans['actions']) if ans.get('actions')
+                 else grader.grade_win(p, None, ans['after_sfn']))
         elif ans.get('after_sfn'):
             g = grader.grade_after(p, ans['after_sfn'])      # engine baseline: graded by position
         elif ans['actions'] is None and ans.get('stop') == 'answered':
@@ -223,7 +227,8 @@ def main():
             g = {'status': 'no_answer', 'correct': False, 'detail': ans.get('stop')}
         else:
             g = grader.grade(p, ans['actions'])
-        rec = {'puzzle_id': p['id'], 'n': p['n'], 'status': g['status'], 'correct': g['correct'],
+        rec = {'puzzle_id': p['id'], 'n': p['n'], 'category': p.get('category') or f"m{p['n']}",
+               'status': g['status'], 'correct': g['correct'],
                'answer': ans.get('actions') or ans.get('after_sfn'), 'raw_answer': ans.get('raw_answer'),
                'stop': ans.get('stop'), 'usage': ans.get('usage'), 'seconds': secs,
                'grade': {k: v for k, v in g.items() if k not in ('status', 'correct')}}

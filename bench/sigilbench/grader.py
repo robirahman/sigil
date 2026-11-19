@@ -123,10 +123,12 @@ class Grader:
         out = {'after': after, 'key': key}
         if key in set(puzzle.get('answer_keys') or []):
             return dict(out, status='correct', correct=True, proof='answer key')
-        sig = solution_signature(actions or [])
+        if actions is None:      # a position without its action list (engine baseline): only the keys count
+            return dict(out, status='wrong', correct=False, detail='not an answer key (no action list to judge the idea)')
+        sig = solution_signature(actions)
         idea = (tuple(puzzle['key_idea'][0]), tuple(puzzle['key_idea'][1]))
         out['idea'] = [list(sig[0]), list(sig[1])]
-        if actions is None or sig != idea:
+        if sig != idea:
             return dict(out, status='wrong', correct=False, detail='another idea')
         g = self.rust.ask(f"w\t{puzzle['sfn']}\t{after}\t{puzzle.get('depth', 5)}\t{puzzle.get('eval', 'nnue_mt256')}")
         out['rust'] = g

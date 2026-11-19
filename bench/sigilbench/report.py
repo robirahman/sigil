@@ -40,6 +40,9 @@ def summarize(run_dir):
 
     out['overall'] = acc(rows)
     out['by_n'] = {str(n): acc([r for r in rows if r['n'] == n]) for n in sorted({r['n'] for r in rows})}
+    if any(r.get('category') for r in rows):     # v3: mate in 1-5 by proven shortest mate, and winning turns
+        cats = sorted({r.get('category') or f"m{r['n']}" for r in rows}, key=lambda c: (c == 'win', c))
+        out['by_category'] = {c: acc([r for r in rows if (r.get('category') or f"m{r['n']}") == c]) for c in cats}
     out['status_counts'] = dict(collections.Counter(r['status'] for r in rows))
     tin = sum((r.get('usage') or {}).get('input_tokens', 0) for r in rows)
     tout = sum((r.get('usage') or {}).get('output_tokens', 0) for r in rows)
