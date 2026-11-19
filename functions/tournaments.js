@@ -382,10 +382,12 @@ function ownTurns(room, color) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Run fn while holding the event's lock (tournament_locks/{tid}), so two
- * writers never pair the same player or score a game twice. A lock older
- * than LOCK_MS is taken over (its holder crashed). Throws 'unavailable'
- * after a few seconds of waiting.
+ * Run fn(guard) while holding the event's lock (tournament_locks/{tid}), so
+ * two writers never pair the same player or score a game twice. A lock not
+ * renewed for LOCK_MS is taken over (its holder crashed): the holder renews
+ * it every LOCK_MS / 3, and guard.confirm() (save() calls it) renews it once
+ * more and throws if it was lost, so a writer that outlived its lease never
+ * writes. Throws 'unavailable' after waitMs of waiting.
  */
 async function withLock(db, tid, fn, waitMs = 15000) {
 	const ref = db.ref('tournament_locks/' + tid);
@@ -399,9 +401,27 @@ async function withLock(db, tid, fn, waitMs = 15000) {
 		if (Date.now() > until) fail('unavailable', 'busy');
 		await new Promise((r) => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
 	}
+	let lost = false;
+	const renew = async () => {
+		const at = Date.now();
+		// null on the first (cached) run sends it to the server, which reruns
+		// it on the lock as it is; a missing lock commits as null: lost.
+		const r = await ref.transaction((cur) => (cur === null ? null : cur.by === me ? { by: me, until: at + LOCK_MS } : undefined),
+			undefined, false);
+		const v = r.snapshot && r.snapshot.val();
+		if (!r.committed || !v || v.by !== me) { lost = true; return false; }
+		return true;
+	};
+	const timer = setInterval(() => { renew().catch(() => {}); }, Math.floor(LOCK_MS / 3));
+	const guard = {
+		async confirm() {
+			if (lost || !(await renew())) fail('aborted', 'lock-lost');
+		},
+	};
 	try {
-		return await fn();
+		return await fn(guard);
 	} finally {
+		clearInterval(timer);
 		// A transaction first runs on the local cache (null here): answer
 		// null, and the server reruns it on the lock as it is.
 		await ref.transaction((cur) => (cur === null || cur.by === me ? null : undefined), undefined, false).catch(() => {});
@@ -443,6 +463,7 @@ const touchP = (S, uid) => { S.dirtyPlayers.add(uid); };
 const touchG = (S, pid) => { S.dirtyPairings.add(pid); };
 
 async function save(S) {
+	if (S.guard) await S.guard.confirm();
 	const u = Object.assign({}, S.extra);
 	const base = (n) => n + '/' + S.tid;
 	if (S.dirtyT) {
@@ -754,11 +775,47 @@ function repeatEvent(S, now) {
 	t.repeatedTo = tid;
 	S.extra['tournaments/' + tid] = clean(next);
 	S.extra['tournament_active/' + tid] = true;
+	// As create() does: the creator's events list, and their open count.
+	if (t.createdBy) {
+		S.extra['user_tournaments/' + t.createdBy + '/' + tid] = { kind: t.kind, name: t.name, at: now, role: 'creator' };
+		S.extra['tournament_limits/' + t.createdBy + '/' + tid] = now;
+	}
 	if (!next.private) S.extra['tournament_index/' + tid] = indexEntry(next);
 }
 
-function cancelEvent(S, now, reason) {
-	const { t } = S;
+/**
+ * Cancel an event: its open games are aborted (no result, no rating: an
+ * abort without abortedBy is no forfeit to index.js settleAbort), their
+ * pairings void, their players free, and the event final.
+ */
+async function cancelEvent(S, now, reason) {
+	const { t, db } = S;
+	for (const [pid, g] of Object.entries(S.pairings)) {
+		if (!g || g.status !== 'playing') continue;
+		if (g.room && !S.fresh.has(pid)) {
+			const ref = db.ref('rooms/' + g.room);
+			const res = await ref.transaction((r) => {
+				if (r === null) return null;
+				if (r.status !== 'playing') return undefined;
+				return Object.assign(r, { status: 'aborted', endReason: 'cancelled', closedAt: now, finishedAt: now });
+			});
+			// Aborted here, or (the transaction left it) ended first.
+			const v = res.snapshot && res.snapshot.val();
+			if (v && v.status === 'finished') {
+				// It ended first: scored as usual.
+				applyResult(S, pid, await roomResult(freshEngine(), v), v, now);
+				continue;
+			}
+			S.extra['live_rooms/' + g.room] = null;
+			for (const c of ['red', 'blue']) if (g[c]) S.extra['user_active_games/' + g[c] + '/' + g.room] = null;
+		}
+		Object.assign(g, { status: 'void', how: 'cancelled', endedAt: now });
+		touchG(S, pid);
+		for (const c of ['red', 'blue']) {
+			const p = S.players[g[c]];
+			if (p && p.pairing === pid) { p.playing = null; p.pairing = null; touchP(S, p.uid); }
+		}
+	}
 	t.status = 'cancelled';
 	t.cancelledAt = now;
 	t.cancelReason = reason || null;
@@ -859,7 +916,7 @@ async function step(S, now, full) {
 	if (t.kind === 'swiss') {
 		if (t.status === 'created' && now >= t.startsAt) {
 			const n = Object.values(S.players).filter((p) => p && !p.withdrawn).length;
-			if (n < 2) { cancelEvent(S, now, 'not-enough-players'); return; }
+			if (n < 2) { await cancelEvent(S, now, 'not-enough-players'); return; }
 			t.status = 'started';
 			t.startedAt = now;
 			touchT(S);
@@ -890,9 +947,10 @@ async function step(S, now, full) {
 /** Move one event on (the poke, the tick, a trigger). Quiet when it is busy. */
 async function advance(db, tid, now, opts) {
 	try {
-		return await withLock(db, tid, async () => {
+		return await withLock(db, tid, async (guard) => {
 			const S = await load(db, tid);
 			if (!S) return null;
+			S.guard = guard;
 			await step(S, now || Date.now(), !!(opts && opts.full));
 			await save(S);
 			return { status: S.t.status, created: S.created };
@@ -935,9 +993,12 @@ async function onRoomEnded(db, code, now) {
 	} else {
 		return null;
 	}
-	return withLock(db, tour.id, async () => {
+	return withLock(db, tour.id, async (guard) => {
 		const S = await load(db, tour.id);
 		if (!S) return null;
+		S.guard = guard;
+		// A cancelled event scores nothing more (its open games were aborted).
+		if (S.t.status === 'cancelled') return null;
 		// The pairing as stored (an arena loads only its open ones).
 		if (!S.pairings[tour.pairing]) {
 			const g = (await db.ref('tournament_pairings/' + tour.id + '/' + tour.pairing).once('value')).val();
@@ -1059,9 +1120,10 @@ async function act(db, uid, data, ctx) {
 		return { ok: true, status: res ? res.status : null };
 	}
 	if (!['join', 'withdraw', 'start', 'cancel', 'kick'].includes(action)) fail('invalid-argument', 'invalid-action');
-	return withLock(db, tid, async () => {
+	return withLock(db, tid, async (guard) => {
 		const S = await load(db, tid);
 		if (!S) fail('not-found', 'no-event');
+		S.guard = guard;
 		const { t } = S;
 		const owner = uid === t.createdBy || ctx.admin;
 		if (t.status === 'cancelled' || (t.status === 'finished' && action !== 'cancel')) fail('failed-precondition', 'over');
@@ -1087,7 +1149,7 @@ async function act(db, uid, data, ctx) {
 			// site event only by an admin once it has started.
 			if (!ctx.admin && !(uid === t.createdBy && (t.status === 'created' || !t.official))) fail('permission-denied', 'not-owner');
 			if (t.status === 'finished') fail('failed-precondition', 'over');
-			cancelEvent(S, now, ctx.admin && uid !== t.createdBy ? 'admin' : 'creator');
+			await cancelEvent(S, now, ctx.admin && uid !== t.createdBy ? 'admin' : 'creator');
 		} else if (action === 'kick') {
 			const target = data.uid;
 			if (typeof target !== 'string' || !S.players[target]) fail('not-found', 'no-player');
@@ -1106,8 +1168,47 @@ async function act(db, uid, data, ctx) {
 	});
 }
 
+/**
+ * A deleted account's tournament traces (index.js deleteUserData adds
+ * these to its update): its name leaves the standings, the pairings and
+ * the events it created, its own index goes, and it is out of any event
+ * still running. Only records that exist are touched (a child written
+ * under a missing record would create a stub row).
+ */
+async function scrubUser(db, uid, updates) {
+	const DELETED = 'Deleted player';
+	const mine = (await db.ref('user_tournaments/' + uid).once('value')).val() || {};
+	updates['user_tournaments/' + uid] = null;
+	updates['tournament_limits/' + uid] = null;
+	for (const tid of Object.keys(mine)) {
+		if (!/^[A-Za-z0-9_-]{1,40}$/.test(tid)) continue;
+		const [t, p, pairings] = await Promise.all([
+			db.ref('tournaments/' + tid).once('value').then((x) => x.val()),
+			db.ref('tournament_players/' + tid + '/' + uid).once('value').then((x) => x.val()),
+			db.ref('tournament_pairings/' + tid).once('value').then((x) => x.val() || {}),
+		]);
+		if (!t) continue;
+		if (p) {
+			const base = 'tournament_players/' + tid + '/' + uid + '/';
+			updates[base + 'name'] = DELETED;
+			updates[base + 'withdrawn'] = true;
+			if (t.kind === 'arena') { updates[base + 'active'] = false; updates[base + 'waitingSince'] = null; }
+		}
+		for (const [pid, g] of Object.entries(pairings)) {
+			if (g && g.red === uid) updates['tournament_pairings/' + tid + '/' + pid + '/redName'] = DELETED;
+			if (g && g.blue === uid) updates['tournament_pairings/' + tid + '/' + pid + '/blueName'] = DELETED;
+		}
+		if (t.createdBy === uid) {
+			updates['tournaments/' + tid + '/createdByName'] = DELETED;
+			if (!t.private) updates['tournament_index/' + tid + '/by'] = DELETED;
+		}
+		if (t.host === uid) updates['tournaments/' + tid + '/hostName'] = DELETED;
+		for (const [i, x] of (t.podium || []).entries()) if (x && x.uid === uid) updates['tournaments/' + tid + '/podium/' + i + '/name'] = DELETED;
+	}
+}
+
 module.exports = {
 	KINDS, LIMITS, NOSHOW_MS, BERSERK_MIN_TURNS, PRESENCE_GRACE_MS, REMATCH_WAIT_MS, TournamentError,
 	validateCreate, arenaPoints, performance, arenaCompare, assignColors, pairArena, swissPair, swissStandings,
-	withLock, load, save, step, advance, tick, onRoomEnded, act, abortNoShow,
+	withLock, load, save, step, advance, tick, onRoomEnded, act, abortNoShow, scrubUser,
 };

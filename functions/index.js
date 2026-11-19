@@ -415,6 +415,8 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		const claim = await db.ref('usernames/' + key).once('value');
 		if (claim.val() === uid) updates['usernames/' + key] = null;
 	}
+	// Tournaments: the name leaves the standings and pairings; out of events still running.
+	await tournaments.scrubUser(db, uid, updates);
 	// Deleting completed_games children of records that no longer exist
 	// would create stubs: only touch the ones that are there.
 	for (const path of Object.keys(updates)) {

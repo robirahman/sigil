@@ -128,10 +128,12 @@ test('an arena: pairs at once, scores streaks and berserks, pauses no-shows, end
 	assert.strictEqual(pl[bc.blue].active, true);
 	// The status trigger fires on the abort too: already scored, ignored.
 	assert.strictEqual(await T.onRoomEnded(db, bc.room, Date.now()), null);
-	// a, d and the no-show's opponent are free: a meets the opponent (d was last).
+	// a, d and the no-show's opponent are free: one game, between two who
+	// did not just meet (a played d last; the opponent's last depends on colours).
 	open = await openPairings(id);
 	assert.strictEqual(open.length, 1);
-	assert.deepStrictEqual(pairOf(open[0]), ['a', bc.blue].sort().join(''));
+	pl = await val('tournament_players/' + id);
+	assert.ok(pl[open[0].red].lastOpp !== open[0].blue && pl[open[0].blue].lastOpp !== open[0].red, pairOf(open[0]));
 	// The no-show joins again and is paired with d.
 	await T.act(db, bc.red, { action: 'join', id }, { admin: false, now: Date.now() });
 	open = await openPairings(id);
@@ -309,4 +311,97 @@ test('a room is scored once, and only the room its pairing names', async () => {
 	}
 	await assert.rejects(T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Too many', untimed: true } }, { admin: false, now: Date.now() }),
 		(e) => e.code === 'resource-exhausted');
+});
+
+test('a deleted account leaves the standings, the pairings and its events nameless', async () => {
+	await addUsers({ a: 1000, b: 1000 });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'arena', name: 'Gone', minutes: 3, durationMin: 30,
+		startsAt: Date.now() } }, { admin: false, now: Date.now() });
+	for (const u of ['a', 'b']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
+	const [g] = await openPairings(id);
+	const updates = {};
+	await T.scrubUser(db, 'a', updates);
+	await db.ref().update(updates);
+	const pl = await val('tournament_players/' + id);
+	assert.deepStrictEqual([pl.a.name, pl.a.withdrawn, pl.a.active, pl.b.name], ['Deleted player', true, false, 'B']);
+	const pg = await val('tournament_pairings/' + id + '/' + g.pid);
+	assert.strictEqual(g.red === 'a' ? pg.redName : pg.blueName, 'Deleted player');
+	assert.strictEqual((await val('tournaments/' + id)).createdByName, 'Deleted player');
+	assert.strictEqual((await val('tournament_index/' + id)).by, 'Deleted player');
+	assert.deepStrictEqual([await val('user_tournaments/a'), await val('tournament_limits/a')], [null, null]);
+	// Nothing written for an event they only created (no player row appears).
+	const { id: id2 } = await T.act(db, 'b', { action: 'create', config: { kind: 'simul', name: 'Bsimul', untimed: true } }, { admin: false, now: Date.now() });
+	const u2 = {};
+	await T.scrubUser(db, 'b', u2);
+	await db.ref().update(u2);
+	assert.strictEqual(await val('tournament_players/' + id2), null);
+	assert.strictEqual((await val('tournaments/' + id2)).hostName, 'Deleted player');
+});
+
+test('the lock: renewed while held, and a writer that lost it writes nothing', async () => {
+	await addUsers({ a: 1000 });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'arena', name: 'Locks', minutes: 3, durationMin: 30,
+		startsAt: Date.now() + 3600e3 } }, { admin: false, now: Date.now() });
+	// Someone else takes the lock over while we hold it: our save is refused.
+	await assert.rejects(T.withLock(db, id, async (guard) => {
+		const S = await T.load(db, id);
+		S.guard = guard;
+		S.t.name = 'Overwritten';
+		S.dirtyT = true;
+		await db.ref('tournament_locks/' + id).set({ by: 'someone-else', until: Date.now() + 60000 });
+		await T.save(S);
+	}), (e) => e.message === 'lock-lost');
+	assert.strictEqual((await val('tournaments/' + id)).name, 'Locks');
+	await db.ref('tournament_locks/' + id).remove();
+	// A holder renews its lease as it goes.
+	await T.withLock(db, id, async (guard) => {
+		const before = (await val('tournament_locks/' + id)).until;
+		await new Promise((r) => setTimeout(r, 50));
+		await guard.confirm();
+		assert.ok((await val('tournament_locks/' + id)).until > before);
+	});
+	assert.strictEqual(await val('tournament_locks/' + id), null);
+});
+
+test('cancelling a running event aborts its open games and frees their players', async () => {
+	await addUsers({ a: 1000, b: 1000, c: 1000 });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Cancelled simul', untimed: true } }, { admin: false, now: Date.now() });
+	for (const u of ['b', 'c']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
+	await T.act(db, 'a', { action: 'start', id }, { admin: false, now: Date.now() });
+	const open = await openPairings(id);
+	assert.strictEqual(open.length, 2);
+	// One game ends just before the cancel: it keeps its result.
+	await resign(open[0].room, open[0].red === 'a' ? 'blue' : 'red');
+	await T.act(db, 'a', { action: 'cancel', id }, { admin: false, now: Date.now() });
+	const t = await val('tournaments/' + id);
+	assert.deepStrictEqual([t.status, t.final], ['cancelled', true]);
+	const r1 = await val('rooms/' + open[1].room);
+	assert.deepStrictEqual([r1.status, r1.endReason, r1.abortedBy], ['aborted', 'cancelled', undefined]);
+	assert.strictEqual(await val('live_rooms/' + open[1].room), null);
+	const g = await val('tournament_pairings/' + id);
+	assert.deepStrictEqual([g[open[0].pid].status, g[open[1].pid].status, g[open[1].pid].how], ['done', 'void', 'cancelled']);
+	assert.strictEqual(await val('tournament_active/' + id), null);
+	// The abort's trigger finds nothing to score.
+	assert.strictEqual(await T.onRoomEnded(db, open[1].room, Date.now()), null);
+});
+
+test('a repeating event schedules its next edition for its creator', async () => {
+	await addUsers({ adm: 1000, b: 1000, c: 1000 });
+	const { id } = await T.act(db, 'adm', { action: 'create', config: { kind: 'swiss', name: 'Daily Swiss', minutes: 3, rounds: 3,
+		roundGapSec: 0, startsAt: Date.now() + 3600e3, repeat: 'daily', private: true } }, { admin: true, now: Date.now() });
+	// Not enough players at the start: cancelled, and no edition follows a cancel.
+	await T.advance(db, id, (await val('tournaments/' + id)).startsAt + 1);
+	assert.strictEqual((await val('tournaments/' + id)).status, 'cancelled');
+	const { id: id2 } = await T.act(db, 'adm', { action: 'create', config: { kind: 'arena', name: 'Daily Arena', minutes: 3, durationMin: 10,
+		startsAt: Date.now() + 3600e3, repeat: 'daily', private: true } }, { admin: true, now: Date.now() });
+	const t0 = await val('tournaments/' + id2);
+	await T.advance(db, id2, t0.startsAt + 1);
+	await T.advance(db, id2, t0.endsAt + 1);
+	const t1 = await val('tournaments/' + id2);
+	assert.deepStrictEqual([t1.status, t1.final, typeof t1.repeatedTo], ['finished', true, 'string']);
+	const next = await val('tournaments/' + t1.repeatedTo);
+	assert.deepStrictEqual([next.status, next.startsAt - t0.startsAt, next.repeat, next.private], ['created', 86400e3, 'daily', true]);
+	assert.strictEqual((await val('user_tournaments/adm/' + t1.repeatedTo)).role, 'creator');
+	assert.ok(await val('tournament_limits/adm/' + t1.repeatedTo));
+	assert.strictEqual(await val('tournament_active/' + t1.repeatedTo), true);
 });

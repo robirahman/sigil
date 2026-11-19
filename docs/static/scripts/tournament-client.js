@@ -170,6 +170,8 @@
 				try {
 					await h.conn.onDisconnect().remove();
 					await h.seat.child('disconnectedAt').onDisconnect().set(ts);
+					// Once no conns are left, functions/rating.js abandoned() reads this flag.
+					await h.seat.child('connected').onDisconnect().set(false);
 					await h.conn.set(ts);
 					await h.seat.update({ connected: true, disconnectedAt: null });
 				} catch (e) { /* a finished room's seats are frozen */ }
