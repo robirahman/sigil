@@ -454,7 +454,9 @@ function botApi(deps) {
 		on(activeRef, 'child_added', (snap) => {
 			const code = snap.key;
 			if (!ROOM_RE.test(code) || games.has(code)) return;
-			const g = { status: null };
+			// undefined until the first snapshot: a game that ended while this
+			// stream was closed (a reconnect) still reports its end.
+			const g = { status: undefined };
 			games.set(code, g);
 			const statusRef = db.ref('rooms/' + code + '/status');
 			const fn = async (s) => {
@@ -467,7 +469,7 @@ function botApi(deps) {
 					const color = seatColor(room, uid);
 					if (color) send('gameStart', { room: code, color, opponent: { uid: (room[other(color)] || {}).uid || null, name: (room[other(color)] || {}).displayName || null } });
 				} else if (st === 'finished' || st === 'aborted' || st === 'expired' || st === null) {
-					if (was === 'playing') {
+					if (was === 'playing' || (was === undefined && (st === 'finished' || st === 'aborted'))) {
 						const room = (await db.ref('rooms/' + code).once('value')).val() || {};
 						send('gameFinish', { room: code, status: st || 'gone', winner: room.winner || null,
 							endReason: room.forfeitedBy ? 'forfeit' : (room.endReason || (st === 'finished' ? 'play' : st)) });

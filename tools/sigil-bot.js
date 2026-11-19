@@ -233,6 +233,8 @@ async function runBot(opts) {
 	log('signed in as', me.name, '(' + me.uid + ')');
 	const finished = [];
 	const games = new Map();
+	// Games already finished (their end may arrive on both streams).
+	const ended = new Set();
 	let stopEvents = null;
 	let done;
 	const allDone = new Promise((r) => { done = r; });
@@ -281,15 +283,21 @@ async function runBot(opts) {
 	}
 
 	function follow(code, color) {
-		if (games.has(code)) return;
+		if (games.has(code) || ended.has(code)) return;
 		const g = { game: { you: color, moves: [] }, busy: false, pending: null, playedAt: -1, stop: null };
 		games.set(code, g);
 		g.stop = api.stream('/v1/bot/games/' + code + '/stream', async (ev, data) => {
-			if (ev === 'gameFull' || ev === 'gameState') await play(code, data);
+			if (ev !== 'gameFull' && ev !== 'gameState') return;
+			// The game's own stream may see the end first (or alone, if the
+			// event stream was reconnecting then).
+			if (data.status && data.status !== 'playing') finish(code, data);
+			else await play(code, data);
 		});
 	}
 
 	function finish(code, data) {
+		if (ended.has(code)) return;
+		ended.add(code);
 		const g = games.get(code);
 		if (g && g.stop) g.stop();
 		games.delete(code);

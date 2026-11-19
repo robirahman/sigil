@@ -123,10 +123,25 @@ function createApiHandler(deps) {
 		if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
 		try {
 			const path = String(req.path || '/').replace(/\/+$/, '') || '/';
-			const parts = path.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
+			let parts;
+			try {
+				parts = path.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
+			} catch (e) {
+				throw new ApiError(400, 'bad-request', 'A malformed path.');
+			}
 			const q = req.query || {};
-			const caller = await resolveToken(db, req.get('authorization'), now());
 			const t = now();
+			let caller;
+			try {
+				caller = await resolveToken(db, req.get('authorization'), t);
+			} catch (e) {
+				// A bad token counts against the caller's address.
+				if (e instanceof TokenError) {
+					const bad = await hit(db, ipKey(clientIp(req)), LIMITS.anonymous, t);
+					if (!bad.ok) throw new ApiError(429, 'rate-limited', 'Too many requests.');
+				}
+				throw e;
+			}
 			const key = caller ? 'tok_' + caller.id : ipKey(clientIp(req));
 			const rl = await hit(db, key, caller ? LIMITS.token : LIMITS.anonymous, t);
 			res.set('X-RateLimit-Limit', String(rl.limit));
@@ -178,7 +193,11 @@ function createApiHandler(deps) {
 					if (!s.ok) throw new ApiError(429, 'rate-limited', 'Too many streams opened: ' + LIMITS.stream + ' a minute.');
 					return sse(req, res, caller.id, async (send) => bot.watchGame(caller.uid, room, send));
 				}
-				if (POST && b === 'games' && room && d === 'turn') return sendJson(res, 200, await bot.submitTurn(caller.uid, room, body));
+				if (POST && b === 'games' && room && d === 'turn') {
+					const s = await hit(db, 'trn_' + caller.id, LIMITS.turn, t);
+					if (!s.ok) throw new ApiError(429, 'rate-limited', 'Too many turns: ' + LIMITS.turn + ' a minute.');
+					return sendJson(res, 200, await bot.submitTurn(caller.uid, room, body));
+				}
 				if (POST && b === 'games' && room && d === 'resign') return sendJson(res, 200, await bot.endGame(caller.uid, room, 'resign'));
 				if (POST && b === 'games' && room && d === 'abort') return sendJson(res, 200, await bot.endGame(caller.uid, room, 'abort'));
 				if (POST && b === 'challenges' && room && d === 'accept') return sendJson(res, 200, await bot.acceptChallenge(caller.uid, room));

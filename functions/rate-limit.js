@@ -22,6 +22,9 @@ const LIMITS = {
 	stream: 20,
 	// Challenges a bot sends.
 	challenge: 10,
+	// Turns a bot submits (each is a replay of its game): a turn a second
+	// across all its games, with room for bursts.
+	turn: 120,
 };
 // Windows ended this long ago are deleted.
 const KEEP_MS = 10 * 60 * 1000;
