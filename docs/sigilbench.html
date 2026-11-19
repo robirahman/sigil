@@ -186,14 +186,14 @@
 		.verdict { border-left: 4px solid var(--color-border); padding: 8px 12px; margin: 10px 0; background: var(--color-surface); border-radius: 6px; }
 		.verdict--correct { border-left-color: #4caf7a; }
 		.verdict--likely, .verdict--unproven { border-left-color: #d9b44a; }
-		.verdict--wrong, .verdict--invalid { border-left-color: #e06c6c; }
+		.verdict--wrong, .verdict--invalid, .verdict--wrong_execution, .verdict--wrong_idea { border-left-color: #e06c6c; }
 		.verdict small { display: block; color: var(--color-text-muted); margin-top: 4px; word-break: break-word; }
 		table.try-list { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 		table.try-list th, table.try-list td { padding: 5px 8px; border-bottom: 1px solid var(--color-bg-mid); text-align: left; }
 		table.try-list th { font-family: 'Arvo', serif; color: var(--color-text-dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em; }
 		.st-correct { color: #4caf7a; }
 		.st-likely, .st-unproven { color: #d9b44a; }
-		.st-wrong, .st-revealed { color: #e06c6c; }
+		.st-wrong, .st-revealed, .st-wrong_execution, .st-wrong_idea { color: #e06c6c; }
 		.try-list-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--color-border); border-radius: 6px; }
 		.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 	</style>
@@ -259,8 +259,9 @@
 			<p class="footnote" id="table-note"></p>
 
 			<h3 id="try">Try the dev set</h3>
-			<p>Play the 100 puzzles of dev set v2 (25 each of mate in 1, 2, 3 and 4, every spell) yourself under
-				benchmark conditions, or give them to an AI model and grade its answers here. The dev set is password-protected. Results stay in this browser.</p>
+			<p>Play the dev set's 100 puzzles yourself under benchmark conditions, or give them to an AI model and grade
+				its answers here. The dev set is password-protected. Results stay in this browser.</p>
+			<p id="try-set" class="footnote" hidden></p>
 			<form class="try-lock" id="try-lock" autocomplete="off">
 				<label class="visually-hidden" for="try-password">Password</label>
 				<input type="password" id="try-password" placeholder="Password" autocomplete="current-password" />
@@ -275,9 +276,11 @@
 				</div>
 
 				<div id="try-human">
-					<p>Open a puzzle and play <strong>one turn</strong>. As in the benchmark, only your first turn is graded:
-						a proven solution or a win on the spot is correct, and any other turn is judged by the engine. You
-						can play on or retry afterwards for practice, but the first result stands.</p>
+					<p>Open a puzzle and play <strong>one turn</strong>. As in the benchmark, only your first turn is graded.
+						In a mate puzzle a proven solution or a win on the spot is correct, and any other turn is judged by
+						the engine. A winning-turn puzzle is graded by its answer key alone: your turn is correct if the
+						position it reaches is one of the executions of the winning plan that keep the win. You can play on
+						or retry afterwards for practice, but the first result stands.</p>
 					<p id="human-summary"></p>
 					<div class="try-list-wrap">
 						<table class="try-list">
@@ -322,10 +325,12 @@
 						<button class="try-btn" type="button" id="ai-reference">Show a reference solution</button>
 					</div>
 					<div id="ai-verdict" aria-live="polite"></div>
-					<p class="footnote">Grading here: the turn is replayed with the site's own rules. A proven stored solution,
-						or a turn that wins on the spot, is correct. Any other turn is searched by the in-browser engine
-						(about 10 seconds), which can prove the win or find the escape but does not check that the action
-						list was a legal turn. The benchmark's own grader checks legality and proves every answer; run it with
+					<p class="footnote">Grading here: the turn is replayed with the site's own rules. In a mate puzzle a proven
+						stored solution, or a turn that wins on the spot, is correct. Any other turn is searched by the
+						in-browser engine (about 10 seconds), which can prove the win or find the escape but does not check
+						that the action list was a legal turn. A winning-turn answer is looked up in the puzzle's answer key,
+						as the benchmark grades it: correct, right idea but wrong execution, or wrong idea. The benchmark's
+						own grader checks legality and proves every mate answer; run it with
 						<a href="https://github.com/robirahman/sigil/tree/main/bench">the harness</a> for scores you report.
 						Dev-set scores are for development only.</p>
 					<p id="ai-summary"></p>
@@ -532,7 +537,7 @@
 			const label = subset === 'all' ? 'all puzzles' : (col ? col[1].toLowerCase() : subset);
 			const counts = data.split_counts || {};
 			const count = subset === 'all' ? Object.values(counts).reduce((a, b) => a + b, 0) : counts[subset];
-			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + (count ? ' (' + count + ' puzzles)' : '');
+			document.getElementById('chart-title').textContent = 'Accuracy, ' + label + (count ? ' (' + count + ' puzzle' + (count === 1 ? ')' : 's)') : '');
 		}
 
 		function drawTable() {
@@ -673,7 +678,11 @@
 	(function () {
 		'use strict';
 		const ENC_URL = 'static/data/sigilbench/devset.enc.json';
-		const SET_ID = 'dev_v2';                        // must match build_try_devset.py SET_ID
+		// The sets this page opens, newest first (build_try_devset.py SETS; puzzles.html BENCH_SETS).
+		// The file holds one; a file holding an older one than SET_IDS[0] is fetched once more
+		// past the browser cache, in case a service worker handed out a stale copy.
+		const SET_IDS = ['dev_v3', 'dev_v2'];
+		const SET_LABELS = { dev_v2: 'Dev set v2', dev_v3: 'Dev set v3' };
 		const DATA_KEY = 'sigilbench_dev_payload';      // sessionStorage: read by puzzles.html?bench=
 		const HUMAN_KEY = 'sigilbench_try_human';       // localStorage: {id: {status, how, n, at}}
 		const AI_KEY = 'sigilbench_try_ai';             // localStorage: {label: {id: {status, how, n, at}}}
@@ -684,8 +693,19 @@
 			get(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } },
 			set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* blocked */ } },
 		};
-		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)', revealed: 'Solution shown first', invalid: 'Invalid answer' };
+		const STATUS = { correct: 'Correct', likely: 'Probably correct', wrong: 'Not solved', unproven: 'Unproven (not solved)',
+			revealed: 'Solution shown first', invalid: 'Invalid answer',
+			// Winning-turn puzzles (dev set v3), graded by their answer key.
+			wrong_execution: 'Right idea, wrong execution', wrong_idea: 'Wrong idea' };
 		let dev = null;
+
+		// A puzzle's category: v3 carries it (m1..m5, win); v2's mates are m<N>.
+		const catOf = (p) => p.category || (p.kind === 'win' ? 'win' : 'm' + p.n);
+		const CAT_ORDER = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'win'];
+		const catLabel = (c) => (c === 'win' ? 'winning turn' : 'mate in ' + String(c).slice(1));
+		const taskText = (p) => (p.kind === 'win' ? 'Winning turn' : 'Mate in ' + p.n);
+		const catRank = (c) => (CAT_ORDER.indexOf(c) < 0 ? CAT_ORDER.length : CAT_ORDER.indexOf(c));
+		const sortCats = (cs) => cs.sort((a, b) => (catRank(a) - catRank(b)) || (a < b ? -1 : 1));
 
 		const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 		async function decrypt(enc, password) {
@@ -704,8 +724,13 @@
 			$('try-lock').hidden = true;
 			$('try-err').textContent = '';
 			$('try-panel').hidden = false;
+			const counts = {};
+			d.puzzles.forEach((p) => { counts[catOf(p)] = (counts[catOf(p)] || 0) + 1; });
+			$('try-set').textContent = (SET_LABELS[d.set] || d.set) + ': ' + d.puzzles.length + ' puzzles (' +
+				sortCats(Object.keys(counts)).map((c) => counts[c] + ' ' + catLabel(c) + (c === 'win' && counts[c] !== 1 ? 's' : '')).join(', ') + ').';
+			$('try-set').hidden = false;
 			const sel = $('ai-puzzle');
-			sel.innerHTML = d.puzzles.map((p, i) => '<option value="' + i + '">' + esc(p.id) + ' · mate in ' + p.n + ', ' + p.mover + ' to move</option>').join('');
+			sel.innerHTML = d.puzzles.map((p, i) => '<option value="' + i + '">' + esc(p.id) + ' · ' + taskText(p).toLowerCase() + ', ' + p.mover + ' to move</option>').join('');
 			$('ai-label').value = store.get(LABEL_KEY, '') || '';
 			drawHuman();
 			showPuzzle();
@@ -722,10 +747,12 @@
 				if (!window.crypto || !crypto.subtle || typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decrypt the dev set.');
 				const get = (mode) => fetch(ENC_URL, { cache: mode }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
 				const open = async (enc) => { try { return await decrypt(enc, pw); } catch (e) { throw new Error('Wrong password.'); } };
-				let d = await open(await get('no-cache'));
+				// The envelope names its set in clear (files built before v3 do not: dev_v2).
+				let enc = await get('no-cache');
 				// An older service worker can still hand out the previous set's file.
-				if (d.set !== SET_ID) d = await open(await get('reload'));
-				if (d.set !== SET_ID) throw new Error('This browser still has an older copy of the dev set. Reload the page and try again.');
+				if ((enc.set || 'dev_v2') !== SET_IDS[0]) enc = await get('reload');
+				const d = await open(enc);
+				if (SET_IDS.indexOf(d.set) < 0) throw new Error('This browser still has an older copy of the dev set. Reload the page and try again.');
 				opened(d);
 			} catch (e) {
 				$('try-err').textContent = e.message || String(e);
@@ -743,18 +770,19 @@
 		});
 
 		function summary(results) {
-			const by = { 1: [0, 0], 2: [0, 0], 3: [0, 0], 4: [0, 0] };
+			const by = {};   // category -> [correct, attempted]
 			let c = 0, t = 0;
 			for (const p of dev.puzzles) {
 				const r = results[p.id];
 				if (!r || !r.status) continue;
 				t++;
-				by[p.n] = by[p.n] || [0, 0];
-				by[p.n][1]++;
-				if (r.status === 'correct') { c++; by[p.n][0]++; }
+				const k = catOf(p);
+				by[k] = by[k] || [0, 0];
+				by[k][1]++;
+				if (r.status === 'correct') { c++; by[k][0]++; }
 			}
 			if (!t) return 'No puzzles attempted yet.';
-			const parts = Object.keys(by).filter((n) => by[n][1]).map((n) => 'mate in ' + n + ': ' + by[n][0] + '/' + by[n][1]);
+			const parts = sortCats(Object.keys(by)).map((k) => catLabel(k) + ': ' + by[k][0] + '/' + by[k][1]);
 			return c + ' correct of ' + t + ' attempted (' + Math.round(100 * c / t) + '%) · ' + parts.join(' · ');
 		}
 		const statusCell = (r) => r && r.status ? '<span class="st-' + r.status + '" title="' + esc(r.how || '') + '">' + STATUS[r.status] + '</span>' : '–';
@@ -763,7 +791,7 @@
 			const res = store.get(HUMAN_KEY, {});
 			$('human-summary').textContent = 'You: ' + summary(res);
 			$('human-list').innerHTML = dev.puzzles.map((p) =>
-				'<tr><td>' + esc(p.id) + '</td><td>Mate in ' + p.n + ', ' + (p.mover === 'red' ? 'Red' : 'Blue') + ' to move</td>' +
+				'<tr><td>' + esc(p.id) + '</td><td>' + taskText(p) + ', ' + (p.mover === 'red' ? 'Red' : 'Blue') + ' to move</td>' +
 				'<td>' + statusCell(res[p.id]) + '</td>' +
 				'<td><a href="puzzles.html?bench=' + encodeURIComponent(p.id) + '">' + (res[p.id] ? 'Practice' : 'Play') + '</a></td></tr>').join('');
 		}
@@ -811,7 +839,7 @@
 			const prompts = {
 				canary: dev.canary, benchmark: dev.benchmark, name: dev.name,
 				system_prompt: dev.system_prompt, no_tool_note: dev.no_tool_note, tool: dev.tool,
-				puzzles: dev.puzzles.map((p) => ({ id: p.id, n: p.n, mover: p.mover, sfn: p.sfn, user_prompt: p.user_prompt })),
+				puzzles: dev.puzzles.map((p) => ({ id: p.id, kind: p.kind || 'mate', category: catOf(p), n: p.n, mover: p.mover, sfn: p.sfn, user_prompt: p.user_prompt })),
 			};
 			const blob = new Blob([JSON.stringify(prompts, null, 1)], { type: 'application/json' });
 			const a = document.createElement('a');
@@ -833,8 +861,17 @@
 				store.set(AI_KEY, all);
 				drawAi();
 			}
+			const ref = esc(JSON.stringify(p.reference_solution, null, 1));
+			if (p.kind === 'win') {
+				const ok = (p.answer_keys || []).length, bad = (p.failed_keys || []).length;
+				$('ai-verdict').innerHTML = '<div class="verdict"><strong>The winning plan: ' + esc(p.key_idea_text || '?') + '</strong>'
+					+ '<small>One execution that keeps the win is below. The answer key holds ' + ok + ' position' + (ok === 1 ? '' : 's')
+					+ ' (every execution of the plan that keeps the win)' + (bad ? '; ' + bad + ' other execution' + (bad === 1 ? ' does' : 's do')
+					+ ' not keep it and ' + (bad === 1 ? 'is' : 'are') + ' wrong' : '') + '.</small><pre>' + ref + '</pre></div>';
+				return;
+			}
 			$('ai-verdict').innerHTML = '<div class="verdict"><strong>One proven solution</strong><small>Other turns may also win.</small><pre>'
-				+ esc(JSON.stringify(cur().reference_solution, null, 1)) + '</pre></div>';
+				+ ref + '</pre></div>';
 		});
 		$('ai-reset').addEventListener('click', () => {
 			if (!confirm('Clear the dev-set results for "' + label() + '" on this device?')) return;
@@ -881,6 +918,13 @@
 			try { actions = SigilBenchReplay.extractActions(text); } catch (e) { return { status: 'invalid', how: e.message }; }
 			let r;
 			try { r = await SigilBenchReplay.replay(p.sfn, actions); } catch (e) { return { status: 'invalid', how: String((e && e.message) || e).split('\n')[0] }; }
+			if (p.kind === 'win') {
+				// A winning turn is judged by its complete answer key alone, as the
+				// harness grades it (bench/sigilbench/grader.py grade_win).
+				if ((p.answer_keys || []).indexOf(r.key) >= 0) return { status: 'correct', how: 'It carries out the winning plan (' + p.key_idea_text + ') in a way that keeps the win: the position is in the answer key.' };
+				if ((p.failed_keys || []).indexOf(r.key) >= 0) return { status: 'wrong_execution', how: 'It carries out the winning plan, but not in a way that keeps the win (the wrong sacrifice, push or spell resolution).' };
+				return { status: 'wrong_idea', how: 'It is not the winning plan. Position after it: ' + r.after };
+			}
 			if ((p.solution_keys || []).indexOf(r.key) >= 0) return { status: 'correct', how: 'A proven solution.' };
 			if (r.gameover && r.winner === p.mover) return { status: 'correct', how: 'The turn wins on the spot.' };
 			if (p.n === 1) return { status: 'wrong', how: 'The turn does not win the game. Position after it: ' + r.after };
@@ -945,7 +989,7 @@
 		// Already unlocked in this tab (coming back from a puzzle).
 		try {
 			const d = JSON.parse(sessionStorage.getItem(DATA_KEY) || 'null');
-			if (d && Array.isArray(d.puzzles) && d.set === SET_ID) opened(d);
+			if (d && Array.isArray(d.puzzles) && SET_IDS.indexOf(d.set) >= 0) opened(d);
 		} catch (e) { /* locked */ }
 	})();
 	</script>
