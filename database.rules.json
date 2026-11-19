@@ -677,7 +677,7 @@
     },
     "user_tournaments": {
       "$uid": {
-        ".read": true,
+        ".read": "auth !== null && auth.uid === $uid",
         ".indexOn": [
           "at"
         ]

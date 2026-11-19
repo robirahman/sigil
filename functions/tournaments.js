@@ -558,7 +558,8 @@ async function openGame(S, red, blue, now, opts) {
 		}
 	}
 	S.extra['rooms/' + code] = room;
-	S.extra['live_rooms/' + code] = true;
+	// Watch Live lists public events' games; a private event's are watched by link.
+	if (!t.private) S.extra['live_rooms/' + code] = true;
 	S.created.push(code);
 	return pid;
 }

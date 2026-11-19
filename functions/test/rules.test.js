@@ -937,9 +937,13 @@ test('tournaments: events, players, pairings and limits are the server\'s; prese
 		tournament_players: { t1: { alice: { score: 2 } } }, tournament_pairings: { t1: { g1: { red: 'alice', blue: 'bob', status: 'playing' } } },
 		tournament_index: { t1: { name: 'Arena', startsAt: 1 } }, tournament_limits: { alice: { t1: 1 } }, user_tournaments: { alice: { t1: { kind: 'arena' } } } });
 	// Anyone reads an event, its players and its pairings; the index is listable, the events are not.
-	for (const p of ['tournaments/t1', 'tournament_players/t1', 'tournament_pairings/t1', 'tournament_index', 'user_tournaments/alice']) {
+	for (const p of ['tournaments/t1', 'tournament_players/t1', 'tournament_pairings/t1', 'tournament_index']) {
 		await assertSucceeds(get(ref(db(null), p)));
 	}
+	// A player's own events list names private events: theirs alone.
+	await assertSucceeds(get(ref(db('alice'), 'user_tournaments/alice')));
+	await assertFails(get(ref(db('bob'), 'user_tournaments/alice')));
+	await assertFails(get(ref(db(null), 'user_tournaments/alice')));
 	await assertFails(get(ref(db('alice'), 'tournaments')));
 	await assertFails(get(ref(db('alice'), 'tournament_active')));
 	await assertFails(get(ref(db('alice'), 'tournament_locks/t1')));

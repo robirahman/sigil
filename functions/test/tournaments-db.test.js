@@ -243,6 +243,7 @@ test('a simul: the host against every opponent, extra time, one layout', async (
 	const { id } = await T.act(db, 'h', { action: 'create', config: { kind: 'simul', name: 'Simul night', minutes: 5,
 		hostExtraSec: 30, hostColor: 'alternate', maxPlayers: 3 } }, { admin: false, now: Date.now() });
 	await assert.rejects(T.act(db, 'h', { action: 'join', id }, { admin: false, now: Date.now() }), (e) => e.message === 'host');
+	// (A private event's games stay off Watch Live: see the cancel test.)
 	for (const u of ['x', 'y', 'z']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
 	await assert.rejects(T.act(db, 'w', { action: 'join', id }, { admin: false, now: Date.now() }), (e) => e.code === 'resource-exhausted');
 	// The host removes one before the start; w takes the seat.
@@ -365,11 +366,14 @@ test('the lock: renewed while held, and a writer that lost it writes nothing', a
 
 test('cancelling a running event aborts its open games and frees their players', async () => {
 	await addUsers({ a: 1000, b: 1000, c: 1000 });
-	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Cancelled simul', untimed: true } }, { admin: false, now: Date.now() });
+	const { id } = await T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Cancelled simul', untimed: true, private: true } }, { admin: false, now: Date.now() });
 	for (const u of ['b', 'c']) await T.act(db, u, { action: 'join', id }, { admin: false, now: Date.now() });
 	await T.act(db, 'a', { action: 'start', id }, { admin: false, now: Date.now() });
 	const open = await openPairings(id);
 	assert.strictEqual(open.length, 2);
+	// A private event: its games are not on Watch Live (live_rooms), nor is it listed.
+	for (const g of open) assert.strictEqual(await val('live_rooms/' + g.room), null);
+	assert.strictEqual(await val('tournament_index/' + id), null);
 	// One game ends just before the cancel: it keeps its result.
 	await resign(open[0].room, open[0].red === 'a' ? 'blue' : 'red');
 	await T.act(db, 'a', { action: 'cancel', id }, { admin: false, now: Date.now() });
