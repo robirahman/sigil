@@ -163,6 +163,11 @@ def payload(path=DEV_SET, set_id=SET_ID, lines_path=LINES, children_bin=None):
                          f"key_idea_text (complete keys: bench/tools/complete_keys.py); missing {missing or ['answer_keys']}")
         elif kind_of(p) != 'mate':
             sys.exit(f"{p['id']}: unknown kind {p.get('kind')!r}")
+    # finalize_v3.py marks keys whose search hit errors or a truncated enumeration.
+    partial = [p['id'] for p in dev['puzzles'] if kind_of(p) == 'win' and p.get('keys_complete') is False]
+    if partial:
+        print(f"warning: {len(partial)} winning-turn puzzles have incomplete keys ({', '.join(partial[:5])}): the Try "
+              'panel grades an execution missing from both lists as the wrong idea', file=sys.stderr)
     refs = references(dev['puzzles'], children_bin)
     puzzles = []
     for p in dev['puzzles']:
