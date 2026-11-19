@@ -17,6 +17,8 @@ document.addEventListener('alpine:init', () => {
 			tutorialStep: 0,
 			tutorialStatus: tutorial ? 'playing' : '', // playing | done
 			tutorialHint: '',                        // shown after a wrong move
+			tutorialHintReset: true,                 // the wrong move reset the lesson (not a wrong prediction)
+			tutorialAnswer: '',                      // shown after a right prediction (an `ask` step)
 			tutorialTargets: {},                     // nodes the current step wants (gold rings)
 			tutorialTargetAction: '',                // spell / 'dash' / 'pass' the current step wants
 			tutorialDone: {},                        // lesson id -> timestamp (localStorage)
@@ -2512,18 +2514,19 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				// ---------------------------------------------------------------
-				// Tutorial (tutorial.html). A lesson is a start position and the
-				// input tokens it expects, in order. Every click reaches the
-				// controller as a token (a node, 'dash', 'pass', a spell name)
-				// through sendEvent, so _tutorialAccept vets it first: a wrong
-				// one shows the lesson's hint and restarts the lesson. The live
-				// GameController still applies every accepted token, so the
-				// board always follows the real rules.
+				// Tutorial (tutorial.html) and practice drills (drills.html). A
+				// lesson is a start position and the input tokens it expects, in
+				// order. Every click reaches the controller as a token (a node,
+				// 'dash', 'pass', a spell name) through sendEvent, so
+				// _tutorialAccept vets it first: a wrong one shows the step's
+				// explanation for that token (`why`), else the lesson's hint, and
+				// restarts the lesson. The live GameController still applies
+				// every accepted token, so the board always follows the real rules.
 				//
-				// A step's `do` is a token; { oneOf: [...] } any one of them;
-				// { all: [...] } each of them once, in any order; or { any: true }
-				// any node the controller is offering (legal moves or stones to
-				// keep). `mark` lists extra nodes to ring for an { any } step.
+				// A step's `do` is matched by drillStepAccepts (below the
+				// component). An `ask` step instead asks the player to predict a
+				// node (where a push will land): the click is answered on the
+				// panel and never reaches the controller.
 				// ---------------------------------------------------------------
 				function _tutorialLesson() {
 					return tutorial.lessons[_this.tutorialIndex];
@@ -2544,10 +2547,12 @@ document.addEventListener('alpine:init', () => {
 					const step = _tutorialStep();
 					const targets = {};
 					let action = '';
-					if (step && _this.tutorialStatus === 'playing') {
+					if (step && _this.tutorialStatus === 'playing' && !step.ask) {
 						const d = step.do;
+						const rem = _this._tutRemaining;
 						const tokens = typeof d === 'string' ? [d]
-							: d.all ? (_this._tutRemaining || d.all)
+							: d.all ? (rem || d.all)
+							: d.pick ? ((rem && rem.from) || d.from)
 							: d.oneOf ? d.oneOf : (step.mark || []);
 						for (const tok of tokens) {
 							if (NODE_ORDER.includes(tok)) targets[tok] = true;
@@ -2566,42 +2571,49 @@ document.addEventListener('alpine:init', () => {
 					if (_this.tutorialStatus !== 'playing') return false;
 					const step = _tutorialStep();
 					if (!step) return true;
-					const d = step.do;
+					if (step.ask) {
+						// A prediction: answered here, never sent to the game.
+						if (!NODE_ORDER.includes(message)) return false;
+						if (message === step.ask) {
+							_this.tutorialHint = '';
+							_this.tutorialAnswer = step.right || '';
+							_this.tutorialStep += 1;
+							_tutorialShowStep();
+						} else {
+							_this.tutorialAnswer = '';
+							_this.tutorialHintReset = false;
+							_this.tutorialHint = (step.why && (step.why[message] || step.why['*'])) || _tutorialLesson().hint || 'Not quite. Try again.';
+						}
+						return false;
+					}
 					const isNode = NODE_ORDER.includes(message);
 					const offered = isNode ? _tutorialOffered() : null;
 					// A node the controller is not offering would be refused (and
 					// re-prompted) by it, which would put the script out of step.
 					const legal = !offered || !!offered[message];
-					let ok = false;
-					if (typeof d === 'string') ok = message === d;
-					else if (d.oneOf) ok = d.oneOf.includes(message) && legal;
-					else if (d.all) ok = (_this._tutRemaining || d.all).includes(message) && legal;
-					else if (d.any) ok = isNode && legal;
-					if (!ok) {
-						_tutorialWrong();
+					const r = drillStepAccepts(step.do, message, _this._tutRemaining, legal);
+					if (!r.ok) {
+						_tutorialWrong(message);
 						return false;
 					}
-					if (d.all) {
-						const rest = (_this._tutRemaining || d.all).filter(t => t !== message);
-						_this._tutRemaining = rest.length ? rest : null;
-						if (rest.length) {
-							_tutorialShowStep();
-							return true;
-						}
-					}
-					_this.tutorialStep += 1;
+					_this.tutorialAnswer = '';
+					_this._tutRemaining = r.remaining;
+					if (!r.remaining) _this.tutorialStep += 1;
 					_tutorialShowStep();
 					return true;
 				}
 
-				function _tutorialWrong() {
-					_tutorialRestart(_tutorialLesson().hint || 'Not quite. Try again.');
+				function _tutorialWrong(token) {
+					const step = _tutorialStep();
+					const why = step && step.why && token !== undefined ? (step.why[token] || step.why['*']) : '';
+					_tutorialRestart(why || _tutorialLesson().hint || 'Not quite. Try again.');
 				}
 				_this._tutorialWrong = _tutorialWrong;
 
 				function _tutorialSucceed() {
 					_this.tutorialStatus = 'done';
 					_this.tutorialHint = '';
+					_this.tutorialAnswer = '';
 					_this.tutorialTargets = {};
 					_this.tutorialTargetAction = '';
 					_this.actionList = [];
@@ -2610,7 +2622,7 @@ document.addEventListener('alpine:init', () => {
 					const id = _tutorialLesson().id;
 					_this.tutorialDone = Object.assign({}, _this.tutorialDone, { [id]: Date.now() });
 					try {
-						localStorage.setItem('sigil_tutorial_done', JSON.stringify(_this.tutorialDone));
+						localStorage.setItem(tutorial.storageKey || 'sigil_tutorial_done', JSON.stringify(_this.tutorialDone));
 					} catch (e) { /* storage blocked */ }
 				}
 
@@ -2636,6 +2648,8 @@ document.addEventListener('alpine:init', () => {
 					_this.tutorialStatus = 'playing';
 					_this.tutorialStep = 0;
 					_this.tutorialHint = hint;
+					_this.tutorialHintReset = true;
+					_this.tutorialAnswer = '';
 					_this._tutRemaining = null;
 					_this.winner = '';
 					_this.messageHistory = [];
@@ -2657,7 +2671,7 @@ document.addEventListener('alpine:init', () => {
 
 				if (tutorial) {
 					try {
-						_this.tutorialDone = JSON.parse(localStorage.getItem('sigil_tutorial_done') || '{}') || {};
+						_this.tutorialDone = JSON.parse(localStorage.getItem(tutorial.storageKey || 'sigil_tutorial_done') || '{}') || {};
 					} catch (e) {
 						_this.tutorialDone = {};
 					}
@@ -2670,7 +2684,7 @@ document.addEventListener('alpine:init', () => {
 						_this.tutorialIndex = i;
 						try {
 							const u = new URL(window.location.href);
-							u.searchParams.set('lesson', String(i + 1));
+							u.searchParams.set(tutorial.param || 'lesson', String(i + 1));
 							history.replaceState(null, '', u.toString());
 						} catch (e) { /* ignore */ }
 						_tutorialRestart('');
@@ -3402,6 +3416,38 @@ function tutorialLessonSfn(lesson) {
 	const score = lead === 0 ? 'tied' : (lead > 0 ? 'b' : 'r') + Math.min(3, Math.abs(lead));
 	return stones + '/' + lesson.spells.join(',') + ' ' + (tc % 2 === 0 ? 'b' : 'r') + ' ' + tc
 		+ ' ' + counts[0] + ':' + counts[1] + ' ' + locks[0] + ':' + locks[1] + ' -:- ' + score;
+}
+
+/**
+ * Does a tutorial / drill step accept `token`? `d` is the step's `do`:
+ *   'b5' / 'dash' / 'pass' / a spell name    exactly that token
+ *   { oneOf: [...] }                         any one of them
+ *   { all: [...] }                           each of them once, in any order
+ *   { pick: n, from: [...] }                 any n distinct tokens of the list
+ *   { any: true }                            any node the controller offers
+ * `remaining` is what an { all } / { pick } step still wants (null at its
+ * start) and `legal` whether the controller offers the node. Returns
+ * { ok, remaining }: remaining stays non-null while the step wants more.
+ * Shared with tools/drills-verify.js, which proves every drill's script
+ * against the rules.
+ */
+function drillStepAccepts(d, token, remaining, legal) {
+	if (typeof d === 'string') return { ok: token === d, remaining: null };
+	if (d.oneOf) return { ok: d.oneOf.includes(token) && legal, remaining: null };
+	if (d.any) return { ok: NODE_ORDER.includes(token) && legal, remaining: null };
+	if (d.all) {
+		const left = remaining || d.all;
+		if (!left.includes(token) || !legal) return { ok: false, remaining };
+		const rest = left.filter(t => t !== token);
+		return { ok: true, remaining: rest.length ? rest : null };
+	}
+	if (d.pick) {
+		const left = remaining || { n: d.pick, from: d.from };
+		if (!left.from.includes(token) || !legal) return { ok: false, remaining };
+		const n = left.n - 1;
+		return { ok: true, remaining: n > 0 ? { n, from: left.from.filter(t => t !== token) } : null };
+	}
+	return { ok: false, remaining };
 }
 
 /**
