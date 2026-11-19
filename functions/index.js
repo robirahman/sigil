@@ -40,6 +40,9 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabaseWithUrl, ServerValue } = require('firebase-admin/database');
 const { AI_UID, judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = require('./rating');
+const { requireShared } = require('./engine-loader');
+// The automatic suspensions (one copy with account.html).
+const { fairPlayApplyOffense } = requireShared('fair-play.js');
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
@@ -192,22 +195,30 @@ exports.rateGame = onValueCreated({
 			return; // the deletion's own scrub runs after; this game stays unrated and unindexed
 		}
 	}
-	// An upheld abandonment claim adds to the player's record, rated game or
-	// not, which only admins (admin.html) and the player see; a ban stays an
-	// admin's call. Counted once per room (abandonedGames/{room}), however
-	// often this runs or however many records the room has.
-	const quitter = verdict.abandonedBy;
-	const quitterUid = quitter && uids[quitter];
-	if (quitter && record.roomCode && !deleted[quitter] && typeof quitterUid === 'string' && !AI_UID.test(quitterUid)
-		&& (await isFullAccount(quitterUid))) {
-		await db.ref('user_flags/' + quitterUid).transaction((cur) => {
-			const f = cur || {};
-			if (f.abandonedGames && f.abandonedGames[record.roomCode]) return; // counted already
-			return Object.assign({}, f, {
-				abandons: (typeof f.abandons === 'number' ? f.abandons : 0) + 1,
-				abandonedGames: Object.assign({}, f.abandonedGames, { [record.roomCode]: true }),
-			});
+	// An upheld abandonment claim or a stalled-out clock adds to the
+	// player's record, rated game or not, which only admins (admin.html) and
+	// the player see; enough of them in a month suspend the player from rated
+	// play automatically, longer each time (fair-play.js). Counted once per
+	// room (offenses/{room}), however often this runs or however many
+	// records the room has.
+	const offender = verdict.abandonedBy || verdict.stalledBy;
+	const offenderUid = offender && uids[offender];
+	if (offender && record.roomCode && !deleted[offender] && typeof offenderUid === 'string' && !AI_UID.test(offenderUid)
+		&& (await isFullAccount(offenderUid))) {
+		const offense = {
+			room: record.roomCode,
+			kind: verdict.abandonedBy ? 'abandon' : 'stall',
+			at: room && typeof room.closedAt === 'number' ? room.closedAt : Date.now(),
+			evidence: verdict.stalledBy ? verdict.stall : undefined,
+		};
+		let restriction = null;
+		await db.ref('user_flags/' + offenderUid).transaction((cur) => {
+			const res = fairPlayApplyOffense(cur, offense, Date.now());
+			if (!res.counted) return; // counted already
+			restriction = res.restriction;
+			return res.flags;
 		});
+		if (restriction) logger.info('rateGame: automatic suspension', { uid: offenderUid, room: record.roomCode, level: restriction.level, until: restriction.until });
 	}
 	// The room may be deleted by its players only once it is rated: until
 	// then it is the evidence (database.rules.json).
@@ -363,11 +374,13 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		['challenges/' + uid]: null,
 		['presence/' + uid]: null,
 		['vacations/' + uid]: null,
-		// Fair play: the suspension, abandonment count (and the rooms behind
-		// it) and the report rate-limit stamp. A new account starts clean,
-		// as a deleted one's uid never comes back.
+		// Fair play: the suspension, abandonment and stall counts (and the
+		// rooms behind them) and the report rate-limit stamp. A new account
+		// starts clean, as a deleted one's uid never comes back.
 		['user_flags/' + uid]: null,
 		['report_limits/' + uid]: null,
+		// The player's appeal of a suspension (admin.html's queue).
+		['appeals/' + uid]: null,
 	};
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });

@@ -29,6 +29,8 @@ const { freshEngine, requireShared } = require('./engine-loader');
 // roomTurns, sideToMove and the clocks are shared with the site's
 // active-games list (docs/static/scripts/engine/room-clock.js).
 const { roomTurns, sideToMove, roomTimeLeft } = requireShared('room-clock.js');
+// What counts as stalling, shared with account.html (fair-play.js).
+const { FAIR_PLAY } = requireShared('fair-play.js');
 
 const AI_UID = /^__ai_[a-z0-9_]+__$/;
 // Network slack allowed on a loss on time.
@@ -101,6 +103,43 @@ function abandoned(room, loser, now) {
 	const live = seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected !== false;
 	return !live && typeof seat.disconnectedAt === 'number'
 		&& now - seat.disconnectedAt >= ABANDON_GRACE_MS - CLOCK_GRACE_MS;
+}
+
+/**
+ * Did `loser`, who lost a live game on time (flagged as of `now`), stall?
+ * From the turns' server timestamps alone: their clock at the start of the
+ * final turn held at least FAIR_PLAY.STALL_MIN_MS and at least
+ * FAIR_PLAY.STALL_FACTOR times their median time per turn earlier in the game
+ * (FAIR_PLAY.STALL_MIN_TURNS turns at least), and they let it all run out
+ * without moving. Returns the evidence ({ satMs: the final turn's length,
+ * leftMs: the clock it began with, medianMs, turns: their earlier turns }) or
+ * null. A seat left empty counts too: the opponent waited out the clock
+ * instead of claiming the abandonment.
+ */
+function stalled(room, loser, now) {
+	const tc = room.timeControl || {};
+	if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number' || typeof room.startedAt !== 'number') return null;
+	const turns = roomTurns(room);
+	// Both players moved, in turn (as for an abandonment).
+	if (!turns.some((t) => t.color === 'red') || !turns.some((t) => t.color === 'blue')) return null;
+	if (turns.some((t, i) => i > 0 && t.color === turns[i - 1].color)) return null;
+	if (sideToMove(room) !== loser || !flagged(room, loser, now)) return null;
+	const thinks = [];
+	let prev = room.startedAt;
+	for (const t of turns) {
+		if (typeof t.timestamp !== 'number') return null;
+		if (t.color === loser) thinks.push(Math.max(0, t.timestamp - prev));
+		prev = t.timestamp;
+	}
+	if (thinks.length < FAIR_PLAY.STALL_MIN_TURNS) return null;
+	const sorted = thinks.slice().sort((a, b) => a - b);
+	const mid = sorted.length >> 1;
+	const medianMs = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+	const last = turns[turns.length - 1].timestamp;
+	const leftMs = roomTimeLeft(room, loser, last);
+	if (typeof leftMs !== 'number' || leftMs < FAIR_PLAY.STALL_MIN_MS) return null;
+	if (leftMs < FAIR_PLAY.STALL_FACTOR * Math.max(medianMs, 1000)) return null;
+	return { satMs: now - last, leftMs, medianMs: Math.round(medianMs), turns: thinks.length };
 }
 
 /**
@@ -193,8 +232,8 @@ async function judgeGame(record, ctx) {
 		: await _judgeOnlineGame(engine, record, ctx, spellNames, variant);
 	if (!verdict.rated) return verdict;
 	// What an unrated verdict below keeps from the judgment (an upheld
-	// abandonment counts whether or not the game is rated).
-	const carry = verdict.abandonedBy ? { kind: verdict.kind, abandonedBy: verdict.abandonedBy } : { kind: verdict.kind };
+	// abandonment or stall counts whether or not the game is rated).
+	const carry = Object.assign({ kind: verdict.kind }, offenseOf(verdict));
 	if (record.ranked !== true) return Object.assign(unrated('casual'), carry);
 	for (const uid of [redUid, blueUid]) {
 		if (!AI_UID.test(uid) && !(await ctx.isFullAccount(uid))) {
@@ -222,6 +261,13 @@ async function judgeGame(record, ctx) {
 	return verdict;
 }
 
+/** The fair-play offense fields of a verdict ({ abandonedBy } or { stalledBy, stall }), for carrying on. */
+function offenseOf(v) {
+	if (v.abandonedBy) return { abandonedBy: v.abandonedBy };
+	if (v.stalledBy) return { stalledBy: v.stalledBy, stall: v.stall };
+	return {};
+}
+
 async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 	const room = ctx.room;
 	const kind = 'online';
@@ -236,7 +282,11 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 	// rated or not (judgeGame carries it on every later verdict).
 	const abandonedBy = room.endReason === 'abandon' && !room.forfeitedBy
 		&& typeof room.closedAt === 'number' && abandoned(room, loser, room.closedAt) ? loser : null;
-	const kindOf = abandonedBy ? { kind, abandonedBy } : { kind };
+	// A loss on time the loser sat out (stalled): their record counts it too.
+	const stall = room.endReason === 'time' && !room.forfeitedBy && typeof room.closedAt === 'number'
+		? stalled(room, loser, room.closedAt) : null;
+	const offense = abandonedBy ? { abandonedBy } : stall ? { stalledBy: loser, stall } : {};
+	const kindOf = Object.assign({ kind }, offense);
 	// A casual room is held at ranked:false by the rules too.
 	if (room.ranked !== true || room.casual === true) return Object.assign(unrated('casual'), kindOf);
 	const why = engine.unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null);
@@ -269,7 +319,7 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		claimKey: 'room_' + record.roomCode,
 		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
 	};
-	if (abandonedBy) verdict.abandonedBy = abandonedBy;
+	Object.assign(verdict, offense);
 	if (ok) return verdict;
 	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return Object.assign(unrated('result-not-verified'), { kind });
 	// The player who closed the room with a result that does not follow
@@ -399,5 +449,5 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 
 module.exports = {
 	AI_UID, CLOCK_GRACE_MS, ABANDON_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged,
-	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine,
+	abandoned, stalled, sideToMove, onlineTranscript, roomTurns, freshEngine,
 };
