@@ -30,6 +30,8 @@ const { sendPush } = require('./notify');
 const { battleTeams, battleTeamOf, teamBattleStandings } = require('./engine-loader').requireShared('team-battle.js');
 
 const PUSH_TTL_S = 24 * 3600;
+// Events a collapsed inbox entry remembers (so a retried one counts once).
+const EVENTS_KEPT = 20;
 // Posters of a thread told of a reply, besides its author (the latest).
 const THREAD_NOTIFY_MAX = 20;
 // Members of a team told of a battle starting or ending.
@@ -86,12 +88,21 @@ async function notify(db, uid, key, entry, opts) {
 	let written = Object.assign({}, entry);
 	let fresh = true;
 	if (o.collapse) {
+		// o.event names the thing told (a post, a requester): a retried
+		// event is counted once (the last EVENTS_KEPT are remembered).
+		const ev = o.event ? String(o.event) : null;
+		let repeat = false;
 		const res = await ref.transaction((cur) => {
-			const n = cur && !cur.read ? (cur.n || 1) + 1 : 1;
-			return Object.assign({}, entry, { n });
+			const open = cur && !cur.read;
+			repeat = !!(open && ev && cur.ev && cur.ev[ev]);
+			if (repeat) return undefined;
+			const seen = Object.assign({}, open ? cur.ev : null);
+			if (ev) seen[ev] = entry.at;
+			const keep = Object.keys(seen).sort((a, b) => seen[b] - seen[a]).slice(0, EVENTS_KEPT);
+			return Object.assign({}, entry, { n: open ? (cur.n || 1) + 1 : 1, ev: keep.length ? Object.fromEntries(keep.map((k) => [k, seen[k]])) : null });
 		});
 		written = res.snapshot.val();
-		fresh = (written && written.n) === 1;
+		fresh = !repeat && res.committed && (written && written.n) === 1;
 	} else {
 		if (o.quietMs) {
 			const prev = await val(db, 'notifications/' + uid + '/' + key);
@@ -124,11 +135,14 @@ async function onChallenge(db, target, room, now) {
 
 async function onMessage(db, cid, mid, msg, send) {
 	if (!msg || !human(msg.to) || !human(msg.from)) return null;
-	const [blocked, name] = await Promise.all([
+	// Read again: gone (the sender's account deleted since) means no push.
+	const [still, deleted, blocked, name] = await Promise.all([
+		val(db, 'dm_messages/' + cid + '/' + mid + '/from'),
+		val(db, 'deleted_users/' + msg.from),
 		val(db, 'blocks/' + msg.to + '/' + msg.from),
 		val(db, 'users/' + msg.from + '/displayName'),
 	]);
-	if (blocked) return null;
+	if (still !== msg.from || deleted || blocked) return null;
 	return pushNotice(db, msg.to, 'message', {
 		title: 'Message from ' + (name || 'a player'),
 		body: cut(msg.text, 120),
@@ -161,7 +175,7 @@ async function onForumPost(db, cat, tid, pid, post, now, send) {
 	let told = 0;
 	for (const uid of tell) {
 		const w = await notify(db, uid, 'forum-' + tid, { type: 'forum', actor: post.by, cat, thread: tid, post: pid, title: cut(thread.title, 120), at: now }, {
-			send, collapse: true, push: { title: 'Reply in “' + cut(thread.title, 60) + '”', body: name + ': ' + cut(post.text, 100), url, tag: 'sigil-forum-' + tid },
+			send, collapse: true, event: pid, push: { title: 'Reply in “' + cut(thread.title, 60) + '”', body: name + ': ' + cut(post.text, 100), url, tag: 'sigil-forum-' + tid },
 		});
 		if (w) told++;
 	}
@@ -173,7 +187,7 @@ async function onBlogComment(db, pid, cid, comment, now, send) {
 	if (!post || !comment || post.by === comment.by) return null;
 	const name = (await val(db, 'users/' + comment.by + '/displayName')) || 'A player';
 	return notify(db, post.by, 'blog-' + pid, { type: 'blog', actor: comment.by, post: pid, title: cut(post.title, 120), at: now }, {
-		send, collapse: true, push: { title: 'Comment on “' + cut(post.title, 60) + '”', body: name + ': ' + cut(comment.text, 100), url: 'blog.html?p=' + encodeURIComponent(pid) + '#comments', tag: 'sigil-blog-' + pid },
+		send, collapse: true, event: cid, push: { title: 'Comment on “' + cut(post.title, 60) + '”', body: name + ': ' + cut(comment.text, 100), url: 'blog.html?p=' + encodeURIComponent(pid) + '#comments', tag: 'sigil-blog-' + pid },
 	});
 }
 
@@ -243,7 +257,7 @@ async function onTeamRequest(db, tid, uid, now, send) {
 	let told = 0;
 	for (const staff of await teamStaff(db, tid)) {
 		const w = await notify(db, staff, 'teamreq-' + tid, { type: 'team', event: 'request', team: tid, teamName: cut(team.name, 40), actor: uid, at: now }, {
-			send, collapse: true, push: { title: cut(team.name, 40), body: (name || 'A player') + ' asks to join.', url: 'teams.html?id=' + encodeURIComponent(tid) + '#requests', tag: 'sigil-teamreq-' + tid },
+			send, collapse: true, event: uid, push: { title: cut(team.name, 40), body: (name || 'A player') + ' asks to join.', url: 'teams.html?id=' + encodeURIComponent(tid) + '#requests', tag: 'sigil-teamreq-' + tid },
 		});
 		if (w) told++;
 	}
@@ -395,8 +409,12 @@ async function scoreGame(db, uid, gameId, entry, now, send) {
 			if (p.seen && p.seen[gameId]) return undefined;
 			return Object.assign({}, p, { team: me.team, points: (p.points || 0) + (win ? 1 : 0), games: (p.games || 0) + 1, seen: Object.assign({}, p.seen, { [gameId]: true }) });
 		});
-		if (!res.committed) continue;
-		scored.push({ battle: bid, team: me.team, win });
+		const after = res.snapshot.val();
+		// Counted by an earlier try of this event: the steps below may not
+		// have finished then, so they run again (they are safe to repeat).
+		const counted = !!(after && after.seen && after.seen[gameId]);
+		if (!res.committed && !counted) continue;
+		if (res.committed) scored.push({ battle: bid, team: me.team, win });
 		// Closed (or closing) by now? Read afresh, after the score is in:
 		// either this sees the close's result and rewrites it, or the close
 		// rewrites it after marking the battle finished (battleTick), and

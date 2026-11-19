@@ -73,6 +73,10 @@ test('inbox: written once per subject, pushed only when switched on', async () =
 	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'carol', at: 2 }, { collapse: true, send, push: p });
 	assert.strictEqual((await get('notifications/bob/forum-t1')).n, 2);
 	assert.strictEqual(sent.length, before + 1);
+	// A retried event is counted (and pushed) once.
+	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'erin', at: 4 }, { collapse: true, send, push: p, event: 'post9' });
+	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'erin', at: 5 }, { collapse: true, send, push: p, event: 'post9' });
+	assert.strictEqual((await get('notifications/bob/forum-t1')).n, 3);
 	await db.ref('notifications/bob/forum-t1/read').set(true);
 	await community.notify(db, 'bob', 'forum-t1', { type: 'forum', actor: 'dave', at: 3 }, { collapse: true, send, push: p });
 	const e = await get('notifications/bob/forum-t1');
@@ -88,6 +92,7 @@ test('challenges and messages', async () => {
 	assert.deepStrictEqual(await get('notifications/bob/challenge-ROOM1'), { type: 'challenge', actor: 'alice', room: 'ROOM1', at: 10 });
 	await db.ref('community_config/push').set(true);
 	const msg = { from: 'alice', to: 'bob', text: 'Hello Bob, '.repeat(30), at: 1 };
+	await db.ref('dm_messages/alice_bob').set({ m1: msg, m2: msg, m3: { from: 'bob', to: 'alice', text: 'x', at: 2 } });
 	await community.onMessage(db, 'alice_bob', 'm1', msg, send);
 	assert.strictEqual(sent.length, 1);
 	assert.strictEqual(sent[0].message.data.title, 'Message from Alice');
@@ -99,6 +104,12 @@ test('challenges and messages', async () => {
 	await community.onMessage(db, 'alice_bob', 'm2', msg, send);
 	await db.ref('notify_prefs/alice/message').set(false);
 	await community.onMessage(db, 'alice_bob', 'm3', { from: 'bob', to: 'alice', text: 'x', at: 2 }, send);
+	assert.strictEqual(sent.length, 1);
+	// Its sender deleted their account before the event ran: no push of the text.
+	await db.ref().update({ 'blocks/bob/alice': null, 'deleted_users/alice': 1 });
+	await community.onMessage(db, 'alice_bob', 'm2', msg, send);
+	await db.ref().update({ 'deleted_users/alice': null, 'dm_messages/alice_bob/m2': null });
+	await community.onMessage(db, 'alice_bob', 'm2', msg, send);
 	assert.strictEqual(sent.length, 1);
 });
 
@@ -242,6 +253,11 @@ test('team battles: scored games, the start, the result', async () => {
 	assert.deepStrictEqual(turned.standings.map((s) => [s.team, s.score]), [['reds', 3], ['blues', 2]]);
 	const fixed = await get('notifications/bob/battle-tb1');
 	assert.deepStrictEqual([fixed.event, fixed.winner, fixed.winnerName], ['battle-end', 'reds', 'Reds']);
+	// A retry of a game already scored, whose result write was lost: the
+	// retry writes it.
+	await db.ref('team_battles/tb1/result').set({ standings: [], games: 0, at: 1 });
+	assert.deepStrictEqual(await community.scoreGame(db, 'alice', 'g12', game('bob', 'win'), now + 3 * HOUR), []);
+	assert.deepStrictEqual((await get('team_battles/tb1/result')).standings.map((s) => [s.team, s.score]), [['reds', 3], ['blues', 2]]);
 	// A result counting more games is never overwritten by a staler one.
 	await db.ref('team_battles/tb1/result/games').set(999);
 	await community.scoreGame(db, 'dave', 'g13', game('carol', 'win'), now + 3 * HOUR);
