@@ -18,9 +18,12 @@
  * words), human turns preferred.
  *
  * Data shape (one "segment" = a set of games):
- *   { games, boards: { <layout id>: { n, r, tree } },
- *     layouts: [ { s: [spells in slot order], b: layout id, n, r, t?: tree } ],
- *     sets:    [ { s: [spells, sorted], b, n, r, a: arrangements } ] }
+ *   { games, boards: { <variant>: { b: layout id, n, r, tree } },
+ *     layouts: [ { s: [spells in slot order], b: layout id, v: variant, n, r, t?: tree } ],
+ *     sets:    [ { s: [spells, sorted], b, v, n, r, a: arrangements } ] }
+ *   Games are kept apart by variant (normalizeVariant: 'standard',
+ *   'deathmatch', 'pentagon', ...): the same stones mean a different game
+ *   under Deathmatch or Scramble rules, or on the Cataclysm board.
  *   tree node: { m: label, k: positionKey, n: games, r: red wins,
  *                p?: the focus player's wins, c: [children, most played first] }
  *   The root has no m/k. Games without a recorded winner are left out.
@@ -110,9 +113,15 @@ const OpeningExplorer = (() => {
 		// Plies are labelled red, blue, red... from the first.
 		if (turns[0].color !== 'red' || turns[0].turnNumber !== 1) return null;
 		let layout = 'core';
-		try { layout = sfnToDict(turns[0].sfnBefore).layout || 'core'; } catch (e) {
+		let variant = rec.variant || 'standard';
+		try {
+			const d = sfnToDict(turns[0].sfnBefore);
+			layout = d.layout || 'core';
+			if (!rec.variant && d.variant) variant = d.variant;
+		} catch (e) {
 			layout = typeof boardLayoutForSpellCount === 'function' ? boardLayoutForSpellCount((rec.spellNames || []).length) : 'core';
 		}
+		if (typeof normalizeVariant === 'function') variant = normalizeVariant(variant);
 		if (!standardStart(turns[0].sfnBefore, layout)) return null;
 		const plies = [];
 		for (const t of turns.slice(0, depth || DEFAULTS.depth)) {
@@ -122,6 +131,7 @@ const OpeningExplorer = (() => {
 		const isAi = (uid) => typeof uid === 'string' && /^__ai_/.test(uid);
 		return {
 			board: layout,
+			variant,
 			spells: (rec.spellNames || []).slice(),
 			winner: rec.winner,
 			pvp: !!(rec.redUid && rec.blueUid && !isAi(rec.redUid) && !isAi(rec.blueUid) && rec.redUid !== rec.blueUid),
@@ -177,16 +187,17 @@ const OpeningExplorer = (() => {
 			if (!e) continue;
 			games++;
 			const red = e.winner === 'red' ? 1 : 0;
-			if (!boards.has(e.board)) boards.set(e.board, newNode());
-			addPath(boards.get(e.board), e, o.depth);
-			const lk = e.board + '|' + e.spells.join(',');
+			const v = e.variant || 'standard';
+			if (!boards.has(v)) boards.set(v, Object.assign(newNode(), { b: e.board }));
+			addPath(boards.get(v), e, o.depth);
+			const lk = v + '|' + e.spells.join(',');
 			let L = layouts.get(lk);
-			if (!L) { L = { s: e.spells.slice(), b: e.board, n: 0, r: 0, tree: newNode() }; layouts.set(lk, L); }
+			if (!L) { L = { s: e.spells.slice(), b: e.board, v, n: 0, r: 0, tree: newNode() }; layouts.set(lk, L); }
 			L.n++; L.r += red;
 			addPath(L.tree, e, o.layoutDepth);
-			const sk = e.board + '|' + e.spells.slice().sort().join(',');
+			const sk = v + '|' + e.spells.slice().sort().join(',');
 			let S = sets.get(sk);
-			if (!S) { S = { s: e.spells.slice().sort(), b: e.board, n: 0, r: 0, arr: new Set() }; sets.set(sk, S); }
+			if (!S) { S = { s: e.spells.slice().sort(), b: e.board, v, n: 0, r: 0, arr: new Set() }; sets.set(sk, S); }
 			S.n++; S.r += red; S.arr.add(lk);
 		}
 		const byCount = (a, b) => b.n - a.n || (a.s.join(',') < b.s.join(',') ? -1 : 1);
@@ -195,14 +206,14 @@ const OpeningExplorer = (() => {
 			games,
 			boards: {},
 			layouts: layoutList.map((L, i) => {
-				const row = { s: L.s, b: L.b, n: L.n, r: L.r };
+				const row = { s: L.s, b: L.b, v: L.v, n: L.n, r: L.r };
 				if (i < o.layoutTrees && L.n >= o.minGames) row.t = finish(L.tree, null, o.minGames, o.withPlayer);
 				return row;
 			}),
 			sets: [...sets.values()].filter((S) => S.n >= o.minLayoutGames).sort(byCount).slice(0, o.maxLayouts)
-				.map((S) => ({ s: S.s, b: S.b, n: S.n, r: S.r, a: S.arr.size })),
+				.map((S) => ({ s: S.s, b: S.b, v: S.v, n: S.n, r: S.r, a: S.arr.size })),
 		};
-		for (const [b, root] of boards) out.boards[b] = { n: root.n, r: root.r, tree: finish(root, null, o.minGames, o.withPlayer) };
+		for (const [v, root] of boards) out.boards[v] = { b: root.b, n: root.n, r: root.r, tree: finish(root, null, o.minGames, o.withPlayer) };
 		return out;
 	}
 
@@ -216,7 +227,13 @@ const OpeningExplorer = (() => {
 		return node;
 	}
 
-	return { DEFAULTS, positionKey, simTokens, turnText, standardStart, gameEntry, aggregate, walk };
+	/** "Standard", "Deathmatch", "Cataclysm + Scramble"... (the lobby's names). */
+	function variantName(v) {
+		const names = { standard: 'Standard', competitive: 'Competitive', deathmatch: 'Deathmatch', scramble: 'Scramble', duplicates: 'Duplicates', pentagon: 'Cataclysm' };
+		return String(v || 'standard').split('_').map((t) => names[t] || t).join(' + ');
+	}
+
+	return { DEFAULTS, positionKey, simTokens, turnText, standardStart, gameEntry, aggregate, walk, variantName };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = OpeningExplorer;

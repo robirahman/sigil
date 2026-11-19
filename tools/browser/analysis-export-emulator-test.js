@@ -158,6 +158,8 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		['users/' + uid + '/displayName']: 'Alice',
 		['user_games/' + uid + '/g1']: { timestamp: Date.now() - 2000, roomCode: CODE, color: 'red', result: 'win', opponent: 'Bob', rated: true },
 		['user_games/' + uid + '/g2']: { timestamp: Date.now() - 1000, roomCode: SHORT, color: 'blue', result: 'win', opponent: 'Bob', rated: true },
+		// A private game: left out of the explorer, as its review is refused.
+		['user_games/' + uid + '/g3']: { timestamp: Date.now() - 500, roomCode: PRIV, color: 'red', result: 'win', opponent: 'Bob', rated: true },
 	});
 
 	const dl = fs.mkdtempSync(path.join(process.env.SIGIL_TEST_TMP || os.tmpdir(), 'export-dl-'));
@@ -389,7 +391,7 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		await page.goto(`${BASE}/openings.html?player=${uid}`, { waitUntil: 'load', timeout: 60000 });
 		await page.waitForFunction((s) => { const d = document.querySelector(s)._x_dataStack[0]; return d.source === 'player' && d.segment; }, { timeout: 60000 }, OX);
 		st = await oxVal('({ games: X.segment.games, name: X.playerName, root: X.tree().p, kids: X.tree().c.map((c) => [c.m, c.n, c.p]), sample: document.querySelector(".ox__sample").offsetParent !== null })');
-		check('explorer: one player\'s games from user_games and their rooms', st.games === 2 && st.name === 'Alice' && st.root === 2 && !st.sample, st);
+		check('explorer: one player\'s games from user_games and their rooms (not the private one)', st.games === 2 && st.name === 'Alice' && st.root === 2 && !st.sample, st);
 		check('explorer: the player\'s first turns', JSON.stringify(st.kids.map((k) => k[0]).sort()) === JSON.stringify(['a11', 'a2']), st.kids);
 		await page.evaluate((s) => document.querySelector(s)._x_dataStack[0].setPlayerSide('blue'), OX);
 		await sleep(200);

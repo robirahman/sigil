@@ -166,7 +166,7 @@ async function main() {
 		try { turns = await openingTurns(E, rec, Math.max(opts.depth, opts.layoutDepth)); } catch (e) { skip('replay failed'); continue; }
 		if (!turns || !turns.length) { skip('no turns'); continue; }
 		const e = E.OpeningExplorer.gameEntry(
-			{ spellNames: E.normalizeSpellNames(list(rec.spellNames) || []), winner: rec.winner, redUid: rec.redUid, blueUid: rec.blueUid },
+			{ spellNames: E.normalizeSpellNames(list(rec.spellNames) || []), variant: rec.variant || null, winner: rec.winner, redUid: rec.redUid, blueUid: rec.blueUid },
 			turns, Math.max(opts.depth, opts.layoutDepth));
 		if (!e) { skip('not from the standard start'); continue; }
 		entries.push(e);

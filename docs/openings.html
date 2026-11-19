@@ -86,11 +86,14 @@
 					<button type="button" x-bind:aria-pressed="playerSide === 'red'" x-on:click="setPlayerSide('red')">As red</button>
 					<button type="button" x-bind:aria-pressed="playerSide === 'blue'" x-on:click="setPlayerSide('blue')">As blue</button>
 				</div>
-				<div class="ox__seg" role="group" aria-label="Board" x-show="boardIds().length > 1">
-					<template x-for="b in boardIds()" x-bind:key="b">
-						<button type="button" x-bind:aria-pressed="board === b" x-on:click="setBoard(b)" x-text="b === 'pentagon' ? 'Cataclysm board' : 'Core board'"></button>
-					</template>
-				</div>
+				<!-- Variants are kept apart: the same stones are another game under other rules or on another board. -->
+				<label x-show="boardIds().length > 1">Rules
+					<select x-bind:value="board" x-on:change="setBoard($event.target.value)">
+						<template x-for="b in boardIds()" x-bind:key="b">
+							<option x-bind:value="b" x-bind:selected="board === b" x-text="OpeningExplorer.variantName(b) + ' (' + segment.boards[b].n + ')'"></option>
+						</template>
+					</select>
+				</label>
 				<span class="ox__note" x-show="loadingText" x-text="loadingText"></span>
 			</div>
 
@@ -223,7 +226,7 @@
 		// is kept in localStorage.
 		const OX_PLAYER_GAMES = window.__OX_PLAYER_GAMES || 300;
 		const OX_FETCH_BATCH = 20;
-		const OX_ROOM_CACHE_KEY = 'sigil_openings_rooms_v1';
+		const OX_ROOM_CACHE_KEY = 'sigil_openings_rooms_v2';
 		const OX_ROOM_CACHE_MAX = 2000;
 		const OX_ENGINE = ['board.js', 'moves.js', 'spells.js', 'ai-player.js', 'game-controller.js?v=1', 'game-review.js?v=42']
 			.map((f) => 'static/scripts/engine/' + f);
@@ -258,7 +261,7 @@
 				error: '',
 				loadingText: 'Loading…',
 				source: 'all',          // all | pvp | player
-				board: 'core',
+				board: 'standard',      // the variant shown (segment.boards key)
 				tab: 'openings',
 				path: [],               // position keys from the root
 				layoutKey: '',          // '' = all layouts, else layoutId of a layout with a tree
@@ -285,8 +288,7 @@
 						this.error = 'Could not load the site-wide numbers (' + (e.message || e) + ').';
 					}
 					this.loadingText = '';
-					const ids = this.boardIds();
-					if (ids.length && !ids.includes(this.board)) this.board = ids[0];
+					this._fixBoard();
 					firebase.auth().onAuthStateChanged((u) => { this.myUid = u && !u.isAnonymous ? u.uid : ''; });
 					const player = params.get('player');
 					if (player) await this.loadPlayer(player);
@@ -298,14 +300,15 @@
 					if (this.source === 'player') return this.playerSegments[this.playerSide || 'both'] || null;
 					return this.data && this.data.segments ? this.data.segments[this.source] || null : null;
 				},
+				// Variants with games, most played first.
 				boardIds() {
 					const seg = this.segment;
-					return seg ? Object.keys(seg.boards || {}).sort() : [];
+					return seg ? Object.keys(seg.boards || {}).sort((a, b) => seg.boards[b].n - seg.boards[a].n || (a < b ? -1 : 1)) : [];
 				},
-				layoutId(L) { return L.b + '|' + L.s.join(','); },
+				layoutId(L) { return L.v + '|' + L.s.join(','); },
 				layoutsWithTrees() {
 					const seg = this.segment;
-					return seg ? seg.layouts.filter((L) => L.t && L.b === this.board) : [];
+					return seg ? seg.layouts.filter((L) => L.t && L.v === this.board) : [];
 				},
 				tree() {
 					const seg = this.segment;
@@ -356,7 +359,7 @@
 					const seg = this.segment;
 					if (!seg) return [];
 					const q = this.spellFilter.trim().toLowerCase().replace(/[\s_]+/g, ' ');
-					let rows = (this.bySet ? seg.sets : seg.layouts).filter((L) => L.b === this.board);
+					let rows = (this.bySet ? seg.sets : seg.layouts).filter((L) => L.v === this.board);
 					if (q) rows = rows.filter((L) => L.s.some((n) => displaySpellName(n).toLowerCase().includes(q)));
 					const rate = (L) => (L.n ? L.r / L.n : 0);
 					if (this.sortBy === 'red') rows = rows.slice().sort((a, b) => rate(b) - rate(a) || b.n - a.n);
@@ -377,8 +380,8 @@
 				_previewSpells() {
 					const id = this.tab === 'openings' ? this.layoutKey : (this.bySet ? '' : this.previewLayout);
 					if (!id) return [];
-					const [b, s] = id.split('|');
-					return b === this.board && s ? s.split(',') : [];
+					const [v, s] = id.split('|');
+					return v === this.board && s ? s.split(',') : [];
 				},
 				previewLabel() {
 					if (this.tab === 'layouts') {
@@ -390,14 +393,14 @@
 					return steps.length ? 'After ' + steps.map((s, i) => (i % 2 === 0 ? 'R ' : 'B ') + (s.m || '—')).join(', ') : 'The starting position';
 				},
 				_previewSfn() {
-					const def = boardLayoutDef(this.board);
+					const def = boardLayoutDef(variantBoardLayout(this.board));
 					const spells = this._previewSpells();
 					const steps = this.tab === 'openings' ? this.pathSteps() : [];
 					let key;
 					if (steps.length) key = steps[steps.length - 1].k;
 					else key = def.nodeOrder.map((n) => (n === 'a1' ? 'r' : n === 'b1' ? 'b' : '.')).join('') + ' 0:0 -:- -:- b1';
 					const p = key.split(' ');
-					return p[0] + '/' + spells.join(',') + ' r 1 ' + p.slice(1).join(' ') + (this.board === 'pentagon' ? ' pentagon' : '');
+					return p[0] + '/' + spells.join(',') + ' r 1 ' + p.slice(1).join(' ') + (this.board !== 'standard' ? ' ' + this.board : '');
 				},
 				// Each draw renders off screen and only the latest one is shown, so a
 				// slow image load never paints over a newer position.
@@ -455,16 +458,19 @@
 								let room = cache[g.roomCode];
 								if (!room) {
 									const base = db.ref('rooms/' + g.roomCode);
-									const [sp, va, se, st, log] = await Promise.all([
+									const [sp, va, se, st, pr, log] = await Promise.all([
 										base.child('spellNames').once('value'), base.child('variant').once('value'),
 										base.child('setupSfn').once('value'), base.child('startSfn').once('value'),
+										base.child('allowSpectators').once('value'),
 										base.child('gameLog').orderByKey().limitToFirst(depth).once('value'),
 									]);
 									if (!sp.exists()) return;   // pruned room
 									room = { spellNames: oxList(sp.val()), variant: va.val() || 'standard', setupSfn: se.val() || null,
-										startSfn: st.val() || null, turns: oxList(log.val()), at: Date.now() };
+										startSfn: st.val() || null, private: pr.val() === false, turns: oxList(log.val()), at: Date.now() };
 									cache[g.roomCode] = room;
 								}
+								// A private game (no spectators) is not shown, as its review is not.
+								if (room.private) return;
 								if (room.startSfn || !room.turns.length) return;   // a game from a position
 								try {
 									const turns = room.turns.map((t) => Object.assign({}, t, { actions: oxList(t.actions) }));
@@ -473,7 +479,7 @@
 									const fat = turns.every((t) => t.sfnBefore && t.sfnAfter) ? turns
 										: await reconstructGameLog(normalizeSpellNames(room.spellNames), normalizeVariant(room.variant), setup, turns);
 									const winner = g.result === 'win' ? g.color : (g.color === 'red' ? 'blue' : 'red');
-									const e = OpeningExplorer.gameEntry({ spellNames: normalizeSpellNames(room.spellNames), winner, player: g.color }, fat, depth);
+									const e = OpeningExplorer.gameEntry({ spellNames: normalizeSpellNames(room.spellNames), variant: room.variant, winner, player: g.color }, fat, depth);
 									if (e) entries.push(e);
 								} catch (err) { /* a transcript the engine cannot replay: not counted */ }
 							}));
