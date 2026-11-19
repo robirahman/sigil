@@ -485,7 +485,8 @@ function boardExportMixin() {
 			}
 			const code = this._roomCodeForReview || '';
 			if (code && this.reviewMode && this.reviewSfns && this.reviewSfns.length > 1) {
-				return 'game=' + encodeURIComponent(code) + (this.reviewIndex < this.reviewSfns.length - 1 ? '&ply=' + this.reviewIndex : '');
+				// Always the shown ply: a bare ?game= opens at the start.
+				return 'game=' + encodeURIComponent(code) + '&ply=' + (this.reviewIndex || 0);
 			}
 			let sfn;
 			if (this.reviewMode) {

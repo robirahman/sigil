@@ -219,7 +219,7 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 				check('GIF: named after the room', gif.name === 'sigil-game-' + CODE + '.gif', gif.name);
 			}
 		}
-		check('embed code at the last position: the game', (await boardVal(page, 'B.embedQuery()')) === 'game=' + CODE);
+		check('embed code at the last position: the game at its last ply', (await boardVal(page, 'B.embedQuery()')) === 'game=' + CODE + '&ply=' + (n - 1));
 		await page.evaluate((s) => document.querySelector(s)._x_dataStack[0].reviewFirst(), BOARD);
 		check('embed code at an earlier position: the game at that ply', (await boardVal(page, 'B.embedQuery()')) === 'game=' + CODE + '&ply=0');
 		await browser.defaultBrowserContext().overridePermissions(BASE, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
@@ -315,8 +315,10 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		await boardWait(page, 'B.canTypeTurn() && B.whoseTurn === "red"', 60000);
 		const typeTurn = async (text) => {
 			await page.evaluate((s, t) => { document.querySelector(s)._x_dataStack[0].typedTurnText = t; }, BOARD, text);
-			await sleep(100);
-			await page.click('.typed-turn__go');
+			// The button enables once the board waits for input (the analysis
+			// board restarts its controller as it settles on the position).
+			await page.waitForFunction(() => [...document.querySelectorAll('.typed-turn__go')].some((b) => b.offsetParent !== null && !b.disabled), { timeout: 20000 });
+			await page.evaluate(() => [...document.querySelectorAll('.typed-turn__go')].find((b) => b.offsetParent !== null && !b.disabled).click());
 			await sleep(200);
 			await boardWait(page, '!B.typedTurnBusy', 20000);
 		};
@@ -349,7 +351,10 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		const rows0 = await boardVal(page, 'B.anaRows().length');
 		const first = Object.keys(await boardVal(page, 'B._lastPrompt.moveoptions'))[0];
 		await typeTurn(first + ' pass');
-		await boardWait(page, `B.anaRows().length > ${rows0}`, 20000);
+		await boardWait(page, `B.anaRows().length > ${rows0}`, 20000).catch(async (e) => {
+			console.log('analysis state:', JSON.stringify(await boardVal(page, '({ err: B.typedTurnError, text: B.typedTurnText, can: B.canTypeTurn(), aw: B.awaiting, rows: B.anaRows().length })')));
+			throw e;
+		});
 		st = await boardVal(page, '({ rows: B.anaRows().length, err: B.typedTurnError, q: B.embedQuery(), cur: B.anaCurrentSfn() })');
 		check('analysis: a typed turn adds a node to the tree', st.rows === rows0 + 1 && st.err === '', st);
 		check('analysis: the embed code is the selected position', st.q === 'sfn=' + encodeURIComponent(st.cur));
