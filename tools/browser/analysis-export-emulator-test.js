@@ -265,6 +265,11 @@ const stoneAt = (page, sel, node, layout) => page.evaluate((s, n, l) => {
 		check('embed: no engine or Firebase loaded for a position', !requests.some((u) => /game-review\.js|firebasejs/.test(u)));
 		check('embed: a position opens on the analysis board', (await page.$eval('#embed-open', (a) => a.href)).includes('/analysis.html?sfn='));
 		check('embed: the viewer\'s own theme is not changed', await page.evaluate(() => localStorage.getItem('sigil_theme')) !== 'frost');
+		const banks = await page.evaluate((sfn) => {
+			const st = BoardImage.stateFromSfn(sfn + ' pm:2:0');
+			return [st.redBank, st.blueBank, BoardImage.sideText('Alice', 1, 'standard', st.redBank), BoardImage.sideText('Bob', 0, 'deathmatch', st.blueBank)];
+		}, dashSfn);
+		check('images: Providence banks are read and captioned', JSON.stringify(banks) === JSON.stringify([2, 0, 'Alice · 1 spell · bank 2', 'Bob']), banks);
 		await page.close();
 
 		// ---- 3. puzzles

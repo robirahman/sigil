@@ -133,8 +133,8 @@
 							canvas,
 							size: Math.min(1480, Math.round(css * (window.devicePixelRatio || 1))),
 							caption: {
-								left: BoardImage.sideText(view.names.red, st.redSpells, st.variant),
-								right: BoardImage.sideText(view.names.blue, st.blueSpells, st.variant),
+								left: BoardImage.sideText(view.names.red, st.redSpells, st.variant, st.redBank),
+								right: BoardImage.sideText(view.names.blue, st.blueSpells, st.variant, st.blueBank),
 								centre: view.sfns.length > 1 ? (view.labels[i] || '') : view.result,
 							},
 						});

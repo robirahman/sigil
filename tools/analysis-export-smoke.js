@@ -174,7 +174,18 @@ const { TypedTurn, OpeningExplorer, reconstructGameLog } = ctx.__x;
 	const mine = O.aggregate(entries.map((e, i) => e && Object.assign({}, e, { player: i === 3 ? 'blue' : 'red' })), { minGames: 1, withPlayer: true });
 	check('the focus player\'s wins', mine.boards.core.tree.p === 3, mine.boards.core.tree.p);
 	check('an engine turn reads in the notation', O.turnText({ kind: 'sim', actions: [{ type: 'dash', sacrificed: ['a1', 'a2'] }, { type: 'move', node: 'c10' }, { type: 'cast', spell: 'Rock_Slide', kept: ['a3'] }, { type: 'pass' }] }) === 'dash a1 a2 c10 Rock Slide a3');
-	check('not from the standard start', O.gameEntry({ winner: 'red' }, [{ sfnBefore: online.turns && 'rr.....................................' + '/' + spells.join(',') + ' r 1 0:0 -:- -:- b1', sfnAfter: 'x' }]) === null);
+	const start = (stones, rest) => [{ color: 'red', turnNumber: 1, sfnBefore: stones + '/' + spells.join(',') + ' ' + rest, sfnAfter: 'x' }];
+	const std = 'r............b.........................';
+	check('the standard start counts', O.standardStart(std + '/x r 1 0:0 -:- -:- b1') && O.standardStart(std + '/x r 1 0:0 -:- -:- b1 deathmatch'));
+	check('not from the standard start: stones', O.gameEntry({ winner: 'red' }, start('rr' + std.slice(2), 'r 1 0:0 -:- -:- b1')) === null);
+	for (const [why, rest] of [['blue to move', 'b 2 0:0 -:- -:- b1'], ['turn counter', 'r 5 0:0 -:- -:- b1'], ['score', 'r 1 0:0 -:- -:- tied'],
+		['a lock', 'r 1 0:0 Bewitch:- -:- b1'], ['a springlock', 'r 1 0:0 -:- -:Bewitch b1'], ['a Providence bank', 'r 1 0:0 -:- -:- b1 pm:1:0']]) {
+		check('not from the standard start: ' + why, O.gameEntry({ winner: 'red' }, start(std, rest)) === null);
+	}
+	check('a blue first turn is not counted', O.gameEntry({ winner: 'red' }, [{ color: 'blue', turnNumber: 1, sfnBefore: std + '/x r 1 0:0 -:- -:- b1', sfnAfter: 'x' }]) === null);
+	check('the Providence banks are part of the position key', O.positionKey(std + '/x b 1 0:0 -:- -:- tied pm:1:0') === std + ' 0:0 -:- -:- tied pm:1:0'
+		&& O.positionKey(std + '/x b 1 0:0 -:- -:- tied pm:1:0 standard_providence') === std + ' 0:0 -:- -:- tied pm:1:0'
+		&& O.positionKey(std + '/x b 1 0:0 -:- -:- tied') === std + ' 0:0 -:- -:- tied');
 
 	// ---- the generator, on a small dump
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ox-'));

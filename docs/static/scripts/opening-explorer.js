@@ -42,11 +42,15 @@ const OpeningExplorer = (() => {
 	const disp = (n) => (typeof displaySpellName === 'function' ? displaySpellName(n) : String(n || '').replace(/_/g, ' '));
 
 	/** Position key of an SFN: no spell list, side token or turn counter, so
-	 *  the same opening on different layouts meets. */
+	 *  the same opening on different layouts meets; the Providence banks
+	 *  (the 'pm:' token) are part of the position and kept. */
 	function positionKey(sfn) {
 		const p = String(sfn || '').trim().split(/\s+/);
 		if (p.length < 7) return '';
-		return [p[0].split('/')[0], p[3], p[4], p[5], p[6]].join(' ');
+		const key = [p[0].split('/')[0], p[3], p[4], p[5], p[6]];
+		const pm = p.slice(7).find((t) => t.startsWith('pm:'));
+		if (pm) key.push(pm);
+		return key.join(' ');
 	}
 
 	/** An engine turn's SimActions in the notation's words. */
@@ -75,11 +79,14 @@ const OpeningExplorer = (() => {
 		return tokens.map((t) => (/^[A-Z]/.test(t) ? disp(t) : t === 'skip_providence' ? 'skip' : t)).join(' ');
 	}
 
-	/** Did the game start from the standard opening position? */
+	/** Is `sfn` (the first turn's position before it is played) the standard
+	 *  opening: the two start stones, red to move on turn 1, no spells cast,
+	 *  no locks, the opening score, empty Providence banks? */
 	function standardStart(sfn, layout) {
 		const p = String(sfn || '').trim().split(/\s+/);
 		if (p.length < 7) return false;
-		if (p[3] !== '0:0') return false;
+		if (p[1] !== 'r' || p[2] !== '1' || p[3] !== '0:0' || p[4] !== '-:-' || p[5] !== '-:-' || p[6] !== 'b1') return false;
+		if (p.slice(7).some((t) => t.startsWith('pm:'))) return false;
 		const stones = p[0].split('/')[0];
 		const order = typeof boardLayoutDef === 'function' ? boardLayoutDef(layout || 'core').nodeOrder : null;
 		if (!order || order.length !== stones.length) return false;
@@ -100,6 +107,8 @@ const OpeningExplorer = (() => {
 	function gameEntry(rec, turns, depth) {
 		if (!rec || (rec.winner !== 'red' && rec.winner !== 'blue')) return null;
 		if (!Array.isArray(turns) || !turns.length || !turns[0].sfnBefore) return null;
+		// Plies are labelled red, blue, red... from the first.
+		if (turns[0].color !== 'red' || turns[0].turnNumber !== 1) return null;
 		let layout = 'core';
 		try { layout = sfnToDict(turns[0].sfnBefore).layout || 'core'; } catch (e) {
 			layout = typeof boardLayoutForSpellCount === 'function' ? boardLayoutForSpellCount((rec.spellNames || []).length) : 'core';

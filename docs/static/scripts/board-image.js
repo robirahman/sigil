@@ -18,7 +18,8 @@
  *
  * A state is { layout, spells: [name per slot, spellSlotNames() order],
  * stones: {node: 'red'|'blue'|'X'|null}, redLock, blueLock, redSpringlock,
- * blueSpringlock, score, lastPlay: [nodes], redSpells, blueSpells }.
+ * blueSpringlock, score, lastPlay: [nodes], redSpells, blueSpells,
+ * redBank, blueBank (Providence) }.
  *
  * Needs engine/constants.js, engine/notation.js (sfnToDict) and
  * board-geometry.js; theme-manager.js (THEMES) when loaded; gif-encoder.js
@@ -128,6 +129,7 @@ const BoardImage = (() => {
 			redSpringlock: d.red_springlock || '', blueSpringlock: d.blue_springlock || '',
 			score: d.score || 'unset',
 			redSpells: d.red_spellcounter || 0, blueSpells: d.blue_spellcounter || 0,
+			redBank: d.red_bank || 0, blueBank: d.blue_bank || 0,
 			variant: d.variant || 'standard',
 			lastPlay: [],
 		};
@@ -294,12 +296,15 @@ const BoardImage = (() => {
 		return canvas;
 	}
 
-	/** "Name · 3 spells" for a caption side. */
-	function sideText(name, spellsCast, variant) {
-		const n = name || '';
-		if (variant && typeof variantHasDeathmatch === 'function' && variantHasDeathmatch(variant)) return n;
-		const s = typeof spellsCast === 'number' ? spellsCast + (spellsCast === 1 ? ' spell' : ' spells') : '';
-		return n && s ? n + ' · ' + s : (n || s);
+	/** "Name · 3 spells · bank 2" for a caption side (the spell counter is
+	 *  left out in Deathmatch, which has none; the Providence bank only
+	 *  while it holds stones, as the page's Bank badge). */
+	function sideText(name, spellsCast, variant, bank) {
+		const parts = [name || ''];
+		const deathmatch = variant && typeof variantHasDeathmatch === 'function' && variantHasDeathmatch(variant);
+		if (!deathmatch && typeof spellsCast === 'number') parts.push(spellsCast + (spellsCast === 1 ? ' spell' : ' spells'));
+		if (bank) parts.push('bank ' + bank);
+		return parts.filter(Boolean).join(' · ');
 	}
 
 	/**
@@ -319,8 +324,8 @@ const BoardImage = (() => {
 			await render(st, {
 				size, canvas, artOnly: opts.artOnly,
 				caption: {
-					left: sideText(opts.redName || 'Red', st.redSpells, st.variant),
-					right: sideText(opts.blueName || 'Blue', st.blueSpells, st.variant),
+					left: sideText(opts.redName || 'Red', st.redSpells, st.variant, st.redBank),
+					right: sideText(opts.blueName || 'Blue', st.blueSpells, st.variant, st.blueBank),
 					centre: (opts.labels && opts.labels[i]) || (i + 1) + '/' + sfns.length,
 				},
 			});
@@ -402,6 +407,7 @@ function boardExportMixin() {
 				redSpringlock: this.redSpringlock || '', blueSpringlock: this.blueSpringlock || '',
 				score: this.score || 'unset',
 				redSpells: this.redSpellCounter || 0, blueSpells: this.blueSpellCounter || 0,
+				redBank: this.redBank || 0, blueBank: this.blueBank || 0,
 				variant: this.gameVariant || (this.isDeathmatch ? 'deathmatch' : 'standard'),
 				lastPlay: !reviewing && this.lastPlay ? [this.lastPlay] : [],
 			};
@@ -430,8 +436,8 @@ function boardExportMixin() {
 				const canvas = await BoardImage.render(st, {
 					size: 1200, artOnly: !!this.useArtOnlySpells,
 					caption: {
-						left: BoardImage.sideText(names.red, st.redSpells, st.variant),
-						right: BoardImage.sideText(names.blue, st.blueSpells, st.variant),
+						left: BoardImage.sideText(names.red, st.redSpells, st.variant, st.redBank),
+						right: BoardImage.sideText(names.blue, st.blueSpells, st.variant, st.blueBank),
 						centre: label,
 					},
 				});
