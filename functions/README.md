@@ -10,6 +10,10 @@
 | `analyzeGame` | task queue, enqueued by `rateGame` for each rated game | The Rust engine's review of the game (`analysis.js`) at the Quick-review preset, 10 positions per task, re-enqueued until done; writes `game_evals/{roomCode}`, which the review panel reads. Progress in `game_evals_progress/{gameId}` (server-only). Fills and reads the eval cache `position_evals/{key}`. |
 | `evalPositions` | callable (signed in) | Up to 10 positions a browser Quick review searched itself: each is checked (it must read back to itself) and searched again here before it is cached in `position_evals`, so clients cannot poison the cache. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
+| `socialGame` | new `user_games/{uid}/{gameId}` | Badges and the activity feed (`social.js`): the win for the followers' feed (`activity/{uid}/w_<gameId>`), rating milestones (`r_<rating>`, the first time a player reaches each 100 from 1100, from `achievements/{uid}/peakElo`) and the badges the game earns (`badges/{uid}/{id}`; the catalog and rules are `docs/static/scripts/engine/badges.js`). Guests and AIs get nothing. All three paths are public and server-only. |
+| `socialPuzzle` | `users/{uid}/puzzleProgress/daily/{day}` written | A solve of today's or yesterday's (UTC, the server's clock) daily puzzle extends `achievements/{uid}/puzzleStreak`; 7/30/100/365 days are posted, and the streak badges awarded. An old day synced from a browser counts for nothing. |
+
+Tournaments do not exist yet: when they do, their code calls `social.js` `recordTournamentEntry` ("X joined …") and `recordTournamentWin` (the Tournament Champion badge and "X won …"); the feed and the badge catalog already show both.
 
 ## How a result is checked
 
@@ -35,7 +39,7 @@
 
 ```sh
 cd functions && npm ci
-npm test             # rating.js on recorded games, analysis.js with the wasm engine (no emulator)
+npm test             # rating.js on recorded games, analysis.js with the wasm engine, social.js (no emulator)
 npm run test:rules   # database.rules.json on the database emulator
 npm run test:e2e     # rules + functions + auth emulators, through the client SDK
 ```

@@ -67,6 +67,16 @@ async function isGone(db, uid) {
 	return (await db.ref('deleted_users/' + uid).once('value')).exists();
 }
 
+/**
+ * An account deleted while this event was being handled (deleteUserData
+ * marks deleted_users first, then scrubs): what was just written for it goes.
+ */
+async function undoIfGone(db, uid, out) {
+	if (!(await isGone(db, uid))) return out;
+	await db.ref().update({ ['activity/' + uid]: null, ['badges/' + uid]: null, ['achievements/' + uid]: null });
+	return { skipped: 'deleted' };
+}
+
 /** Write an activity entry (idempotent by key) and prune the oldest. */
 async function recordActivity(db, uid, key, entry) {
 	await db.ref('activity/' + uid + '/' + key).set(entry);
@@ -173,7 +183,7 @@ async function onUserGame(db, uid, gameId, entry, now) {
 			if (post) out.posted.push('b_' + id);
 		}
 	}
-	return out;
+	return undoIfGone(db, uid, out);
 }
 
 /**
@@ -201,7 +211,7 @@ async function onPuzzleDaily(db, uid, day, status, now) {
 	for (const id of B.sigilPuzzleStreakBadges(next.n)) {
 		if (await awardBadge(db, uid, id, now, null, false)) out.badges.push(id);
 	}
-	return out;
+	return undoIfGone(db, uid, out);
 }
 
 function _tournament(t) {

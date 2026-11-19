@@ -141,7 +141,7 @@
 					</div>
 				</div>
 			</template>
-			<p class="tv__note">Games whose players allow spectators, from the lobby's Watch Live list, ranked by the players' average rating (guests count as unrated). A game you pick stays on until it ends.</p>
+			<p class="tv__note">Games whose players allow spectators, from the lobby's Watch Live list (not your own), ranked by the players' average rating (guests count as unrated). A game you pick stays on until it ends.</p>
 		</div>
 	</div>
 
@@ -236,6 +236,10 @@
 						const r = rooms[i];
 						if (r.status !== 'playing' || r.allowSpectators === false || r.local === true) return;
 						if (!r.red || !r.red.uid || !r.blue || !r.blue.uid) return;
+						// Not the viewer's own game: framed here it would be a second
+						// seated tab (they have the game page for it).
+						const me = firebase.auth().currentUser;
+						if (me && (r.red.uid === me.uid || r.blue.uid === me.uid)) return;
 						// A player at the board (as Watch Live requires).
 						if (r.red.connected === false && r.blue.connected === false) return;
 						const [re, be] = await Promise.all([this._eloOf(r.red), this._eloOf(r.blue)]);

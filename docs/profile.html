@@ -452,7 +452,7 @@
 														<span> &middot; <a class="review-link" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-on:click.stop="">review</a></span>
 													</template>
 													<template x-if="g.roomCode && bookmarks.can">
-														<button type="button" class="bookmark-star" x-bind:data-room="g.roomCode" x-bind:disabled="bookmarks.busy[g.roomCode]"
+														<button type="button" class="bookmark-star" x-bind:data-room="g.roomCode" x-bind:disabled="!!bookmarks.busy[g.roomCode]"
 															x-bind:aria-pressed="bookmarks.rooms[g.roomCode] ? 'true' : 'false'"
 															x-bind:aria-label="bookmarks.rooms[g.roomCode] ? 'Remove bookmark' : 'Bookmark this game'"
 															x-bind:title="bookmarks.rooms[g.roomCode] ? 'Bookmarked (Saved tab on your profile): click to remove' : 'Bookmark this game'"
