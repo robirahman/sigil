@@ -251,6 +251,7 @@ if (process.env.SIGIL_RACER_POOL) {
 		const seq = await rest('GET', 'puzzle_race_seq/' + id);
 		check('every board opens on the same first puzzle, the sequence\'s', firsts[0] && firsts.every((f) => f === firsts[0]) && seq && seq[0] === firsts[0], { firsts, seq0: seq && seq[0] });
 		check('the puzzles are readable from the start', await tryRead(pb, 'puzzle_race_seq/' + id) === 'ok');
+		await watcher.waitForFunction(() => /Race in progress/.test(document.getElementById('racer-root').innerText), { timeout: 20000, polling: 250 }).catch(() => {});
 		const tw = await text(watcher);
 		check('someone who is not in the race watches it', /Race in progress/.test(tw) && /You are watching/.test(tw), tw);
 
