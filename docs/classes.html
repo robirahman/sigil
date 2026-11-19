@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Classes - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.classes { max-width: 960px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 24px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); }
+		.classes h2 { font-family: 'Arvo', serif; text-align: center; margin-bottom: 6px; overflow-wrap: anywhere; }
+		.classes h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 22px 0 8px; }
+		.classes__intro { text-align: center; color: var(--color-text-dim); margin: 0 0 16px; }
+		.card {
+			background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+			padding: 12px 16px; margin: 8px 0;
+		}
+		.class-list { display: flex; flex-direction: column; gap: 8px; }
+		.class-card {
+			display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 12px 16px;
+			background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; text-decoration: none; color: inherit;
+		}
+		.class-card:hover { background: var(--color-surface-raised); border-color: var(--color-border-hover); }
+		.class-card__name { color: var(--color-text-bright); font-family: 'Arvo', serif; overflow-wrap: anywhere; }
+		.class-card__role, .muted { color: var(--color-text-dim); font-size: 0.88em; }
+		.field { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; font-size: 0.92em; }
+		.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+		input[type="text"], input[type="date"], input[type="number"], select, textarea {
+			font-family: 'Overlock', sans-serif; font-size: 1em; padding: 6px 8px; border-radius: 4px; max-width: 100%;
+			border: 1px solid var(--color-border); background: var(--color-surface-raised); color: var(--color-text-light, #f0f0f0);
+			box-sizing: border-box;
+		}
+		textarea { width: 100%; min-height: 60px; }
+		.btn {
+			appearance: none; padding: 6px 14px; background: var(--color-surface-raised); border: 2px solid var(--color-border);
+			border-radius: 6px; color: var(--color-text-warm); font-family: 'Arvo', serif; font-size: 0.92em; cursor: pointer;
+			text-decoration: none; display: inline-block;
+		}
+		.btn:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+		.btn--small { padding: 2px 8px; font-size: 0.82em; border-width: 1px; }
+		.error { color: var(--color-error); margin: 6px 0; }
+		.ok { color: var(--color-success); margin: 6px 0; }
+		.code { font-family: 'Source Code Pro', monospace; font-size: 1.4em; letter-spacing: 0.15em; color: var(--color-text-bright); }
+		.table-wrap { overflow-x: auto; }
+		table.progress { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+		table.progress th, table.progress td { border-bottom: 1px solid var(--color-border); padding: 6px 8px; text-align: left; white-space: nowrap; }
+		table.progress th { color: var(--color-text-bright); font-weight: normal; font-family: 'Arvo', serif; }
+		table.progress td.num { text-align: right; font-variant-numeric: tabular-nums; }
+		.status-done { color: var(--color-success); }
+		.assignment { border-left: 3px solid var(--color-accent); padding: 4px 10px; margin: 8px 0; }
+		.assignment__title { color: var(--color-text-bright); font-family: 'Arvo', serif; }
+		.puzzle-links { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+		.puzzle-links a { padding: 2px 8px; border: 1px solid var(--color-border); border-radius: 4px; color: var(--color-text-warm); text-decoration: none; font-size: 0.85em; }
+		.puzzle-links a.solved { border-color: var(--color-success); color: var(--color-success); }
+		.consent { background: var(--color-surface-raised); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; }
+		.consent ul { margin: 6px 0 6px 1.2em; }
+		a { color: var(--color-accent); }
+		.back-link { display: inline-block; margin-top: 20px; text-decoration: none; }
+		@media (max-width: 480px) { .classes { padding: 16px; } }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="classesPage()">
+		<div class="classes">
+			<p class="muted" x-show="!ready">Loading&hellip;</p>
+
+			<!-- ============ Not signed in ============ -->
+			<template x-if="ready && !signedIn">
+				<div>
+					<h2>Classes</h2>
+					<p class="classes__intro">Teachers set puzzles, studies and lessons for their students and follow their progress.</p>
+					<p class="card"><a href="account.html">Sign in</a> to create or join a class: progress is kept on your account, so guests cannot join.</p>
+				</div>
+			</template>
+
+			<!-- ============ Join by code ============ -->
+			<template x-if="ready && signedIn && view === 'join'">
+				<div class="join-view">
+					<h2>Join a class</h2>
+					<p class="error" x-show="joinError" x-text="joinError"></p>
+					<template x-if="joinInfo">
+						<div class="consent">
+							<p>You are joining <strong x-text="joinInfo.name"></strong>, taught by <strong x-text="joinInfo.teacherName"></strong>.</p>
+							<p>By joining, you let your teacher see on one page:</p>
+							<ul>
+								<li>your rating and the games you play (as on your public profile),</li>
+								<li>your puzzle rating and which puzzles you solved,</li>
+								<li>the assignments you mark as done.</li>
+							</ul>
+							<p>Other students cannot see you or your progress. You can leave the class at any time.</p>
+							<div class="row">
+								<button class="btn join-confirm" x-on:click="confirmJoin()" x-bind:disabled="busy">Join the class</button>
+								<a class="btn" href="classes.html">Cancel</a>
+							</div>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<!-- ============ My classes ============ -->
+			<template x-if="ready && signedIn && view === 'list'">
+				<div class="list-view">
+					<h2>Classes</h2>
+					<p class="classes__intro">Teachers set puzzles, studies and lessons for their students and follow their progress.</p>
+					<h3>Your classes</h3>
+					<p class="muted" x-show="!myClasses.length">You are not in a class yet.</p>
+					<div class="class-list">
+						<template x-for="c in myClasses" x-bind:key="c.cid">
+							<a class="class-card" x-bind:href="'classes.html?id=' + encodeURIComponent(c.cid)" x-bind:data-class="c.cid">
+								<span class="class-card__name" x-text="c.name"></span>
+								<span class="class-card__role" x-text="c.role === 'teacher' ? 'Teacher' : 'Student'"></span>
+							</a>
+						</template>
+					</div>
+					<h3>Join a class</h3>
+					<div class="card row">
+						<input type="text" maxlength="8" placeholder="Class code" aria-label="Class code" x-model="codeInput" class="join-code"
+							x-on:keydown.enter="goJoin()" style="text-transform: uppercase" />
+						<button class="btn" x-on:click="goJoin()">Continue</button>
+					</div>
+					<h3>Start a class</h3>
+					<div class="card">
+						<label class="field">Class name <input type="text" maxlength="60" x-model="newName" class="new-class-name" placeholder="e.g. Tuesday club" /></label>
+						<button class="btn new-class-create" x-on:click="createClass()" x-bind:disabled="busy || !newName.trim()">Create class</button>
+						<p class="error" x-show="error" x-text="error"></p>
+					</div>
+				</div>
+			</template>
+
+			<!-- ============ A class ============ -->
+			<template x-if="ready && signedIn && view === 'class'">
+				<div class="class-view">
+					<h2 x-text="info ? info.name : 'Class'"></h2>
+					<p class="classes__intro" x-show="info">Taught by <span x-text="info && info.teacherName"></span></p>
+					<p class="error" x-show="error" x-text="error"></p>
+					<p class="card" x-show="gone">This class is closed, or you are no longer in it. <a href="classes.html">Your classes</a></p>
+
+					<!-- Teacher -->
+					<template x-if="isTeacher && info">
+						<div class="teacher-view">
+							<div class="card">
+								<div class="row"><span>Join code:</span> <span class="code class-code" x-text="code"></span>
+									<button class="btn btn--small" x-on:click="copy(joinUrl(), 'link')" x-text="copied === 'link' ? 'Copied!' : 'Copy join link'"></button>
+									<button class="btn btn--small" x-on:click="newCode()" title="The old code stops working">New code</button></div>
+								<p class="muted">Students open the link (or enter the code on the Classes page) and agree to share their progress with you.</p>
+							</div>
+
+							<h3>Students (<span x-text="students.length"></span>)</h3>
+							<p class="muted" x-show="!students.length">No students yet: send them the join link.</p>
+							<div class="table-wrap" x-show="students.length">
+								<table class="progress">
+									<thead><tr>
+										<th>Student</th><th>Rating</th><th>Games</th><th x-text="'Last ' + recentDays + ' days'"></th>
+										<th>Puzzle rating</th><th>Puzzles solved</th>
+										<template x-for="a in assignments" x-bind:key="a.aid"><th x-text="a.title" x-bind:title="a.title"></th></template>
+										<th></th>
+									</tr></thead>
+									<tbody>
+										<template x-for="s in students" x-bind:key="s.uid">
+											<tr x-bind:data-student="s.uid">
+												<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(s.uid)" x-text="s.name"></a></td>
+												<td class="num" x-text="s.elo === null ? '—' : s.elo"></td>
+												<td class="num" x-text="s.games"></td>
+												<td class="num" x-text="s.recent === null ? '…' : s.recent"></td>
+												<td class="num" x-text="s.puzzleRating === null ? '—' : s.puzzleRating"></td>
+												<td class="num" x-text="s.solved"></td>
+												<template x-for="a in assignments" x-bind:key="a.aid">
+													<td x-bind:class="{ 'status-done': status(a, s).done }" x-text="status(a, s).text"></td>
+												</template>
+												<td><button class="btn btn--small" x-on:click="removeStudent(s)">Remove</button></td>
+											</tr>
+										</template>
+									</tbody>
+								</table>
+							</div>
+
+							<h3>Assignments</h3>
+							<template x-for="a in assignments" x-bind:key="a.aid">
+								<div class="assignment">
+									<div class="assignment__title" x-text="a.title"></div>
+									<div class="muted" x-text="describe(a)"></div>
+									<div x-show="a.note" x-text="a.note"></div>
+									<div class="row"><a class="btn btn--small" x-bind:href="openHref(a)">Open</a>
+										<button class="btn btn--small" x-on:click="deleteAssignment(a)">Delete</button></div>
+								</div>
+							</template>
+							<div class="card new-assignment">
+								<label class="field">Kind
+									<select x-model="draft.kind" class="assign-kind">
+										<option value="puzzles">Puzzles</option>
+										<option value="study">A study</option>
+										<option value="link">A page of the site (a tutorial lesson, a drill&hellip;)</option>
+									</select>
+								</label>
+								<label class="field">Title <input type="text" maxlength="80" x-model="draft.title" class="assign-title" /></label>
+								<div x-show="draft.kind === 'puzzles'">
+									<label class="field">Puzzle ids or links (one per line, or separated by spaces)
+										<textarea x-model="draft.puzzleText" class="assign-puzzles" placeholder="puzzles.html?id=..."></textarea></label>
+									<div class="row muted">Or pick
+										<input type="number" min="1" x-bind:max="maxPuzzles" x-model.number="draft.pickCount" style="width: 4em" aria-label="How many" />
+										<select x-model="draft.pickSet" aria-label="Set"><option value="">any kind</option>
+											<template x-for="(label, k) in puzzleSets" x-bind:key="k"><option x-bind:value="k" x-text="label"></option></template></select>
+										<select x-model="draft.pickDifficulty" aria-label="Difficulty"><option value="">any difficulty</option>
+											<template x-for="d in [1, 2, 3, 4, 5]" x-bind:key="d"><option x-bind:value="d" x-text="'difficulty ' + d"></option></template></select>
+										<button class="btn btn--small assign-pick" x-on:click="pickPuzzles()" x-bind:disabled="picking" x-text="picking ? 'Loading puzzles…' : 'Pick for me'"></button>
+									</div>
+								</div>
+								<div x-show="draft.kind === 'study'">
+									<label class="field">Study
+										<select x-model="draft.study" class="assign-study">
+											<option value="">Paste a link below&hellip;</option>
+											<template x-for="s in myStudies" x-bind:key="s.sid"><option x-bind:value="s.sid" x-text="s.title"></option></template>
+										</select></label>
+									<label class="field" x-show="!draft.study">Study link <input type="text" x-model="draft.studyText" placeholder="analysis.html?study=..." /></label>
+									<p class="muted">Students need to be able to open it: an unlisted or public study, or invite them to a private one.</p>
+								</div>
+								<label class="field" x-show="draft.kind === 'link'">Page of this site
+									<input type="text" x-model="draft.linkText" class="assign-link" placeholder="tutorial.html" /></label>
+								<label class="field">Note for students (optional) <input type="text" maxlength="500" x-model="draft.note" /></label>
+								<label class="field">Due (optional) <input type="date" x-model="draft.due" /></label>
+								<button class="btn assign-create" x-on:click="createAssignment()" x-bind:disabled="busy">Add assignment</button>
+								<p class="error" x-show="draftError" x-text="draftError"></p>
+							</div>
+							<h3>Close the class</h3>
+							<button class="btn class-delete" x-on:click="deleteClass()">Close this class for everyone</button>
+						</div>
+					</template>
+
+					<!-- Student -->
+					<template x-if="!isTeacher && info">
+						<div class="student-view">
+							<h3>Assignments</h3>
+							<p class="muted" x-show="!assignments.length">No assignments yet.</p>
+							<template x-for="a in assignments" x-bind:key="a.aid">
+								<div class="assignment" x-bind:data-assignment="a.aid">
+									<div class="assignment__title"><span x-text="a.title"></span>
+										<span class="status-done" x-show="myStatus(a).done"> &#10003; done</span></div>
+									<div class="muted" x-text="describe(a)"></div>
+									<div x-show="a.note" x-text="a.note"></div>
+									<template x-if="a.kind === 'puzzles'">
+										<div>
+											<div class="muted" x-text="myStatus(a).solved + ' of ' + myStatus(a).total + ' solved'"></div>
+											<div class="puzzle-links">
+												<template x-for="(pid, i) in puzzleOrder(a)" x-bind:key="pid">
+													<a x-bind:href="'puzzles.html?id=' + encodeURIComponent(pid)" x-bind:class="{ solved: mySolved(pid) }" x-text="(i + 1) + (mySolved(pid) ? ' ✓' : '')"></a>
+												</template>
+											</div>
+										</div>
+									</template>
+									<template x-if="a.kind !== 'puzzles'">
+										<div class="row">
+											<a class="btn btn--small" x-bind:href="openHref(a)">Open</a>
+											<button class="btn btn--small mark-done" x-on:click="markDone(a)" x-text="myStatus(a).done ? 'Mark not done' : 'Mark done'"></button>
+										</div>
+									</template>
+								</div>
+							</template>
+							<h3>Leave</h3>
+							<p class="muted">Leaving stops sharing your progress with this class's teacher.</p>
+							<button class="btn class-leave" x-on:click="leave()">Leave the class</button>
+						</div>
+					</template>
+				</div>
+			</template>
+
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/position-rating.js?v=36"></script>
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+	<script src="static/scripts/classes.js"></script>
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('classesPage', () => ({
+				ready: false,
+				signedIn: false,
+				uid: '',
+				myName: 'Player',
+				view: 'list',             // 'list' | 'join' | 'class'
+				busy: false,
+				error: '',
+				copied: '',
+				// list
+				myClasses: [],
+				codeInput: '',
+				newName: '',
+				// join
+				joinCode: '',
+				joinInfo: null,
+				joinError: '',
+				// a class
+				cid: '',
+				info: null,
+				gone: false,
+				isTeacher: false,
+				code: '',
+				students: [],
+				assignments: [],
+				done: {},                 // aid -> { uid: ms }
+				myProgress: null,         // the student's own puzzleProgress
+				myStudies: [],
+				recentDays: CLASS_RECENT_DAYS,
+				maxPuzzles: CLASS_MAX_PUZZLES,
+				puzzleSets: CLASS_PUZZLE_SETS,
+				picking: false,
+				draft: { kind: 'puzzles', title: '', note: '', due: '', puzzleText: '', pickCount: 5, pickSet: '', pickDifficulty: '', study: '', studyText: '', linkText: '' },
+				draftError: '',
+
+				async init() {
+					const user = await firebaseAuthSettled();
+					this.signedIn = !!(user && !user.isAnonymous);
+					this.uid = user ? user.uid : '';
+					if (!this.signedIn) { this.ready = true; return; }
+					const db = firebase.database();
+					try {
+						const n = (await db.ref('users/' + this.uid + '/displayName').once('value')).val();
+						this.myName = String(n || user.displayName || 'Player').slice(0, 30);
+					} catch (e) { /* default */ }
+					const params = new URLSearchParams(location.search);
+					if (params.get('join')) {
+						this.view = 'join';
+						await this.loadJoin(params.get('join'));
+					} else if (params.get('id')) {
+						this.view = 'class';
+						this.cid = params.get('id');
+						await this.loadClass();
+					} else {
+						await this.loadList();
+					}
+					this.ready = true;
+				},
+
+				async loadList() {
+					const db = firebase.database();
+					let v = {};
+					try { v = (await db.ref('user_classes/' + this.uid).once('value')).val() || {}; } catch (e) { v = {}; }
+					this.myClasses = Object.keys(v).map((cid) => ({ cid, name: v[cid].name || 'Class', role: v[cid].role, at: v[cid].at || 0 }))
+						.sort((a, b) => (a.role === b.role ? b.at - a.at : (a.role === 'teacher' ? -1 : 1)));
+				},
+
+				goJoin() {
+					const code = String(this.codeInput || '').trim().toUpperCase();
+					if (code) location.href = 'classes.html?join=' + encodeURIComponent(code);
+				},
+
+				async loadJoin(code) {
+					this.joinCode = String(code).toUpperCase();
+					const db = firebase.database();
+					if (!/^[A-Z0-9]{6,8}$/.test(this.joinCode)) { this.joinError = 'That is not a class code.'; return; }
+					try {
+						const v = (await db.ref('class_codes/' + this.joinCode).once('value')).val();
+						if (!v) { this.joinError = 'No class has the code ' + this.joinCode + '. Ask your teacher for the current one.'; return; }
+						const mine = (await db.ref('user_classes/' + this.uid + '/' + v.cid).once('value')).val();
+						if (mine) { location.replace('classes.html?id=' + encodeURIComponent(v.cid)); return; }
+						this.joinInfo = v;
+					} catch (e) {
+						this.joinError = 'Could not look up the code: ' + ((e && e.message) || e);
+					}
+				},
+
+				async confirmJoin() {
+					const v = this.joinInfo;
+					if (!v) return;
+					this.busy = true;
+					const u = {};
+					u['classes/' + v.cid + '/members/' + this.uid] = { name: this.myName, joined: classTs(), code: this.joinCode };
+					u['user_classes/' + this.uid + '/' + v.cid] = { name: v.name, role: 'student', at: classTs() };
+					try {
+						await firebase.database().ref().update(u);
+						location.href = 'classes.html?id=' + encodeURIComponent(v.cid);
+					} catch (e) {
+						this.joinError = e && e.code === 'PERMISSION_DENIED'
+							? 'You could not join: the teacher may have changed the code, or you are the teacher of this class.'
+							: 'You could not join: ' + ((e && e.message) || e);
+						this.busy = false;
+					}
+				},
+
+				async createClass() {
+					const name = String(this.newName || '').trim().slice(0, 60);
+					if (!name) return;
+					this.busy = true;
+					this.error = '';
+					const db = firebase.database();
+					const cid = db.ref('classes').push().key;
+					for (let attempt = 0; attempt < 5; attempt++) {
+						const code = classNewCode();
+						const u = {};
+						u['classes/' + cid + '/info'] = { name, teacher: this.uid, teacherName: this.myName, created: classTs() };
+						u['classes/' + cid + '/code'] = code;
+						u['class_codes/' + code] = { cid, name, teacherName: this.myName };
+						u['user_classes/' + this.uid + '/' + cid] = { name, role: 'teacher', at: classTs() };
+						try {
+							await db.ref().update(u);
+							location.href = 'classes.html?id=' + encodeURIComponent(cid);
+							return;
+						} catch (e) {
+							// A code someone else holds: try another.
+							if (!(e && e.code === 'PERMISSION_DENIED')) { this.error = 'The class was not created: ' + ((e && e.message) || e); break; }
+						}
+					}
+					if (!this.error) this.error = 'The class was not created. Please try again.';
+					this.busy = false;
+				},
+
+				// ---------------- a class ----------------
+
+				async loadClass() {
+					const db = firebase.database();
+					const base = 'classes/' + this.cid;
+					try {
+						this.info = (await db.ref(base + '/info').once('value')).val();
+					} catch (e) { this.info = null; }
+					if (!this.info) {
+						// Drop it from the list: closed, or removed by the teacher.
+						await db.ref('user_classes/' + this.uid + '/' + this.cid).remove().catch(() => {});
+						this.gone = true;
+						return;
+					}
+					this.isTeacher = this.info.teacher === this.uid;
+					const av = (await db.ref(base + '/assignments').once('value').catch(() => null));
+					this.assignments = Object.entries((av && av.val()) || {}).map(([aid, a]) => Object.assign({ aid }, a))
+						.sort((a, b) => (a.created || 0) - (b.created || 0));
+					if (this.isTeacher) await this.loadTeacher(db, base);
+					else await this.loadStudent(db, base);
+				},
+
+				async loadTeacher(db, base) {
+					const [codeSnap, membersSnap, doneSnaps, studiesSnap] = await Promise.all([
+						db.ref(base + '/code').once('value'),
+						db.ref(base + '/members').once('value'),
+						Promise.all(this.assignments.map((a) => db.ref(base + '/done/' + a.aid).once('value').catch(() => null))),
+						db.ref('user_studies/' + this.uid).once('value').catch(() => null),
+					]);
+					this.code = codeSnap.val() || '';
+					const done = {};
+					this.assignments.forEach((a, i) => { done[a.aid] = (doneSnaps[i] && doneSnaps[i].val()) || {}; });
+					this.done = done;
+					const sv = (studiesSnap && studiesSnap.val()) || {};
+					this.myStudies = Object.keys(sv).filter((sid) => sv[sid].role === 'owner' || sv[sid].role === 'editor')
+						.map((sid) => ({ sid, title: sv[sid].title || 'Study' }));
+					const members = membersSnap.val() || {};
+					this.students = Object.keys(members).map((uid) => ({
+						uid, name: members[uid].name || 'Player', joined: members[uid].joined || 0,
+						elo: null, games: 0, recent: null, puzzleRating: null, solved: 0, progress: null,
+					})).sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1));
+					// Each student's public records, a few at a time.
+					const since = Date.now() - CLASS_RECENT_DAYS * 86400000;
+					const one = async (s) => {
+						const [user, games] = await Promise.all([
+							db.ref('users/' + s.uid).once('value').then((x) => x.val() || {}).catch(() => ({})),
+							db.ref('user_games/' + s.uid).orderByChild('timestamp').startAt(since).once('value').then((x) => x.numChildren()).catch(() => null),
+						]);
+						if (user.displayName) s.name = user.displayName;
+						s.elo = typeof user.elo === 'number' ? Math.round(user.elo) : null;
+						s.games = user.gamesPlayed || 0;
+						s.recent = games;
+						s.puzzleRating = user.puzzle && typeof user.puzzle.rating === 'number' ? Math.round(user.puzzle.rating) : null;
+						s.progress = user.puzzleProgress || {};
+						s.solved = Object.keys(s.progress.solved || {}).length;
+					};
+					for (let i = 0; i < this.students.length; i += 8) {
+						await Promise.all(this.students.slice(i, i + 8).map(one));
+						this.students = this.students.slice();
+					}
+				},
+
+				async loadStudent(db, base) {
+					const [progress, dones] = await Promise.all([
+						db.ref('users/' + this.uid + '/puzzleProgress').once('value').then((x) => x.val() || {}).catch(() => ({})),
+						Promise.all(this.assignments.map((a) => db.ref(base + '/done/' + a.aid + '/' + this.uid).once('value').then((x) => x.val()).catch(() => null))),
+					]);
+					// Solved on this device and not yet merged into the account count too.
+					let local = {};
+					try { local = JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}') || {}; } catch (e) { local = {}; }
+					this.myProgress = Object.assign({}, progress, { solved: Object.assign({}, local, progress.solved || {}) });
+					const done = {};
+					this.assignments.forEach((a, i) => { done[a.aid] = dones[i] ? { [this.uid]: dones[i] } : {}; });
+					this.done = done;
+				},
+
+				status(a, s) {
+					return classAssignmentStatus(a, s.progress, (this.done[a.aid] || {})[s.uid]);
+				},
+
+				myStatus(a) {
+					return classAssignmentStatus(a, this.myProgress, (this.done[a.aid] || {})[this.uid]);
+				},
+
+				mySolved(pid) {
+					return !!(this.myProgress && this.myProgress.solved && this.myProgress.solved[pid]);
+				},
+
+				puzzleOrder(a) {
+					return classPuzzleOrder(a);
+				},
+
+				describe(a) {
+					const due = a.due ? ' · due ' + new Date(a.due).toLocaleDateString() : '';
+					if (a.kind === 'puzzles') {
+						const n = Object.keys(a.puzzles || {}).length;
+						return n + (n === 1 ? ' puzzle' : ' puzzles') + due;
+					}
+					if (a.kind === 'study') return 'A study' + due;
+					return 'A page: ' + a.url + due;
+				},
+
+				openHref(a) {
+					if (a.kind === 'puzzles') return 'puzzles.html?id=' + encodeURIComponent(classPuzzleOrder(a)[0] || '');
+					if (a.kind === 'study') return 'analysis.html?study=' + encodeURIComponent(a.study);
+					return a.url;
+				},
+
+				joinUrl() {
+					return new URL('classes.html?join=' + encodeURIComponent(this.code), location.href).toString();
+				},
+
+				copy(text, which) {
+					if (!navigator.clipboard) return;
+					navigator.clipboard.writeText(text).then(() => {
+						this.copied = which;
+						setTimeout(() => { if (this.copied === which) this.copied = ''; }, 2000);
+					}).catch(() => {});
+				},
+
+				async newCode() {
+					const db = firebase.database();
+					for (let attempt = 0; attempt < 5; attempt++) {
+						const code = classNewCode();
+						const u = {};
+						if (this.code) u['class_codes/' + this.code] = null;
+						u['class_codes/' + code] = { cid: this.cid, name: this.info.name, teacherName: this.info.teacherName };
+						u['classes/' + this.cid + '/code'] = code;
+						try {
+							await db.ref().update(u);
+							this.code = code;
+							return;
+						} catch (e) { /* taken: another */ }
+					}
+					this.error = 'Could not make a new code. Please try again.';
+				},
+
+				async pickPuzzles() {
+					this.picking = true;
+					this.draftError = '';
+					try {
+						const resp = await fetch('static/puzzles/mate_puzzles.json');
+						const data = await resp.json();
+						const ids = classPickPuzzles(data.puzzles || [], this.draft.pickSet, this.draft.pickDifficulty,
+							Math.max(1, Math.min(CLASS_MAX_PUZZLES, Number(this.draft.pickCount) || 5)));
+						if (!ids.length) this.draftError = 'No puzzles match.';
+						this.draft.puzzleText = ids.join('\n');
+						if (!this.draft.title) {
+							this.draft.title = (CLASS_PUZZLE_SETS[this.draft.pickSet] || 'Puzzles')
+								+ (this.draft.pickDifficulty ? ', difficulty ' + this.draft.pickDifficulty : '');
+						}
+					} catch (e) {
+						this.draftError = 'Could not load the puzzles: ' + ((e && e.message) || e);
+					}
+					this.picking = false;
+				},
+
+				async createAssignment() {
+					const d = this.draft;
+					this.draftError = '';
+					const title = String(d.title || '').trim().slice(0, 80);
+					if (!title) { this.draftError = 'Give the assignment a title.'; return; }
+					const a = { kind: d.kind, title, created: classTs() };
+					if (d.note.trim()) a.note = d.note.trim().slice(0, 500);
+					if (d.due) {
+						const t = new Date(d.due + 'T23:59:59').getTime();
+						if (Number.isFinite(t)) a.due = t;
+					}
+					if (d.kind === 'puzzles') {
+						const ids = classParsePuzzleIds(d.puzzleText);
+						if (!ids.length) { this.draftError = 'List at least one puzzle (its id or its puzzles.html link), or pick some.'; return; }
+						if (ids.length > CLASS_MAX_PUZZLES) { this.draftError = 'At most ' + CLASS_MAX_PUZZLES + ' puzzles in one assignment.'; return; }
+						a.puzzles = {};
+						ids.forEach((id, i) => { a.puzzles[id] = i; });
+					} else if (d.kind === 'study') {
+						const sid = d.study || classParseStudy(d.studyText);
+						if (!sid) { this.draftError = 'Choose a study or paste its link.'; return; }
+						a.study = sid;
+					} else {
+						const url = classParseLink(d.linkText);
+						if (!url) { this.draftError = 'A page of this site, like tutorial.html or puzzles.html?set=m1.'; return; }
+						a.url = url;
+					}
+					this.busy = true;
+					try {
+						const ref = firebase.database().ref('classes/' + this.cid + '/assignments').push();
+						await ref.set(a);
+						this.assignments = this.assignments.concat([Object.assign({ aid: ref.key }, a, { created: Date.now() })]);
+						this.done = Object.assign({}, this.done, { [ref.key]: {} });
+						this.draft = { kind: d.kind, title: '', note: '', due: '', puzzleText: '', pickCount: d.pickCount, pickSet: d.pickSet, pickDifficulty: d.pickDifficulty, study: '', studyText: '', linkText: '' };
+					} catch (e) {
+						this.draftError = 'Not saved: ' + ((e && e.message) || e);
+					}
+					this.busy = false;
+				},
+
+				async deleteAssignment(a) {
+					if (!confirm('Delete the assignment "' + a.title + '"?')) return;
+					const u = {};
+					u['classes/' + this.cid + '/assignments/' + a.aid] = null;
+					for (const uid of Object.keys(this.done[a.aid] || {})) u['classes/' + this.cid + '/done/' + a.aid + '/' + uid] = null;
+					try {
+						await firebase.database().ref().update(u);
+						this.assignments = this.assignments.filter((x) => x.aid !== a.aid);
+					} catch (e) { this.error = 'Not deleted: ' + ((e && e.message) || e); }
+				},
+
+				async removeStudent(s) {
+					if (!confirm('Remove ' + s.name + ' from the class? You will no longer see their progress here.')) return;
+					try {
+						await firebase.database().ref('classes/' + this.cid + '/members/' + s.uid).remove();
+						this.students = this.students.filter((x) => x.uid !== s.uid);
+					} catch (e) { this.error = 'Not removed: ' + ((e && e.message) || e); }
+				},
+
+				async deleteClass() {
+					if (!confirm('Close "' + this.info.name + '" for everyone? Its assignments and students\' marks are deleted.')) return;
+					const u = {};
+					u['classes/' + this.cid] = null;
+					if (this.code) u['class_codes/' + this.code] = null;
+					u['user_classes/' + this.uid + '/' + this.cid] = null;
+					try {
+						await firebase.database().ref().update(u);
+						location.href = 'classes.html';
+					} catch (e) { this.error = 'Not closed: ' + ((e && e.message) || e); }
+				},
+
+				async markDone(a) {
+					const ref = firebase.database().ref('classes/' + this.cid + '/done/' + a.aid + '/' + this.uid);
+					const was = this.myStatus(a).done;
+					try {
+						if (was) await ref.remove(); else await ref.set(classTs());
+						this.done = Object.assign({}, this.done, { [a.aid]: was ? {} : { [this.uid]: Date.now() } });
+					} catch (e) { this.error = 'Not saved: ' + ((e && e.message) || e); }
+				},
+
+				async leave() {
+					if (!confirm('Leave "' + this.info.name + '"? Your teacher will no longer see your progress.')) return;
+					const u = {};
+					u['classes/' + this.cid + '/members/' + this.uid] = null;
+					u['user_classes/' + this.uid + '/' + this.cid] = null;
+					try {
+						await firebase.database().ref().update(u);
+						location.href = 'classes.html';
+					} catch (e) { this.error = 'Could not leave: ' + ((e && e.message) || e); }
+				},
+			}));
+		});
+	</script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>
