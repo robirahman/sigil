@@ -1357,14 +1357,12 @@ async function replayRoomHistory(spellNames, variant, startSfn, turns, roomSfn, 
 	if (!Array.isArray(turns) || !turns.length) return null;
 	let start;
 	try {
-		const b = new SigilBoard(spellNames, variant);
-		if (startSfn) b.loadFromSfn(startSfn); else b.setupInitial();
-		start = { tc: b.turnCounter, sfn: boardToSfn(b) };
+		start = _roomStart(spellNames, variant, startSfn);
 	} catch (e) {
 		console.warn(tag + ' could not read the start position:', e);
 		return null;
 	}
-	const numbered = turns.map((t, i) => ({ color: t.color, actions: t.actions, turnNumber: start.tc + 1 + i }));
+	const numbered = _numberRoomTurns(turns, start.tc);
 	let board = null;
 	let log;
 	try {
@@ -1387,4 +1385,36 @@ async function replayRoomHistory(spellNames, variant, startSfn, turns, roomSfn, 
 		return null;
 	}
 	return { board, log, sfns: sfns.slice(0, -1), sfn: sfns[sfns.length - 1], behind: at < sfns.length - 1 };
+}
+
+/**
+ * How a room's turns (as replayRoomHistory takes them) end, by the rating
+ * function's own check (reconstructGameLog's `result`): { gameover, winner },
+ * or null when they do not all replay. Either seated player can close a room
+ * with any winner, so a client that missed a natural end the other recorded
+ * takes it only when this agrees (MultiplayerController._endAsRoom).
+ */
+async function replayRoomResult(spellNames, variant, startSfn, turns) {
+	if (!Array.isArray(turns) || !turns.length) return null;
+	try {
+		const start = _roomStart(spellNames, variant, startSfn);
+		const numbered = _numberRoomTurns(turns, start.tc);
+		const result = {};
+		const log = await reconstructGameLog(spellNames, variant, startSfn || null, numbered, { result });
+		return log.length === numbered.length ? result : null;
+	} catch (e) {
+		return null;
+	}
+}
+
+/** A room's start position: its turn counter and SFN. Throws on a bad startSfn. */
+function _roomStart(spellNames, variant, startSfn) {
+	const b = new SigilBoard(spellNames, variant);
+	if (startSfn) b.loadFromSfn(startSfn); else b.setupInitial();
+	return { tc: b.turnCounter, sfn: boardToSfn(b) };
+}
+
+/** Room turns numbered as the game loop plays them, from the start's counter. */
+function _numberRoomTurns(turns, startCounter) {
+	return turns.map((t, i) => ({ color: t.color, actions: t.actions, turnNumber: startCounter + 1 + i }));
 }

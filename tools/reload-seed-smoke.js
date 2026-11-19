@@ -19,9 +19,11 @@
  *   3. The room's currentSfn trails its turns (a reload between a turn and
  *      its currentSfn write): the board goes on from the replay's position.
  *   4. A transcript that does not replay: a warning, the counts start
- *      empty and the board misses the threefold; the other client's result
- *      ends the game here, on the reference's final position, with nothing
- *      written.
+ *      empty and the board misses the threefold; the other client's result,
+ *      which the room's turns show once they are readable again, ends the
+ *      game here, on the reference's final position, with nothing written.
+ *   5. A modified client closes the room with a win its moves do not show:
+ *      the board does not take it, and says the server will judge it.
  */
 'use strict';
 const fs = require('fs');
@@ -74,6 +76,9 @@ function stubSync(played) {
 		reconnectTurns: played.map((t) => ({ color: t.color, actions: t.actions.slice() })),
 		_turnKeys: played.map((_, i) => 'k' + i),
 		_incomingQueue: [], _waitingResolver: null, sent: [], final: null, finish: null,
+		// The room as the server holds it (readRoomResult), once finished.
+		room: null,
+		async readRoomResult() { return this.room; },
 		serverNow: () => Date.now(),
 		getNextOpponentAction() {
 			if (this._incomingQueue.length) return Promise.resolve(this._incomingQueue.shift());
@@ -184,6 +189,7 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	// This board missed the threefold and gives Red turn 9.
 	await until(() => lost._inputResolve, 'turn 9');
 	check(!over(lost) && lost.board.turnCounter === 9, 'unreplayable: the board missed the threefold');
+	lost.sync.room = { status: 'finished', winner: 'blue', turns: TURNS };
 	lost.sync.finish('blue', 'finished');
 	await until(() => over(lost), 'the room\'s result');
 	check(over(lost).winner === 'blue' && lost.board.gameover && lost.board.winner === 'blue', 'the room\'s result ends the game here');
@@ -191,6 +197,17 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	check(lost.sync.final === null, 'and nothing is written');
 	lost.handlePlayerAction('a6');
 	check(lost._turnBuffer.length <= 1 && lost.sync.sent.length === 1, 'a click after it does nothing');
+
+	// 5. Blue's modified client closes the room as a Blue win after turn 4.
+	warnings.length = 0;
+	const forged = await open('red', [], null);
+	for (let i = 0; i < 4; i++) await playTurn(forged, i);
+	await until(() => forged._inputResolve, 'turn 5');
+	forged.sync.room = { status: 'finished', winner: 'blue', turns: TURNS.slice(0, 4) };
+	forged.sync.finish('blue', 'finished');
+	await until(() => said(forged, /result the moves do not show/), 'the notice');
+	check(!over(forged) && !forged.board.gameover, 'a forged close: the board does not take the result');
+	check(warnings.some((w) => /\[Controller\].*moves do not show/.test(w)) && forged.sync.final === null, 'it is warned of, and nothing is written', warnings);
 
 	process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('TEST FAILED:', e && e.stack || e); process.exit(1); });

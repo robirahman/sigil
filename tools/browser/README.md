@@ -121,9 +121,10 @@ A seated player whose page reloads replays the room's turns so far (`_seedHistor
 the reload. Two signed-in players reach a twofold, each reloads, and both pages end the game
 at the third occurrence as a Blue win with the same review and a full record in the room;
 then a reload whose transcript cannot be replayed misses the threefold and takes the room's
-result from the other page. With the functions emulator (or `--functions`) both games are
-recorded and rated as Blue wins, not overturned. The smoke test also covers a currentSfn that
-trails the room's turns.
+result from the other page once the room's turns show it; a room closed with a win its moves do
+not show (a modified client) is not taken. With the functions emulator (or `--functions`) the
+threefold games are recorded and rated as Blue wins, not overturned, and the forged close as the
+closer's resignation. The smoke test also covers a currentSfn that trails the room's turns.
 
 ## Live analysis on early-return review paths
 

@@ -13,8 +13,11 @@
 //      while it loads): a warning, and its board misses the threefold; the
 //      Blue page ends the game, and the Red page takes the room's result
 //      (Blue wins), writing nothing.
-//   With the functions emulator running, both games are recorded and rated
-//   as Blue wins, not overturned (a threefold closed by either client).
+//   3. A modified Red client closes a room as a Red win after two turns:
+//      Blue's page does not take it, and says the server will judge it.
+//   With the functions emulator running, games 1 and 2 are recorded and
+//   rated as Blue wins, not overturned (a threefold closed by either
+//   client), and game 3 as Red's resignation, which Blue's page reports.
 //
 //   (cd docs && python3 -m http.server 8801) &
 //   cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
@@ -276,7 +279,25 @@ const LOBBY = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		check('the room: Blue closed it, Blue won, Blue\'s full game log', room.status === 'finished' && room.winner === 'blue'
 			&& room.finishedBy === 'blue' && room.gameLog && room.gameLog.length === 8, { finishedBy: room.finishedBy, log: room.gameLog && room.gameLog.length });
 
+		// 3. A modified Red client closes the room as a Red win after two
+		// turns (the rules let a seated player write any winner): Blue's page
+		// does not take it.
+		const g3 = await newGame();
+		await playThrough(g3.code, g3, 0, 2);
+		await rest('PATCH', 'rooms/' + g3.code, { finishedBy: 'red', winner: 'red', status: 'finished', closedAt: { '.sv': 'timestamp' } });
+		await g3.blue.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).messageHistory
+			.some((m) => /result the moves do not show/.test(m)), { timeout: 30000, polling: 250 }).catch(() => {});
+		const b3 = await state(g3.blue);
+		check('a forged close: Blue\'s page does not show it, and says the server will judge it', !b3.winner
+			&& b3.messages.some((m) => /result the moves do not show/.test(m)), b3.messages.slice(-3));
+
 		if (WITH_FUNCTIONS) {
+			const v3 = await verdict(g3.code);
+			check('the forged close is rated as Red\'s resignation', v3.rec && v3.rec.eloProcessed === true && v3.room.winner === 'blue'
+				&& v3.room.forfeitedBy === 'red' && v3.blueResult === 'win', { room: v3.room && { winner: v3.room.winner, forfeitedBy: v3.room.forfeitedBy }, blue: v3.blueResult });
+			await g3.blue.waitForFunction(() => !!Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).ratingText, { timeout: 60000, polling: 500 }).catch(() => {});
+			const rt = await g3.blue.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).ratingText);
+			check('Blue\'s page reports the rating the server gave', !!rt, rt);
 			for (const [name, code] of [['game 1', g1.code], ['game 2 (closed by Blue)', g2.code]]) {
 				const v = await verdict(code);
 				check(name + ': recorded and rated as a Blue win, not overturned', !!v.gameId && v.rec && v.rec.winner === 'blue'

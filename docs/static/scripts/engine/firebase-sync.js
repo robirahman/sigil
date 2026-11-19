@@ -1282,6 +1282,17 @@ class FirebaseSync {
 		try { await this.roomRef.child('takeback').remove(); } catch (e) { /* already gone */ }
 	}
 
+	/**
+	 * The room's result and its turns in play order (roomTurnList), as the
+	 * server holds them now: what a client checks a result against before
+	 * taking it (MultiplayerController._endAsRoom). Null if the room is gone.
+	 */
+	async readRoomResult() {
+		const room = await this.readRoom();
+		if (!room) return null;
+		return { status: room.status || null, winner: room.winner || null, turns: roomTurnList(room.turns, room.seq === true) };
+	}
+
 	/** The room as the server holds it now (not the local cache). */
 	async readRoom() {
 		if (!this.roomRef) return null;

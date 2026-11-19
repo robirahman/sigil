@@ -370,6 +370,7 @@ class MultiplayerController {
 		// Variant is replicated via Firebase room metadata; sync.variant
 		// is set during createRoom / joinRoom / reconnectAsCreator.
 		const variant = normalizeVariant(this.sync && this.sync.variant);
+		this._variant = variant;
 		this.board = new SigilBoard(this.spellNames, variant);
 		// A room from a position opens on its start SFN (sync.startSfn).
 		const startSfn = (this.sync && this.sync.startSfn) || null;
@@ -402,7 +403,8 @@ class MultiplayerController {
 			} else if (reason === 'finished' && (winner === 'red' || winner === 'blue')) {
 				// A natural end the other client recorded: this board reaches
 				// the same one from the same turns, and records it too. Should
-				// it not, the room's result stands here (_endAsRoom).
+				// it not, the room's result stands here if its moves show it
+				// (_endAsRoom).
 				this._roomWinner = winner;
 				this._endAsRoom();
 			}
@@ -513,19 +515,44 @@ class MultiplayerController {
 	 * _roomWinner) and this board has not ended the game although it has
 	 * played every turn the room holds: it missed the ending, e.g. a
 	 * threefold repetition after a reload whose history could not be
-	 * rebuilt. Take the room's result, as for a flag the other client saw
-	 * first: the board goes back to the start of the turn it began (the
-	 * game ended before it), and nothing is written. Checked when the
-	 * result arrives and whenever the loop waits for input, so the board's
-	 * own ending, which comes first, always has its chance.
+	 * rebuilt. Either seated player can close a room with any winner, so the
+	 * result is taken only when the room's turns, replayed from the start,
+	 * end with it (replayRoomResult: the rating function's own check). Then,
+	 * as for a flag the other client saw first, the board goes back to the
+	 * start of the turn it began (the game ended before it) and nothing is
+	 * written. A result the moves do not show is not taken: the server
+	 * judges it (as the closer's resignation), and the rating it gives is
+	 * reported here. Checked when the result arrives and whenever the loop
+	 * waits for input, so the board's own ending, which comes first, always
+	 * has its chance.
 	 */
-	_endAsRoom() {
+	async _endAsRoom() {
 		const winner = this._roomWinner;
 		const board = this.board;
-		if (!winner || !this._waiting || !board || board.gameover
-			|| this._timedOut || this._forfeitHandled || this._aborted) return;
+		const open = () => !!this._waiting && !!board && !board.gameover
+			&& !this._timedOut && !this._forfeitHandled && !this._aborted;
+		if (!winner || this._roomResultChecked || !open()) return;
+		// A page on older scripts cannot check: it keeps waiting, as before.
+		if (typeof replayRoomResult !== 'function' || typeof this.sync.readRoomResult !== 'function') return;
 		const roomTurns = ((this.sync && this.sync._turnKeys) || []).length;
 		if ((this._unseenTurns || 0) + this._gameLog.length < roomTurns) return;
+		this._roomResultChecked = true;
+		let room = null;
+		try { room = await this.sync.readRoomResult(); } catch (e) { room = null; }
+		// Not read: try again at the next wait.
+		if (!room) { this._roomResultChecked = false; return; }
+		const replayed = room.status === 'finished' && room.winner === winner
+			? await replayRoomResult(this.spellNames, this._variant, (this.sync && this.sync.startSfn) || null, room.turns)
+			: null;
+		if (!replayed || !replayed.gameover || replayed.winner !== winner) {
+			console.warn('[Controller] the room was closed with a result its moves do not show; the server judges it.', { winner });
+			this.emit({ type: 'message', awaiting: null,
+				message: 'Your opponent closed the game with a result the moves do not show. The server will judge it.' });
+			this._stopTimer();
+			this._reportRating();
+			return;
+		}
+		if (!open()) return;
 		console.warn('[Controller] the room finished without this board ending the game; taking its result.', { winner });
 		this._timedOut = true;
 		this._stopTimer();
