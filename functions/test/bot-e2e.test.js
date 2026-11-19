@@ -292,4 +292,34 @@ test('public reads need no token; tokens are checked; limits hold', { timeout: 6
 	assert.strictEqual((await http('GET', '/v1', null, null, { 'X-Forwarded-For': '198.51.100.251' })).status, 200);
 });
 
+test('a bot that reconnects after its game ended still hears gameFinish', { timeout: 60000 }, async () => {
+	const b = await bot('Lagbot');
+	const owner = (p, body) => fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, { method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: JSON.stringify(body) });
+	// A game that finished while the bot's event stream was away: its
+	// active-games entry is still there (recordRoom has not run yet).
+	await owner('rooms/LAGX22', { spellNames: ['Sprout'], status: 'finished', winner: 'red', seq: true, variant: 'standard', created: 1, closedAt: 2,
+		red: { uid: 'someone', displayName: 'X' }, blue: { uid: b.uid, displayName: b.name, bot: true }, timeControl: { type: 'realtime', initialTime: 60000, increment: 0 } });
+	await owner('user_active_games/' + b.uid + '/LAGX22', { roomCode: 'LAGX22', myColor: 'blue' });
+	const ac = new AbortController();
+	const res = await fetch(API + '/v1/bot/events', { headers: { Authorization: 'Bearer ' + b.token }, signal: ac.signal });
+	assert.strictEqual(res.status, 200);
+	const dec = new TextDecoder();
+	let buf = '';
+	let finish = null;
+	for await (const chunk of res.body) {
+		buf += dec.decode(chunk, { stream: true });
+		const m = /event: gameFinish\ndata: (.*)\n/.exec(buf);
+		if (m) { finish = JSON.parse(m[1]); break; }
+	}
+	ac.abort();
+	assert.deepStrictEqual([finish.room, finish.status, finish.winner], ['LAGX22', 'finished', 'red']);
+	// And the game is off its list.
+	let gone = false;
+	for (let i = 0; i < 40 && !gone; i++) {
+		gone = !(await get(ref(b.db, 'user_active_games/' + b.uid + '/LAGX22'))).exists();
+		if (!gone) await new Promise((r) => setTimeout(r, 250));
+	}
+	assert.ok(gone);
+});
+
 test.after(() => setTimeout(() => process.exit(0), 100));
