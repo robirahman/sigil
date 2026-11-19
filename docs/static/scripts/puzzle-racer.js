@@ -171,10 +171,13 @@ async function bootRacer(all, params) {
 				.sort((a, b) => b.createdAt - a.createdAt);
 			el.innerHTML = rows.length ? rows.map((r) => {
 				const mins = Math.max(0, Math.floor((t - r.createdAt) / 60000));
+				// The count can lag a racer who closed the tab (until the next
+				// join, leave or sweep): a full race still links, and its page
+				// says when it really is full.
 				const full = (r.n || 0) >= (r.max || 10);
 				return '<div class="racer-race" data-race="' + racerEsc(r.id) + '"><div><b>' + racerEsc(r.hostName || 'Player') + '</b>’s race'
-					+ '<div class="racer-note">' + (r.n || 0) + ' of ' + (r.max || 10) + ' racers · opened ' + (mins ? mins + ' min ago' : 'just now') + '</div></div>'
-					+ (full ? '<span class="racer-note">Full</span>' : '<a class="action-button" href="puzzles.html?tab=racer&amp;race=' + encodeURIComponent(r.id) + '">Join</a>') + '</div>';
+					+ '<div class="racer-note">' + (r.n || 0) + ' of ' + (r.max || 10) + ' racers' + (full ? ' (full)' : '') + ' · opened ' + (mins ? mins + ' min ago' : 'just now') + '</div></div>'
+					+ '<a class="action-button" href="puzzles.html?tab=racer&amp;race=' + encodeURIComponent(r.id) + '">Join</a></div>';
 			}).join('') : '<p class="racer-note">No open races right now. Open one and share its link; new races show up here as they open.</p>';
 		};
 		db.ref('puzzle_race_lobby').orderByChild('createdAt').limitToLast(50).on('value', (snap) => {
@@ -513,15 +516,16 @@ async function bootRacer(all, params) {
 	async function writeProgress(ok) {
 		const ref = db.ref('puzzle_races/' + R.id + '/players/' + R.uid + '/p');
 		const TS = firebase.database.ServerValue.TIMESTAMP;
-		for (let t = 0; t < 10; t++) {
-			if (now() > R.race.endAt + RACER_WRITE_GRACE_MS) return false;
+		// Until the race's write window closes: the page has already counted
+		// this result, and it must land before the next one is written.
+		while (now() <= R.race.endAt + RACER_WRITE_GRACE_MS) {
 			try {
 				const res = await ref.transaction((cur) => {
 					cur = cur || {};
 					return { n: (cur.n || 0) + 1, score: (cur.score || 0) + (ok ? 1 : 0), at: TS, st: ok ? TS : (cur.st || 0) };
 				}, undefined, false);
 				if (res.committed) return true;
-			} catch (e) { /* refused: too soon after the last write, or outside the race */ }
+			} catch (e) { /* refused: too soon after the last write, or not yet the race by the server's clock */ }
 			await sleep(600);
 		}
 		return false;

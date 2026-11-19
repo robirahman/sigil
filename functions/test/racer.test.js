@@ -67,7 +67,7 @@ test('a public race is listed in the lobby; a private one is not; one open lobby
 		players: { alice: { name: 'Alice', guest: false, joinedAt: T } } });
 	assert.deepStrictEqual(d.puzzle_race_lobby, { [pub.id]: { hostName: 'Alice', n: 1, max: 10, createdAt: T } });
 	assert.strictEqual(d.puzzle_races[priv.id].public, false);
-	assert.deepStrictEqual(d.puzzle_race_hosts, { alice: pub.id, bob: priv.id });
+	assert.deepStrictEqual(d.puzzle_race_hosts, { alice: { [pub.id]: true }, bob: { [priv.id]: true } });
 	// Alice opens another: her first lobby closes and leaves the list.
 	const again = await racer.createRace(db, alice, { public: true }, T + 1000);
 	d = db.dump();
@@ -78,7 +78,7 @@ test('a public race is listed in the lobby; a private one is not; one open lobby
 	const [x, y] = await Promise.all([racer.createRace(db, bob, { public: true }, T + 3000), racer.createRace(db, bob, { public: true }, T + 3000)]);
 	d = db.dump();
 	const open = [x.id, y.id, priv.id].filter((k) => d.puzzle_races[k].status === 'lobby');
-	assert.deepStrictEqual(open, [d.puzzle_race_hosts.bob], 'exactly the indexed one is open');
+	assert.deepStrictEqual(open, Object.keys(d.puzzle_race_hosts.bob), 'exactly the indexed one is open');
 	assert.ok(!d.puzzle_race_lobby[x.id] !== !d.puzzle_race_lobby[y.id], 'and only it is listed');
 });
 
@@ -111,6 +111,17 @@ test('leaving a lobby: the host passes on; the last one out closes it', async ()
 	let d = db.dump();
 	assert.strictEqual(d.puzzle_races[id].host, 'bob');
 	assert.deepStrictEqual(d.puzzle_race_lobby[id], { hostName: 'Bob', n: 2, max: 10, createdAt: T });
+	assert.deepStrictEqual(d.puzzle_race_hosts, { bob: { [id]: true } }, 'the race moves to the new host\'s index');
+	// The new host opening a race of their own closes the one handed to them.
+	const db2 = fakeDb();
+	const h = await racer.createRace(db2, alice, { public: true }, T);
+	await racer.joinRace(db2, h.id, bob, T + 1);
+	await racer.joinRace(db2, h.id, guest(1), T + 2);
+	await racer.leaveRace(db2, h.id, 'alice');
+	const own = await racer.createRace(db2, bob, { public: true }, T + 10);
+	const d2 = db2.dump();
+	assert.deepStrictEqual([d2.puzzle_races[h.id].status, d2.puzzle_races[own.id].status], ['closed', 'lobby']);
+	assert.deepStrictEqual(Object.keys(d2.puzzle_race_lobby), [own.id]);
 	await racer.leaveRace(db, id, 'bob');
 	await racer.leaveRace(db, id, 'anon1');
 	d = db.dump();
@@ -139,6 +150,7 @@ test('the start: the host, two racers at least, the server\'s clock and sequence
 	assert.strictEqual(r.players.bob.gone, false);
 	assert.deepStrictEqual(d.puzzle_race_seq[id], pick(racer.RACE_PUZZLES));
 	assert.ok(!d.puzzle_race_lobby, 'off the lobby list');
+	assert.ok(!d.puzzle_race_hosts, 'and out of the host index');
 	await assert.rejects(racer.startRace(db, id, 'alice', T + 200, pick), reason('started'));
 	assert.deepStrictEqual(db.dump().puzzle_race_seq[id], pick(racer.RACE_PUZZLES), 'a second start keeps the first sequence');
 	await assert.rejects(racer.joinRace(db, id, guest(2), T + 300), reason('started'));
@@ -239,7 +251,7 @@ test('the sweep: stale lobbies, abandoned lobbies, old races and leftovers go', 
 			doneRace: { hostName: 'A', n: 2, max: 10, createdAt: T - 20 * M },
 			ghost: { hostName: 'A', n: 2, max: 10, createdAt: T - 20 * M },
 		},
-		puzzle_race_hosts: { h: 'fresh', h2: 'oldRace', h3: 'doneRace' },
+		puzzle_race_hosts: { h: { fresh: true }, h2: { oldRace: true }, h3: { doneRace: true } },
 	});
 	const n = await racer.sweepRaces(db, T);
 	const d = db.dump();
@@ -248,7 +260,7 @@ test('the sweep: stale lobbies, abandoned lobbies, old races and leftovers go', 
 	assert.deepStrictEqual(Object.keys(d.puzzle_race_seq), ['doneRace']);
 	assert.deepStrictEqual(Object.keys(d.puzzle_race_lobby), ['fresh']);
 	assert.strictEqual(d.puzzle_race_lobby.fresh.n, 1, 'the listing counts who is still there');
-	assert.deepStrictEqual(d.puzzle_race_hosts, { h: 'fresh', h3: 'doneRace' });
+	assert.deepStrictEqual(d.puzzle_race_hosts, { h: { fresh: true }, h3: { doneRace: true } });
 });
 
 test('the callable refuses malformed requests', async () => {

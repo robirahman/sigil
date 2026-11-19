@@ -22,7 +22,7 @@
  *                              players: { uid: { name, guest, joinedAt, gone, p } } }
  *   puzzle_race_seq/{id}     [puzzle id, ...]
  *   puzzle_race_lobby/{id}   { hostName, n, max, createdAt }   public lobbies
- *   puzzle_race_hosts/{uid}  the race id of the host's last race (one open lobby each)
+ *   puzzle_race_hosts/{uid}  { raceId: true } the races the account hosts (one open lobby each)
  *
  * A race is over when the server's clock passes endAt; nothing is written
  * then. sweepRaces deletes lobbies nobody started, lobbies everyone left,
@@ -144,10 +144,11 @@ async function raceTransaction(db, id, fn) {
 
 /**
  * Open a race hosted by `me` ({ uid, name, guest }). One open lobby a host:
- * the race is written first, then it takes the host's index entry in a
- * transaction, and whichever race the entry held is closed. Two creations
- * at once (two tabs) are ordered by the transaction: the later closes the
- * earlier, so exactly one stays open.
+ * the race is written first, then it replaces the host's index in a
+ * transaction, and every lobby the index held is closed -- the host's own
+ * earlier lobbies and any handed to them (leaveRace). Two creations at once
+ * (two tabs) are ordered by the transaction: the later closes the earlier,
+ * so exactly one stays open.
  */
 async function createRace(db, me, opts, now) {
 	const pub = !!(opts && opts.public);
@@ -160,8 +161,10 @@ async function createRace(db, me, opts, now) {
 	if (pub) updates['puzzle_race_lobby/' + id] = lobbyEntry(race);
 	await db.ref().update(updates);
 	let prev = null;
-	await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => { prev = cur; return id; });
-	if (typeof prev === 'string' && prev !== id && ID_RE.test(prev)) await closeLobby(db, prev, me.uid);
+	await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => { prev = cur; return { [id]: true }; });
+	for (const k of Object.keys(prev && typeof prev === 'object' ? prev : {})) {
+		if (k !== id && ID_RE.test(k)) await closeLobby(db, k, me.uid);
+	}
 	return { id };
 }
 
@@ -197,15 +200,21 @@ async function joinRace(db, id, me, now) {
 	return { id };
 }
 
-/** Leave a race still in its lobby; the earliest to join takes over as host. */
+/**
+ * Leave a race still in its lobby; the earliest to join takes over as host,
+ * and the race moves to their host index (one open lobby a host).
+ */
 async function leaveRace(db, id, uid) {
 	let why = null;
-	const { race } = await raceTransaction(db, id, (r) => {
+	let wasHost = false;
+	const { committed, race } = await raceTransaction(db, id, (r) => {
 		why = null;
+		wasHost = false;
 		if (r.status !== 'lobby') { why = r.status === 'racing' ? 'started' : 'closed'; return undefined; }
 		if (!r.players || !r.players[uid]) return undefined;
 		delete r.players[uid];
 		if (r.host === uid) {
+			wasHost = true;
 			const next = presentPlayers(r).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0))[0];
 			if (next) r.host = next[0];
 			else r.status = 'closed';
@@ -214,6 +223,11 @@ async function leaveRace(db, id, uid) {
 	});
 	if (!race) throw new RaceError('not-found');
 	if (why) throw new RaceError(why);
+	if (committed && wasHost) {
+		const moves = { ['puzzle_race_hosts/' + uid + '/' + id]: null };
+		if (race.status === 'lobby') moves['puzzle_race_hosts/' + race.host + '/' + id] = true;
+		await db.ref().update(moves);
+	}
 	if (race.public) {
 		if (race.status === 'lobby') await db.ref('puzzle_race_lobby/' + id).set(lobbyEntry(race));
 		else await db.ref('puzzle_race_lobby/' + id).remove();
@@ -231,6 +245,7 @@ async function startRace(db, id, uid, now, pick) {
 	if (!Array.isArray(seq) || !seq.length) throw new RaceError('no-puzzles');
 	let why = null;
 	const startAt = now + RACE_COUNTDOWN_MS;
+	let lobbyHost = null;
 	const { committed, race } = await raceTransaction(db, id, (r) => {
 		why = null;
 		if (r.status !== 'lobby') { why = r.status === 'racing' ? 'started' : 'closed'; return undefined; }
@@ -247,6 +262,7 @@ async function startRace(db, id, uid, now, pick) {
 		for (const [k, p] of present) {
 			r.players[k] = Object.assign({}, p, { gone: false, p: { n: 0, score: 0, at: 0, st: 0 } });
 		}
+		lobbyHost = r.host;
 		r.host = uid;
 		r.status = 'racing';
 		r.startAt = startAt;
@@ -258,7 +274,10 @@ async function startRace(db, id, uid, now, pick) {
 	if (!committed || race.startAt !== startAt) throw new RaceError(why || 'started');
 	// Only the start that won writes the sequence, well inside the
 	// countdown: the rules hide it until startAt.
-	await db.ref().update({ ['puzzle_race_seq/' + id]: seq, ['puzzle_race_lobby/' + id]: null });
+	// No longer a lobby: off the list and out of its host's index.
+	const done = { ['puzzle_race_seq/' + id]: seq, ['puzzle_race_lobby/' + id]: null };
+	if (typeof lobbyHost === 'string' && lobbyHost) done['puzzle_race_hosts/' + lobbyHost + '/' + id] = null;
+	await db.ref().update(done);
 	return { id, startAt: race.startAt, endAt: race.endAt };
 }
 
@@ -292,7 +311,7 @@ async function rematchRace(db, id, me, now, newId) {
 		if (res.committed && res.snapshot.val() === created.id) return created;
 		// Another racer linked theirs first: drop this one and join that.
 		await db.ref().update({ ['puzzle_races/' + created.id]: null, ['puzzle_race_lobby/' + created.id]: null });
-		await db.ref('puzzle_race_hosts/' + me.uid).transaction((cur) => (cur === created.id ? null : (cur === null ? null : undefined)));
+		await db.ref('puzzle_race_hosts/' + me.uid + '/' + created.id).remove();
 	}
 	throw new RaceError('closed');
 }
@@ -339,10 +358,9 @@ async function sweepRaces(db, now) {
 		updates['puzzle_race_seq/' + c.key] = null;
 		updates['puzzle_race_lobby/' + c.key] = null;
 	});
-	// A host's index entry goes with the race it points at.
+	// The host's index entry goes with the race.
 	for (const [id, host] of dropped) {
-		if (typeof host !== 'string' || !host) continue;
-		if ((await db.ref('puzzle_race_hosts/' + host).once('value')).val() === id) updates['puzzle_race_hosts/' + host] = null;
+		if (typeof host === 'string' && host && !/[.#$\[\]\/]/.test(host)) updates['puzzle_race_hosts/' + host + '/' + id] = null;
 	}
 	// Lobby entries: gone with their race, or refreshed.
 	const lobby = (await db.ref('puzzle_race_lobby').once('value')).val() || {};
