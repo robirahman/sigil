@@ -931,3 +931,88 @@ test('presence: one entry per connection, by its owner, with the server time', a
 	await assertSucceeds(get(ref(db(null), 'presence/alice')));
 	await assertSucceeds(remove(ref(db('alice'), 'presence/alice/c1')));
 });
+
+test('Puzzle Racer: the server runs the race; a racer only moves their own car on, inside the race', async () => {
+	const now = Date.now();
+	const racer = (name) => ({ name, guest: false, joinedAt: 1, p: { n: 0, score: 0, at: 0, st: 0 } });
+	const race = (startAt, endAt) => ({ host: 'alice', public: true, status: 'racing', createdAt: now - 60000, startAt, endAt, len: 3, max: 10,
+		players: { alice: racer('Alice'), bob: racer('Bob'), gina: Object.assign(racer('Guest GINA'), { guest: true }) } });
+	await seed({
+		puzzle_races: {
+			R1: race(now - 1000, now + 120000),
+			R2: race(now + 60000, now + 180000),
+			R3: race(now - 200000, now - 10000),
+			L1: { host: 'alice', public: true, status: 'lobby', createdAt: now, max: 10, players: { alice: { name: 'Alice', guest: false, joinedAt: now } } },
+		},
+		puzzle_race_seq: { R1: { k1: ['a', 'b', 'c'] }, R2: { k2: ['d', 'e', 'f'] } },
+		puzzle_race_lobby: { L1: { hostName: 'Alice', n: 1, max: 10, createdAt: now } },
+	});
+	const p = (who, r, u) => ref(who, `puzzle_races/${r}/players/${u}/p`);
+	const ts = serverTimestamp();
+	const st = async (r, u) => {
+		let v = null;
+		await env.withSecurityRulesDisabled(async (c) => { v = (await get(ref(c.database(), `puzzle_races/${r}/players/${u}/p`))).val(); });
+		return v;
+	};
+	const pause = () => new Promise((r) => setTimeout(r, 600));
+	// Anyone reads a race and the public lobby; nobody lists the races.
+	await assertSucceeds(get(ref(db(null), 'puzzle_races/R1')));
+	await assertSucceeds(get(ref(db(null), 'puzzle_race_lobby')));
+	await assertFails(get(ref(db('alice'), 'puzzle_races')));
+	// The puzzles are hidden until the start, from the racers too.
+	await assertSucceeds(get(ref(db('bob'), 'puzzle_race_seq/R1/k1')));
+	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/R2')));
+	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/R2/k2')));
+	await assertFails(get(ref(db('bob'), 'puzzle_race_seq/L1')));
+	await assertFails(get(ref(db('bob'), 'puzzle_race_seq')));
+	// Only the server writes the race, its sequence and the lobby.
+	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/status'), 'racing'));
+	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/startAt'), now));
+	await assertFails(set(ref(db('bob'), 'puzzle_races/L1/players/bob'), { name: 'Bob', guest: false, joinedAt: now }));
+	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/players/alice/name'), 'Queen'));
+	await assertFails(set(ref(db('alice'), 'puzzle_races/NEW'), { host: 'alice', status: 'lobby' }));
+	await assertFails(set(ref(db('alice'), 'puzzle_race_seq/R2/k2'), ['easy']));
+	await assertFails(set(ref(db('alice'), 'puzzle_race_lobby/X'), { hostName: 'A', n: 1, max: 10, createdAt: now }));
+	await assertFails(set(ref(db('alice'), 'puzzle_races/L1/players/alice/p'), { n: 0, score: 0, at: ts, st: 0 }));
+	// A solve: one puzzle on, the score up by one, stamped by the server.
+	const a = db('alice');
+	await assertSucceeds(set(p(a, 'R1', 'alice'), { n: 1, score: 1, at: ts, st: ts }));
+	const s1 = await st('R1', 'alice');
+	assert.ok(s1.st > now - 5000 && s1.at === s1.st);
+	// Not twice within half a second.
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 1, at: ts, st: s1.st }));
+	await pause();
+	// Never more than one puzzle or one point a write, never back, never a new solve time for a miss.
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 3, score: 2, at: ts, st: ts }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 3, at: ts, st: ts }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 0, at: ts, st: s1.st }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 0, score: 0, at: ts, st: 0 }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 1, at: ts, st: ts }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 1, at: now + 999999, st: s1.st }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 2, score: 1, at: ts, st: s1.st, bonus: 5 }));
+	await assertFails(remove(p(a, 'R1', 'alice')));
+	// A miss: one puzzle on, the score and solve time kept.
+	await assertSucceeds(set(p(a, 'R1', 'alice'), { n: 2, score: 1, at: ts, st: s1.st }));
+	await pause();
+	await assertSucceeds(set(p(a, 'R1', 'alice'), { n: 3, score: 2, at: ts, st: ts }));
+	await pause();
+	// No further than the sequence.
+	const s3 = await st('R1', 'alice');
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 4, score: 3, at: ts, st: ts }));
+	await assertFails(set(p(a, 'R1', 'alice'), { n: 4, score: 2, at: ts, st: s3.st }));
+	// Only one's own car, only in a race that is on.
+	await assertFails(set(p(db('bob'), 'R1', 'alice'), { n: 4, score: 2, at: ts, st: s3.st }));
+	await assertFails(set(p(db('mallory'), 'R1', 'mallory'), { n: 1, score: 1, at: ts, st: ts }));
+	await assertFails(set(p(db('bob'), 'R2', 'bob'), { n: 1, score: 1, at: ts, st: ts }));
+	await assertFails(set(p(db('bob'), 'R3', 'bob'), { n: 1, score: 1, at: ts, st: ts }));
+	// Guests race too.
+	await assertSucceeds(set(p(guestDb('gina'), 'R1', 'gina'), { n: 1, score: 0, at: ts, st: 0 }));
+	// `gone` (onDisconnect): one's own flag, in a race one is in.
+	await assertSucceeds(set(ref(db('bob'), 'puzzle_races/R1/players/bob/gone'), true));
+	await assertSucceeds(set(ref(db('bob'), 'puzzle_races/R1/players/bob/gone'), false));
+	await assertSucceeds(set(ref(db('alice'), 'puzzle_races/L1/players/alice/gone'), true));
+	await assertFails(set(ref(db('bob'), 'puzzle_races/R1/players/alice/gone'), true));
+	await assertFails(set(ref(db('bob'), 'puzzle_races/L1/players/bob/gone'), false));
+	await assertFails(set(ref(db('bob'), 'puzzle_races/R1/players/bob/gone'), 'yes'));
+	await assertFails(set(ref(db('bob'), 'puzzle_races/GONE/players/bob/gone'), true));
+});

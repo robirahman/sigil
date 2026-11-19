@@ -137,7 +137,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### Puzzles
 
 - [x] **Add a puzzle dashboard** (results by theme over time). Done: `puzzles.html?tab=dashboard`, solve rates by difficulty, kind and theme, rating over time, recent misses.
-- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer). Storm done: `puzzles.html?tab=storm`, 3 minutes, unrated, best score on the Storm leaderboard. Racer (multiplayer) is still open.
+- [x] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer). Storm done: `puzzles.html?tab=storm`, 3 minutes, unrated, best score on the Storm leaderboard. Done: Racer at `puzzles.html?tab=racer`, 2 to 10 racers (guests too), public lobby or private link, the same 60 puzzles for everyone picked by the `puzzleRace` function, a 2-minute race on the server's clock, live cars, results and rematch; stale races swept every 5 minutes.
 - [x] **Generate puzzles from a player's own games** (positions where they missed a win). Puzzles v2: "My missed wins", ranked games only.
 
 ### Learning

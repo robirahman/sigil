@@ -470,6 +470,40 @@
         ".validate": "data.exists() && newData.hasChildren(['rating', 'plays']) && newData.child('rating').isNumber() && newData.child('rating').val() - data.child('rating').val() <= 32 && data.child('rating').val() - newData.child('rating').val() <= 32 && newData.child('plays').val() === data.child('plays').val() + 1 && newData.parent().parent().child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists() && !root.child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists()"
       }
     },
+    "puzzle_races": {
+      ".indexOn": [
+        "createdAt"
+      ],
+      "$race": {
+        ".read": true,
+        "players": {
+          "$uid": {
+            "gone": {
+              ".write": "auth !== null && auth.uid === $uid && root.child('puzzle_races/' + $race + '/players/' + $uid + '/name').exists()",
+              ".validate": "newData.isBoolean()"
+            },
+            "p": {
+              ".write": "auth !== null && auth.uid === $uid && data.exists() && newData.exists() && root.child('puzzle_races/' + $race + '/status').val() === 'racing' && now >= root.child('puzzle_races/' + $race + '/startAt').val() && now <= root.child('puzzle_races/' + $race + '/endAt').val() + 3000",
+              ".validate": "newData.hasChildren(['n', 'score', 'at', 'st']) && newData.child('at').val() === now && now >= data.child('at').val() + 500 && newData.child('n').val() === data.child('n').val() + 1 && newData.child('n').val() <= root.child('puzzle_races/' + $race + '/len').val() && ((newData.child('score').val() === data.child('score').val() + 1 && newData.child('st').val() === now) || (newData.child('score').val() === data.child('score').val() && newData.child('st').val() === data.child('st').val()))",
+              "$other": {
+                ".validate": "$other === 'n' || $other === 'score' || $other === 'at' || $other === 'st'"
+              }
+            }
+          }
+        }
+      }
+    },
+    "puzzle_race_seq": {
+      "$race": {
+        ".read": "root.child('puzzle_races/' + $race + '/startAt').isNumber() && root.child('puzzle_races/' + $race + '/startAt').val() <= now"
+      }
+    },
+    "puzzle_race_lobby": {
+      ".read": true,
+      ".indexOn": [
+        "createdAt"
+      ]
+    },
     "admins": {
       "$uid": {
         ".read": "auth !== null && auth.uid === $uid"

@@ -191,6 +191,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/profile-stats.js?v=35',
 	'./static/scripts/puzzle-progress.js?v=35',
 	'./static/scripts/puzzle-rating.js?v=35',
+	// Puzzle Racer (puzzles.html?tab=racer).
+	'./static/scripts/puzzle-racer.js',
+	'./static/css/puzzle-racer.css',
 	'./static/scripts/report-dialog.js?v=35',
 	'./static/scripts/rules-reference.js?v=36',
 	'./static/scripts/settings-panel.js?v=35',
