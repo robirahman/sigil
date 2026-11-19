@@ -25,7 +25,11 @@
  *   5. A modified client closes the room with a win its moves do not show:
  *      the board does not take it, and says the server will judge it.
  *   6. A reload onto a position that is itself an end (after the last turn,
- *      before the result was written): the game ends and is recorded.
+ *      before the result was written): the game ends and is recorded there,
+ *      without another turn starting.
+ *   7. The same after a game whose last turn won on the board in a way the
+ *      position alone does not show (functions/test/online-game.json): the
+ *      replay's ending is taken.
  */
 'use strict';
 const fs = require('fs');
@@ -105,9 +109,9 @@ function stubSync(played) {
 }
 
 /** A seated controller opening the room after `played`, on `roomSfn`. */
-async function open(color, played, roomSfn, sync) {
+async function open(color, played, roomSfn, sync, spells) {
 	const events = [];
-	const c = new E.MultiplayerController((ev) => events.push(ev), sync || stubSync(played), color, SPELLS.slice());
+	const c = new E.MultiplayerController((ev) => events.push(ev), sync || stubSync(played), color, (spells || SPELLS).slice());
 	c.events = events;
 	await c.startGame(roomSfn || null);
 	return c;
@@ -220,6 +224,20 @@ const slim = (log) => (log || []).map((t) => [t.color, t.turnNumber, (t.actions 
 	await until(() => over(last), 'the loaded end');
 	check(over(last).winner === 'red' && last.sync.final && last.sync.final.winner === 'red', 'a reload onto an ended position: the game ends and is recorded',
 		{ winner: over(last).winner, final: !!last.sync.final });
+	check(last.board.turnCounter === 6 && last.sync.final.finalSfn.split(' ')[2] === '6' && !last.events.some((e) => e.type === 'whoseturndisplay'),
+		'on that position, with no turn started', last.sync.final.finalSfn);
+
+	// 7. A whole recorded game, reloaded after its winning turn.
+	const G = require(path.join(REPO, 'functions', 'test', 'online-game.json'));
+	const gTurns = G.turns.map((t) => ({ color: t.color, actions: t.actions.slice() }));
+	const gLog = await E.reconstructGameLog(G.spellNames, 'standard', null, G.turns);
+	const gEnd = gLog[gLog.length - 1].sfnAfter;
+	warnings.length = 0;
+	const done = await open('red', gTurns, gEnd, stubSync(gTurns), G.spellNames);
+	await until(() => over(done), 'the recorded game to end');
+	check(over(done).winner === G.winner && done.sync.final && done.sync.final.winner === G.winner && done.sync.final.gameLog.length === G.turns.length
+		&& done.sync.final.finalSfn === gEnd && warnings.length === 0, 'a reload after the winning turn: the replay\'s ending, recorded where it happened',
+		{ winner: over(done).winner, expected: G.winner, log: done.sync.final && done.sync.final.gameLog.length, warnings });
 
 	process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('TEST FAILED:', e && e.stack || e); process.exit(1); });

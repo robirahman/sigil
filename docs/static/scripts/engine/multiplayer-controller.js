@@ -454,6 +454,16 @@ class MultiplayerController {
 		// Rebuild the game so far before the loop gives anyone a move.
 		this._unseenTurns = earlier.length;
 		if (rejoin) await this._seedHistory(variant);
+		// Back on a position the game ended on (a reload after the last
+		// turn, before the result was written): announce and record it as
+		// the loop would have, without starting another turn.
+		if (rejoin && this.board.gameover && !this._endedByRoom()) {
+			this.emit(this.board.getBoardStatePayload());
+			this._emitSfn();
+			this.emit({ type: 'game_over', winner: this.board.winner, gameLog: this._gameLog });
+			this._saveGameRecord(this.board.winner);
+			return;
+		}
 
 		// Initialize timer (red, on fresh games)
 		if (this.myColor === 'red' && !rejoin) {
@@ -464,9 +474,7 @@ class MultiplayerController {
 		this._emitSfn();
 		await this._delay(500);
 		// A forfeit, flag or abort while the game was being rebuilt has
-		// ended it (and said so) already. Not a position that is itself an
-		// end (a reload after the last turn, before the result was written):
-		// the loop announces and records that one.
+		// ended it (and said so) already.
 		if (this._endedByRoom()) return;
 		this._runGameLoop();
 	}
@@ -505,6 +513,12 @@ class MultiplayerController {
 		}
 		this.board.allLoopingSnapshotCounts = Object.assign({}, h.board.allLoopingSnapshotCounts);
 		this.board.silenced = Object.assign({ red: false, blue: false }, h.board.silenced);
+		// The last turn ended the game (a stone lead, the last spell): the
+		// position alone does not always show it.
+		if (h.board.gameover && !this.board.gameover) {
+			this.board.gameover = true;
+			this.board.winner = h.board.winner;
+		}
 		this._gameLog = h.log.map((t) => ({
 			color: t.color, turnNumber: t.turnNumber, sfnBefore: t.sfnBefore, sfnAfter: t.sfnAfter, actions: t.actions.slice(),
 		})).concat(this._gameLog);
