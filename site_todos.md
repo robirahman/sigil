@@ -93,11 +93,11 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Pairing & ratings
 
-- [ ] **Add matchmaking pools** that pair players automatically within a rating range, alongside the open-game lobby.
+- [x] **Add matchmaking pools** that pair players automatically within a rating range, alongside the open-game lobby. Done: "Matchmaking" in the lobby (shown when `site_config/matchmaking` is true): a ticket per player in a pool of one exact game (time control, Standard/Competitive, rated/casual; guests casual), paired on the server by the `matchmake` function within a rating window that widens while waiting (100 + deviation, +5 a second, anyone after 3 min); the host creates an invite-only room for the guest.
 - [x] **Let a friend-challenge link choose colour** (random, red or blue). Done: every room records `creatorColor`.
 - [x] **Let players choose rated or casual per game.** Done: a casual room (`casual: true`) is held at `ranked: false` by the rules.
-- [ ] **Split ratings by time control and variant** (bullet, blitz, rapid, correspondence; Cataclysm etc.) instead of one Elo.
-- [ ] **Move to Glicko-2** with a provisional `?` marker, and show rating ranges on open games.
+- [x] **Split ratings by time control and variant** (bullet, blitz, rapid, correspondence; Cataclysm etc.) instead of one Elo. Done: Glicko-2 pools bullet, blitz, rapid, correspondence and untimed (Standard), and one per other rated variant (Competitive), rated by `rateGame` next to the unchanged Elo; shown when `site_config/ratingDisplay` is 'glicko'.
+- [x] **Move to Glicko-2** with a provisional `?` marker, and show rating ranges on open games. Done behind the flag `site_config/ratingDisplay` = 'glicko': "?" above deviation 110, open games show the creator's pool rating and 95% range; `functions/scripts/backfill-glicko.js` replays history (dry run, --apply, --undo).
 
 ### During a game
 

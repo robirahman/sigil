@@ -58,6 +58,8 @@
 		.profile__stat-line { font-family: 'Overlock', sans-serif; color: var(--color-border-hover); font-size: 0.95em; }
 		.profile__elo { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; }
 		.profile__elo-label { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; }
+		.profile__pool { white-space: nowrap; }
+		.profile__pool-rating { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.15em; }
 		.chart-wrap {
 			background: var(--color-surface);
 			border-radius: 8px;
@@ -288,8 +290,21 @@
 								x-on:click="SigilReport.open({ target: user.uid, name: user.displayName })">Report this player</button>
 						</div>
 						<div style="text-align: right;">
-							<div class="profile__elo-label">Rating</div>
-							<div class="profile__elo" x-text="user.elo"></div>
+							<template x-if="ratingMode !== 'glicko'">
+								<div>
+									<div class="profile__elo-label">Rating</div>
+									<div class="profile__elo" x-text="user.elo"></div>
+								</div>
+							</template>
+							<!-- Glicko-2, one rating per pool (site_config/ratingDisplay, rating-display.js) -->
+							<template x-if="ratingMode === 'glicko'">
+								<div class="profile__pools" data-testid="pool-ratings">
+									<template x-for="p in pools" x-bind:key="p.id">
+										<div class="profile__pool" x-bind:data-pool="p.id" x-bind:title="p.title"><span class="profile__elo-label" x-text="p.label"></span> <span class="profile__pool-rating" x-text="p.text"></span></div>
+									</template>
+									<div class="profile__elo-label" x-show="pools.length === 0">Unrated</div>
+								</div>
+							</template>
 						</div>
 					</div>
 
@@ -395,8 +410,8 @@
 												<td style="text-align:right;">
 													<template x-if="g.rated">
 														<span>
-															<span x-text="g.eloAfter"></span>
-															<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
+															<span x-text="g.ratingAfter" x-bind:title="g.ratingTitle"></span>
+															<span x-show="typeof g.ratingChange === 'number'" x-bind:class="g.ratingChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="typeof g.ratingChange === 'number' ? (g.ratingChange >= 0 ? ' (+' : ' (') + g.ratingChange + ')' : ''"></span>
 														</span>
 													</template>
 													<template x-if="!g.rated">
@@ -424,7 +439,7 @@
 
 					<!-- Stats: per-mode tables, streaks, best win / worst loss, opponents -->
 					<section x-show="tab === 'stats'" x-cloak role="tabpanel" aria-labelledby="tab-stats">
-						<h3>Rating History</h3>
+						<h3 x-text="chartLabel ? 'Rating History (' + chartLabel + ')' : 'Rating History'">Rating History</h3>
 						<div class="chart-wrap">
 							<template x-if="ratingPoints.length === 0">
 								<p class="empty-msg" style="margin: 0;">No ranked games yet.</p>
@@ -603,6 +618,9 @@
 	<script src="static/scripts/engine/notation.js"></script>
 	<script src="static/scripts/engine/elo.js?v=35"></script>
 	<script src="static/scripts/profile-stats.js?v=35"></script>
+	<!-- Glicko-2 pool ratings, and which rating the site shows (site_config/ratingDisplay). -->
+	<script src="static/scripts/engine/glicko.js?v=1"></script>
+	<script src="static/scripts/rating-display.js?v=1"></script>
 
 	<script>
 		// Room fields the Stats and Insights tabs need (rooms/{code} is public;
@@ -660,6 +678,11 @@
 				games: [],
 				topOpponents: [],
 				ratingPoints: [],
+				// 'glicko': the pool ratings instead of the Elo (rating-display.js);
+				// the player's pools, most played first, and the chart's pool.
+				ratingMode: 'elo',
+				pools: [],
+				chartLabel: '',
 
 				// Follow / block / challenge (friends.js): only for a signed-in
 				// player looking at someone else's profile. Guests (anonymous)
@@ -764,10 +787,18 @@
 					if (!uid) { this.loading = false; return; }
 					const db = firebase.database();
 					try {
-						const [userSnap, gamesSnap] = await Promise.all([
+						const [userSnap, gamesSnap, mode, poolRecs] = await Promise.all([
 							db.ref('users/' + uid).once('value'),
 							db.ref('user_games/' + uid).orderByChild('timestamp').once('value'),
+							typeof SigilRatings !== 'undefined' ? SigilRatings.ready() : 'elo',
+							typeof SigilRatings !== 'undefined' ? SigilRatings.loadPools(uid) : {},
 						]);
+						this.ratingMode = mode;
+						const glicko = mode === 'glicko';
+						this.pools = Object.entries(poolRecs || {}).sort((a, b) => (b[1].n || 0) - (a[1].n || 0)).map(([id, rec]) => ({
+							id, label: SigilRatings.label(id), text: SigilRatings.format(rec),
+							title: SigilRatings.label(id) + ': ' + (rec.n || 0) + ' rated games; 95% range ' + SigilRatings.range(rec),
+						}));
 						const userData = userSnap.val();
 						if (!userData) { this.loading = false; return; }
 						this.user = {
@@ -785,6 +816,11 @@
 						gamesSnap.forEach((c) => {
 							const v = c.val();
 							this._raw[c.key] = v;
+							// While the site shows the pool ratings, a game's rating
+							// columns, stats and chart are its pool's (rateGame's
+							// glicko, or the backfill's).
+							const gl = glicko && v.rated !== false && v.glicko && typeof v.glicko.after === 'number' ? v.glicko : null;
+							const fmt = (r, rd) => Math.round(r) + (rd > SigilGlicko.C.PROVISIONAL_RD ? '?' : '');
 							games.push({
 								id: c.key,
 								timestamp: v.timestamp || 0,
@@ -804,7 +840,24 @@
 								eloChange: v.eloChange ?? 0,
 								// Stored by rateGame since round 2 (AI games too).
 								opponentEloBefore: typeof v.opponentEloBefore === 'number' ? v.opponentEloBefore : null,
+								pool: gl ? gl.pool : null,
 							});
+							const g = games[games.length - 1];
+							if (gl) {
+								Object.assign(g, {
+									eloBefore: Math.round(gl.before), eloAfter: Math.round(gl.after),
+									eloChange: Math.round(gl.after) - Math.round(gl.before),
+									opponentEloBefore: typeof gl.opponentBefore === 'number' ? Math.round(gl.opponentBefore) : null,
+								});
+							} else if (glicko && g.rated) {
+								// A rated game from before the pools (no backfill): its Elo
+								// would mix scales with the pool ratings, so the rating
+								// stats leave it out (its result still counts).
+								Object.assign(g, { eloChange: null, opponentEloBefore: null });
+							}
+							g.ratingAfter = gl ? fmt(gl.after, gl.rdAfter) : (glicko ? '\u2014' : g.eloAfter);
+							g.ratingChange = g.eloChange;
+							g.ratingTitle = gl ? SigilRatings.label(gl.pool) + ' rating (Glicko-2)' : '';
 						});
 						// Sort newest-first for the table
 						games.sort((a, b) => b.timestamp - a.timestamp);
@@ -890,6 +943,8 @@
 					const todo = [];
 					for (const g of this.games) {
 						if (!g.rated || typeof g.opponentEloBefore === 'number' || !g.opponentUid || g.opponentIsAI) continue;
+						// A looked-up Elo would mix scales with the pool ratings.
+						if (this.ratingMode === 'glicko') continue;
 						if (typeof cache[g.id] === 'number') known[g.id] = cache[g.id];
 						else todo.push(g);
 					}
@@ -1049,8 +1104,16 @@
 				},
 
 				_buildRatingChart(games) {
-					// games here are oldest-first (from gamesSnap.forEach order)
-					const points = games.filter((g) => g.rated).map((g) => g.eloAfter);
+					// games here are oldest-first (from gamesSnap.forEach order).
+					// Pool ratings: the most played pool's games only.
+					let rated = games.filter((g) => g.rated);
+					this.chartLabel = '';
+					if (this.ratingMode === 'glicko') {
+						const main = this.pools.length ? this.pools[0].id : null;
+						rated = rated.filter((g) => g.pool && g.pool === main);
+						this.chartLabel = main ? SigilRatings.label(main) : '';
+					}
+					const points = rated.map((g) => g.eloAfter);
 					if (points.length === 0) {
 						this.ratingPoints = [];
 						return;

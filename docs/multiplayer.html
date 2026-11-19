@@ -243,6 +243,11 @@
 		.challenge-setup { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--color-accent); border-radius: 6px; background: var(--color-surface); font-family: 'Overlock', sans-serif; color: var(--color-text-warm); text-align: left; }
 		.challenge-setup button { margin-left: 8px; }
 		.lobby-refresh { background: none; border: none; color: var(--color-border-hover); cursor: pointer; font-family: 'Overlock', sans-serif; text-decoration: underline; }
+		/* Glicko-2 range of an open game's creator, and matchmaking */
+		.lobby-game__range { color: var(--color-border-hover); font-size: 0.85em; margin-left: 6px; }
+		.matchmaking { margin: 4px 0 14px; }
+		.matchmaking__status { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--color-surface); border: 1px solid var(--color-accent); border-radius: 6px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); text-align: left; }
+		.matchmaking small { display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin: -4px 0 8px; }
 		.share-link {
 			display: flex;
 			gap: 6px;
@@ -394,7 +399,7 @@
 			<div class="auth-status" x-show="authReady">
 				<template x-if="authUser">
 					<span>Playing as <span class="auth-status__name" x-text="authDisplayName"></span>
-					<template x-if="authElo !== null"> (<span class="auth-status__elo" x-text="authElo"></span>)</template>
+					<template x-if="authRatingText !== null"> (<span class="auth-status__elo" x-text="authRatingText" x-bind:title="ratingMode === 'glicko' ? 'Your rating in the pool of the game set up below' : 'Your rating'"></span>)</template>
 					&mdash; <a href="account.html">Account</a></span>
 				</template>
 				<template x-if="!authUser">
@@ -417,6 +422,23 @@
 
 			<!-- Open games: public rooms waiting for an opponent, and quick pair -->
 			<template x-if="!positionSfn"><div class="resume-section" style="margin-top: 12px;">
+				<!-- Matchmaking: the server pairs players waiting for the same game by rating (functions/matchmaking.js) -->
+				<div class="matchmaking" x-show="matchmakingOn" x-cloak>
+					<div class="lobby-section-title"><h3>Matchmaking</h3><span class="lobby-game__meta" x-show="mmCount" x-text="mmCount + ' waiting'"></span></div>
+					<template x-if="!mm">
+						<div>
+							<button class="lobby-button lobby-button--matchmaking" x-on:click="findMatch()" x-bind:disabled="isOffline || !mmBucket" x-text="'Find an opponent (' + mmLabel + ')'">Find an opponent</button>
+							<small x-text="mmBucket ? 'Pairs you with a player waiting for the same game, close to your rating; the range widens while you wait.' : 'Matchmaking pairs Standard and Competitive games (whole minutes and seconds): change the settings below.'"></small>
+						</div>
+					</template>
+					<template x-if="mm">
+						<div class="matchmaking__status" data-mm-status>
+							<span x-text="mmStatusText"></span>
+							<button class="lobby-game__btn" x-on:click="cancelMatch()">Cancel</button>
+						</div>
+					</template>
+				</div>
+
 				<div class="lobby-section-title"><h3>Open Games</h3></div>
 				<button class="lobby-button lobby-button--quick-pair" x-on:click="quickPair()" x-bind:disabled="isOffline || quickPairing" x-text="quickPairing ? 'Finding a game\u2026' : 'Quick pair (' + seekLabel + ')'">Quick pair</button>
 				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin: -4px 0 8px;">Joins the oldest open game with the time control, variant and rated/casual choice below, or lists one and waits.</small>
@@ -425,7 +447,7 @@
 					<template x-for="g in openGames" x-bind:key="g.code">
 						<div class="lobby-game" x-bind:data-code="g.code">
 							<div>
-								<div class="lobby-game__who"><span x-text="g.creatorName"></span><span x-show="g.creatorElo !== null" x-text="' (' + g.creatorElo + ')'"></span></div>
+								<div class="lobby-game__who"><span x-text="g.creatorName"></span><span x-show="g.creatorRating !== null" x-text="' (' + g.creatorRating + ')'"></span><span class="lobby-game__range" x-show="g.creatorRange" x-text="g.creatorRange" x-bind:title="g.creatorRangeTitle"></span></div>
 								<div class="lobby-game__meta" x-text="g.mine ? 'Your game: waiting for an opponent' : [g.tcLabel, g.variantLabel, g.ratedLabel, 'you play ' + g.youPlay].join(' \u00b7 ')"></div>
 							</div>
 							<template x-if="!g.mine"><button class="lobby-game__btn" x-on:click="joinOpenGame(g.code)" x-bind:disabled="isOffline">Join</button></template>
@@ -1101,6 +1123,9 @@
 		// Store sync and auth outside Alpine to avoid Proxy wrapping Firebase objects
 		let _firebaseSync = null;
 		let _authManager = null;
+		// Matchmaking's database refs (our ticket, its bucket's count, the
+		// match's room), likewise kept out of Alpine.
+		const _mmRefs = { ticket: null, count: null, room: null };
 
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
@@ -1120,6 +1145,13 @@
 				authUser: null,
 				authDisplayName: 'Guest',
 				authElo: null,
+				authGamesPlayed: 0,
+				// Which rating the site shows ('elo' | 'glicko', rating-display.js),
+				// the signed-in player's Glicko-2 pool records, and whether the
+				// matchmaking pools are on (site_config/matchmaking).
+				ratingMode: 'elo',
+				myPools: {},
+				matchmakingOn: false,
 
 				// Time control
 				tcType: 'none',
@@ -1166,6 +1198,19 @@
 				_unwatchOpen: null,
 				_liveTimer: null,
 				_eloCache: {},
+				// Open-game creators' pool ratings, by uid + '|' + pool.
+				_poolCache: {},
+
+				// Matchmaking (match-pools.js, functions/matchmaking.js): our
+				// ticket while it waits or is being paired, { bucket, pool,
+				// settings, label, startedAt, rating, status: 'queue' |
+				// 'matched', matchId, opp }, and how many wait in its bucket.
+				mm: null,
+				mmCount: 0,
+				mmNow: Date.now(),
+				_mmPing: null,
+				_mmTick: null,
+				_mmTimer: null,
 
 				// Friends (friends.js): the players we follow, with presence;
 				// players blocked either way (their open games are hidden);
@@ -1203,10 +1248,14 @@
 							await _authManager.loadProfile(firebase.database());
 							this.authDisplayName = _authManager.displayName;
 							this.authElo = _authManager.elo;
+							this.authGamesPlayed = (_authManager.userProfile && _authManager.userProfile.gamesPlayed) || 0;
+							this.myPools = typeof SigilRatings !== 'undefined' ? await SigilRatings.loadPools(user.uid) : {};
 						} else {
 							this.authUser = null;
 							this.authDisplayName = 'Guest';
 							this.authElo = null;
+							this.authGamesPlayed = 0;
+							this.myPools = {};
 						}
 						this.authReady = true;
 						this._startFriends();
@@ -1224,7 +1273,17 @@
 					this.$watch('phase', (p) => {
 						if (p === 'lobby') this._startLobbyLists();
 						else if (p !== 'waiting') this._stopLobbyLists();
+						// A matchmaking game has begun: the ticket has served.
+						if (p === 'playing' && this.mm) this._stopMatch();
 					});
+					if (typeof SigilRatings !== 'undefined') {
+						SigilRatings.ready().then((mode) => {
+							this.ratingMode = mode;
+							this.matchmakingOn = SigilRatings.matchmaking;
+							this._renderOpenGames();
+						});
+					}
+					window.addEventListener('pagehide', () => { if (this.mm && _mmRefs.ticket) _mmRefs.ticket.remove().catch(() => {}); });
 
 					const urlChallenge = new URLSearchParams(window.location.search).get('challenge');
 					// Set up once the sign-in is known (it can take longer than
@@ -1669,28 +1728,38 @@
 				async createRoom(opts) {
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
+					// A matchmaking pair's room (opts.match: { settings, invite,
+					// name }): the pool's game, for the paired player alone.
+					const match = (opts && opts.match) || null;
 					try {
 						// The draw fills the chosen board layout (5 of each size on
 						// the Cataclysm board).
-						setBoardLayout(this.pentagonVariant ? 'pentagon' : 'core');
+						setBoardLayout(match ? variantBoardLayout(match.settings.variant) : (this.pentagonVariant ? 'pentagon' : 'core'));
 						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === BOARD.positionCount)
 							? opts.spellNames.slice()
 							: null;
 						if (!spellNames) {
-							spellNames = generateSpellList(readStoredExpansions(), this.duplicatesVariant);
+							// A rated pool's game leaves out the packs that are never rated.
+							spellNames = match
+								? generateSpellList(readStoredExpansions().filter((k) => !match.settings.rated || (k !== 'panda' && k !== 'experimental')), false)
+								: generateSpellList(readStoredExpansions(), this.duplicatesVariant);
 						}
 						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
-						const timeControl = this._getTimeControl();
-						let variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
+						const timeControl = match ? match.settings.timeControl : this._getTimeControl();
+						let variant = match ? match.settings.variant
+							: composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
 						let fromPosition = null;
 						let creatorColor = this.creatorSide;
-						const challenge = !(opts && opts.quickSeek) && !(opts && opts.spellNames) ? this.challengeTarget : null;
+						const challenge = !(opts && (opts.quickSeek || opts.match)) && !(opts && opts.spellNames) ? this.challengeTarget : null;
 						if (challenge && !this.authUser) {
 							this.lobbyError = 'Sign in to an account to challenge a player.';
 							return;
 						}
-						const isPublic = !challenge && (!!(opts && opts.public) || this.listPublic);
-						if (this.positionSfn) {
+						const isPublic = !challenge && !match && (!!(opts && opts.public) || this.listPublic);
+						const casual = match ? !match.settings.rated : this.casualGame;
+						if (match) {
+							// The form's settings are not the game's: leave them.
+						} else if (this.positionSfn) {
 							// The start position names its spells and variant.
 							if (!this.positionOffer || this.positionOffer.loading) return;
 							const d = sfnToDict(this.positionSfn);
@@ -1707,7 +1776,7 @@
 						}
 						if (opts && opts.creatorSide) creatorColor = opts.creatorSide;
 						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition,
-							{ creatorColor, public: isPublic, casual: this.casualGame, invite: challenge ? challenge.uid : null });
+							{ creatorColor, public: isPublic, casual, invite: match ? match.invite : (challenge ? challenge.uid : null) });
 						// Random is resolved by createRoom.
 						creatorColor = _firebaseSync.myColor;
 						if (challenge) {
@@ -1723,8 +1792,9 @@
 							this._watchChallenge(challenge, this.roomCode);
 						}
 						this._quickSeek = (opts && opts.quickSeek) || null;
-						this.waitingInfo = 'You play ' + (creatorColor === 'red' ? 'Red' : 'Blue') + ' \u00b7 '
-							+ (this.casualGame ? 'Casual' : 'Rated') + (isPublic ? ' \u00b7 listed in the open-games lobby' : '')
+						this.waitingInfo = (match ? 'Matched with ' + match.name + ' \u00b7 ' : '')
+							+ 'You play ' + (creatorColor === 'red' ? 'Red' : 'Blue') + ' \u00b7 '
+							+ (casual ? 'Casual' : 'Rated') + (isPublic ? ' \u00b7 listed in the open-games lobby' : '')
 							+ (challenge ? ' \u00b7 challenge sent to ' + challenge.name : '');
 						this.shareUrl = this._buildShareUrl(this.roomCode);
 						this.phase = 'waiting';
@@ -2045,16 +2115,36 @@
 
 				_renderOpenGames() {
 					const uid = this._myUid();
+					const glicko = this.ratingMode === 'glicko' && typeof SigilRatings !== 'undefined';
 					const rows = (this._waitingRooms || []).filter((r) => this._isOpen(r, uid) && !this._isBlocked(r)).map((r) => {
 						const creator = this._creatorOf(r);
 						const seat = r[creator] || {};
-						if (!seat.anon && seat.uid) this._fetchElo(seat.uid);
+						const elo = !seat.anon && typeof this._eloCache[seat.uid] === 'number' ? this._eloCache[seat.uid] : null;
+						// The creator's rating in the game's pool and its 95% range
+						// (Glicko-2), or their Elo.
+						let rating = elo;
+						let range = '';
+						let rangeTitle = '';
+						if (glicko && !seat.anon && seat.uid) {
+							// A variant that is never rated shows the Standard pool of its clock.
+							const pool = unratedReason(null, r.variant, null, null) ? SigilGlicko.timeClass(r.timeControl) : SigilRatings.poolOf(r);
+							const rec = this._poolCache[seat.uid + '|' + pool];
+							if (rec === undefined) this._fetchPoolRating(seat.uid, pool);
+							rating = rec ? SigilRatings.format(rec) : null;
+							range = rec ? SigilRatings.range(rec) : '';
+							rangeTitle = rec ? 'Their ' + SigilRatings.label(pool) + ' rating is in this range with 95% confidence (Glicko-2)' : '';
+						} else if (!seat.anon && seat.uid) {
+							this._fetchElo(seat.uid);
+						}
 						return {
 							code: r.code,
 							created: r.created || 0,
 							creatorUid: seat.uid,
 							creatorName: seat.displayName || 'Guest',
-							creatorElo: !seat.anon && typeof this._eloCache[seat.uid] === 'number' ? this._eloCache[seat.uid] : null,
+							creatorElo: elo,
+							creatorRating: rating,
+							creatorRange: range,
+							creatorRangeTitle: rangeTitle,
 							tcLabel: this._formatTimeControl(r.timeControl),
 							variantLabel: r.startSfn ? 'From a position' : this._variantLabel(r.variant),
 							ratedLabel: this._ratedLabel(r),
@@ -2064,6 +2154,38 @@
 					});
 					rows.sort((a, b) => b.created - a.created);
 					this.openGames = rows;
+				},
+
+				/**
+				 * A player's Glicko-2 record in a pool, else what their first
+				 * game there would start from (their Elo, provisional).
+				 */
+				async _fetchPoolRating(uid, pool) {
+					const key = uid + '|' + pool;
+					if (key in this._poolCache) return;
+					this._poolCache[key] = null;
+					try {
+						const db = firebase.database();
+						const rec = SigilGlicko.normalize((await db.ref('ratings/' + uid + '/' + pool).once('value')).val());
+						if (rec) {
+							this._poolCache[key] = rec;
+						} else {
+							const [elo, played] = await Promise.all([db.ref('users/' + uid + '/elo').once('value'), db.ref('users/' + uid + '/gamesPlayed').once('value')]);
+							this._poolCache[key] = SigilRatings.seedFromElo(elo.val(), played.val() || 0);
+						}
+						this._renderOpenGames();
+					} catch (e) { /* no rating shown */ }
+				},
+
+				/** The lobby's own rating: the Elo, or the pool of the game the form sets up. */
+				get authRatingText() {
+					if (this.authElo === null || this.authElo === undefined) return null;
+					if (this.ratingMode !== 'glicko' || typeof SigilRatings === 'undefined') return String(this.authElo);
+					const s = this._seekSettings();
+					// A variant that is never rated: the Standard pool of the clock.
+					const pool = unratedReason(null, s.variant, null, null) ? SigilGlicko.timeClass(s.timeControl) : SigilGlicko.poolOf(s.variant, s.timeControl);
+					const rec = this.myPools[pool] || SigilRatings.seedFromElo(this.authElo, this.authGamesPlayed);
+					return SigilRatings.label(pool) + ' ' + SigilRatings.format(rec);
 				},
 
 				async _fetchElo(uid) {
@@ -2137,6 +2259,7 @@
 					const code = this.roomCode;
 					this._quickSeek = null;
 					this._stopChallengeWatch();
+					if (this.mm) this._stopMatch();
 					try {
 						const withdrawn = await _firebaseSync.withdrawRoom(code);
 						if (!withdrawn) return; // joined meanwhile: the game starts
@@ -2266,6 +2389,235 @@
 						await this.quickPair();
 					}
 				},
+
+				/* ----- Matchmaking (match-pools.js; the server pairs, functions/matchmaking.js) ----- */
+
+				/** The game the form describes, as matchmaking pairs it (guests: casual). */
+				get mmSettings() {
+					const s = this._seekSettings();
+					return { timeControl: s.timeControl, variant: s.variant, rated: !s.casual && !!this.authUser };
+				},
+
+				get mmBucket() {
+					return typeof SigilMatch !== 'undefined' ? SigilMatch.bucketOf(this.mmSettings) : null;
+				},
+
+				get mmLabel() {
+					const s = this.mmSettings;
+					return [this._formatTimeControl(s.timeControl), this._variantLabel(s.variant), s.rated ? 'Rated' : 'Casual'].join(', ');
+				},
+
+				get mmStatusText() {
+					const mm = this.mm;
+					if (!mm) return '';
+					if (mm.status === 'matched') {
+						return mm.opp ? 'Matched with ' + mm.opp.name + (mm.opp.rating ? ' (' + mm.opp.rating + ')' : '') + ': starting the game\u2026'
+							: 'Matched: starting the game\u2026';
+					}
+					const waited = Math.max(0, this.mmNow - mm.startedAt);
+					const w = SigilMatch.windowFor(mm.rating.rd, waited);
+					const secs = Math.floor(waited / 1000);
+					const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+					const range = isFinite(w) ? 'rated ' + Math.round(mm.rating.r - w) + '\u2013' + Math.round(mm.rating.r + w) : 'of any rating';
+					return 'Looking for an opponent ' + range + ' (' + mm.label + ') \u00b7 ' + clock;
+				},
+
+				/**
+				 * Join the pool of the game the form describes (or `settings`):
+				 * one ticket, mm_tickets/{uid}, stamped every PING_MS while we
+				 * wait; the server pairs it (functions/matchmaking.js).
+				 */
+				async findMatch(settings) {
+					if (this.mm || !_firebaseSync || typeof SigilMatch === 'undefined') return;
+					this.lobbyError = '';
+					this.lobbyNotice = '';
+					const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
+					const uid = userInfo && userInfo.uid;
+					const s = settings || this.mmSettings;
+					const bucket = SigilMatch.bucketOf(s);
+					if (!uid || !bucket) {
+						this.lobbyError = uid ? 'Matchmaking pairs Standard and Competitive games only.' : 'Could not sign in.';
+						return;
+					}
+					const pool = SigilGlicko.poolOf(s.variant, s.timeControl);
+					const rating = this.authUser ? (this.myPools[pool] || SigilRatings.seedFromElo(this.authElo, this.authGamesPlayed))
+						: SigilRatings.seedFromElo(null, 0);
+					const db = firebase.database();
+					const ref = db.ref('mm_tickets/' + uid);
+					const stamp = firebase.database.ServerValue.TIMESTAMP;
+					this.mm = { bucket, pool, settings: s, startedAt: Date.now(), rating, status: 'queue', matchId: null, opp: null,
+						label: [this._formatTimeControl(s.timeControl), this._variantLabel(s.variant), s.rated ? 'Rated' : 'Casual'].join(', ') };
+					this.mmNow = Date.now();
+					try {
+						// A ticket left from another tab or an old pairing goes first.
+						await ref.remove();
+						await ref.set({ bucket, at: stamp, ping: stamp });
+					} catch (e) {
+						this.mm = null;
+						this.lobbyError = 'Could not join matchmaking: ' + (e.message || e);
+						return;
+					}
+					ref.onDisconnect().remove();
+					_mmRefs.ticket = ref;
+					this._mmPing = setInterval(() => { ref.update({ ping: stamp }).catch(() => {}); }, SigilMatch.C.PING_MS);
+					this._mmTick = setInterval(() => { this.mmNow = Date.now(); }, 1000);
+					ref.on('value', (snap) => this._onTicket(snap.val()), () => {});
+					_mmRefs.count = db.ref('mm_counts/' + bucket);
+					_mmRefs.count.on('value', (snap) => { this.mmCount = snap.val() || 0; }, () => {});
+				},
+
+				_onTicket(t) {
+					const mm = this.mm;
+					if (!mm || !_mmRefs.ticket) return;
+					if (!t) {
+						// Withdrawn by the server (not stamped for too long) or another tab.
+						if (mm.status === 'queue') {
+							this._stopMatch();
+							this.lobbyNotice = 'Matchmaking stopped. Press Find an opponent to look again.';
+						}
+						return;
+					}
+					if (t.error) {
+						this._stopMatch();
+						this.lobbyError = t.error === 'suspended' ? 'You are suspended from rated play: choose Casual to use matchmaking.'
+							: 'Rated matchmaking needs a signed-in account: sign in, or choose Casual.';
+						return;
+					}
+					if (t.match && mm.status === 'queue') this._onMatched(t.match);
+				},
+
+				/**
+				 * Paired: the host (who waited longer) creates an invite-only room
+				 * for the guest and names it in mm_matches/{id}/room; the guest
+				 * joins it. Either one waiting too long for the other looks again.
+				 */
+				async _onMatched(id) {
+					const mm = this.mm;
+					mm.status = 'matched';
+					mm.matchId = id;
+					clearInterval(this._mmPing);
+					this._mmPing = null;
+					const db = firebase.database();
+					let m = null;
+					try { m = (await db.ref('mm_matches/' + id).once('value')).val(); } catch (e) { m = null; }
+					if (this.mm !== mm) return;
+					const me = this._myUid();
+					if (!m || (m.host !== me && m.guest !== me)) { this._requeue(mm, 'The pairing fell through; looking again.'); return; }
+					const host = m.host === me;
+					const oppRd = host ? m.guestRd : m.hostRd;
+					mm.opp = {
+						uid: host ? m.guest : m.host,
+						name: host ? m.guestName : m.hostName,
+						rating: String(host ? m.guestRating : m.hostRating) + (oppRd > SigilGlicko.C.PROVISIONAL_RD ? '?' : ''),
+					};
+					// The game is the bucket's (the rules check the host's room against it).
+					const spec = SigilMatch.parseBucket(m.bucket) || mm.settings;
+					if (host) {
+						await this.createRoom({ match: { settings: spec, invite: mm.opp.uid, name: mm.opp.name }, creatorSide: 'random' });
+						if (this.mm === null || this.mm.matchId !== id) return;
+						if (this.phase !== 'waiting' || !this.roomCode) { this._requeue(this.mm, 'Could not set up the game; looking again.'); return; }
+						const code = this.roomCode;
+						try {
+							await db.ref('mm_matches/' + id + '/room').set(code);
+						} catch (e) {
+							// The match was dropped meanwhile: take the room back, look again.
+							if (await _firebaseSync.withdrawRoom(code).catch(() => false)) this._backToLobby();
+							this._requeue(this.mm, 'The pairing fell through; looking again.');
+							return;
+						}
+						this._mmTimer = setTimeout(async () => {
+							if (!this.mm || this.mm.matchId !== id || this.phase !== 'waiting' || this.roomCode !== code) return;
+							// The guest never sat down: our room goes, and we look again.
+							if (!(await _firebaseSync.withdrawRoom(code).catch(() => false))) return; // joined meanwhile
+							this._backToLobby();
+							this._requeue(this.mm, mm.opp.name + ' did not join; looking again.');
+						}, SigilMatch.C.HOST_WAIT_MS);
+					} else {
+						const roomRef = db.ref('mm_matches/' + id + '/room');
+						_mmRefs.room = roomRef;
+						this._mmTimer = setTimeout(() => {
+							if (this.mm && this.mm.matchId === id && this.phase === 'lobby') this._requeue(this.mm, mm.opp.name + ' did not start the game; looking again.');
+						}, SigilMatch.C.GUEST_WAIT_MS);
+						roomRef.on('value', async (snap) => {
+							const code = snap.val();
+							if (!code || !this.mm || this.mm.matchId !== id) return;
+							roomRef.off();
+							_mmRefs.room = null;
+							// Only the game we queued for (the rules check it too).
+							let room = null;
+							try { room = (await db.ref('rooms/' + code).once('value')).val(); } catch (e) { room = null; }
+							if (!this._isMatchRoom(room, spec, me)) {
+								if (this.mm && this.mm.matchId === id) this._requeue(this.mm, 'The game offered was not the one you queued for; looking again.');
+								return;
+							}
+							this.joinCode = code;
+							try {
+								await this.joinRoom(false, true, true);
+							} catch (e) {
+								if (this.mm && this.mm.matchId === id) this._requeue(this.mm, 'Could not join the game; looking again.');
+							}
+						}, () => {});
+					}
+				},
+
+				/** Is `room` the bucket's game (`spec`), waiting for us alone? */
+				_isMatchRoom(room, spec, me) {
+					if (!room || room.status !== 'waiting' || room.invite !== me || room.startSfn) return false;
+					const a = room.timeControl || { type: 'none' };
+					const b = spec.timeControl || { type: 'none' };
+					if ((a.type || 'none') !== (b.type || 'none') || (a.initialTime || 0) !== (b.initialTime || 0)
+						|| (a.increment || 0) !== (b.increment || 0) || (a.moveTimeout || 0) !== (b.moveTimeout || 0)) return false;
+					if (normalizeVariant(room.variant) !== spec.variant) return false;
+					if (spec.rated) return room.casual !== true && !unratedReason(room.spellNames, room.variant, null, null);
+					return room.casual === true;
+				},
+
+				/** Back from a withdrawn waiting room to the lobby. */
+				_backToLobby() {
+					this.roomCode = '';
+					this.shareUrl = '';
+					this.phase = 'lobby';
+					try { window.history.replaceState({}, '', 'multiplayer.html'); } catch (e) {}
+				},
+
+				/** Give up this pairing and queue again for the same game. */
+				_requeue(mm, notice) {
+					const settings = mm && mm.settings;
+					this._stopMatch();
+					this.lobbyNotice = notice || '';
+					if (settings) this.findMatch(settings).then(() => { if (notice) this.lobbyNotice = notice; });
+				},
+
+				async cancelMatch() {
+					const mm = this.mm;
+					this._stopMatch();
+					// The host's room for a pair that has not started goes too.
+					if (mm && mm.status === 'matched' && this.phase === 'waiting' && this.roomCode) {
+						const code = this.roomCode;
+						if (await _firebaseSync.withdrawRoom(code).catch(() => false)) this._backToLobby();
+					}
+				},
+
+				/** Stop waiting: the ticket, its stamps and listeners. */
+				_stopMatch() {
+					clearInterval(this._mmPing);
+					clearInterval(this._mmTick);
+					clearTimeout(this._mmTimer);
+					this._mmPing = this._mmTick = this._mmTimer = null;
+					if (_mmRefs.count) _mmRefs.count.off();
+					_mmRefs.count = null;
+					if (_mmRefs.room) _mmRefs.room.off();
+					_mmRefs.room = null;
+					const ref = _mmRefs.ticket;
+					_mmRefs.ticket = null;
+					if (ref) {
+						ref.off();
+						ref.onDisconnect().cancel().catch(() => {});
+						ref.remove().catch(() => {});
+					}
+					this.mm = null;
+					this.mmCount = 0;
+				},
 			}));
 		});
 	</script>
@@ -2357,6 +2709,11 @@
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 	<script src="static/scripts/report-dialog.js?v=35"></script>
+	<!-- Glicko-2 pool ratings, which rating the site shows (site_config/ratingDisplay)
+	     and the matchmaking pools. -->
+	<script src="static/scripts/engine/glicko.js?v=1"></script>
+	<script src="static/scripts/engine/match-pools.js?v=1"></script>
+	<script src="static/scripts/rating-display.js?v=1"></script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 </body>

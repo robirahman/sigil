@@ -393,6 +393,14 @@ class AuthManager {
 		if (leaderSnap.exists()) {
 			updates['leaderboard/' + uid + '/displayName'] = trimmed;
 		}
+		// The Glicko-2 pool leaderboards (written by the rating function):
+		// the rules let the owner carry the new name onto existing rows.
+		try {
+			const pools = await db.ref('ratings/' + uid).once('value');
+			const rows = await Promise.all(Object.keys(pools.val() || {}).map((p) =>
+				db.ref('pool_leaderboard/' + p + '/' + uid + '/displayName').once('value').then((x) => (x.exists() ? p : null))));
+			rows.filter(Boolean).forEach((p) => { updates['pool_leaderboard/' + p + '/' + uid + '/displayName'] = trimmed; });
+		} catch (e) { /* the rows keep the old name until the next rated game */ }
 
 		await db.ref().update(updates);
 		await this.currentUser.updateProfile({ displayName: trimmed });

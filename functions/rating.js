@@ -29,6 +29,8 @@ const { freshEngine, requireShared } = require('./engine-loader');
 // roomTurns, sideToMove and the clocks are shared with the site's
 // active-games list (docs/static/scripts/engine/room-clock.js).
 const { roomTurns, sideToMove, roomTimeLeft } = requireShared('room-clock.js');
+// Glicko-2 by pool, computed alongside the Elo (engine/glicko.js).
+const Glicko = requireShared('glicko.js');
 
 const AI_UID = /^__ai_[a-z0-9_]+__$/;
 // Network slack allowed on a loss on time.
@@ -309,13 +311,24 @@ async function _judgeAiGame(engine, record, aiSide, spellNames, variant) {
 	return { rated: true, kind, winner: record.winner, claimKey: 'ai_' + claim, startPos };
 }
 
+/** The Glicko-2 pool a game record rates in (glicko.js poolOf). */
+function poolOfRecord(record, engine) {
+	return Glicko.poolOf(engine.normalizeVariant(record && record.variant), record && record.timeControl);
+}
+
 /**
  * The database writes for a judged game. `users` holds the two /users
  * records as read ({ red, blue }, null when missing); `hasLbName` whether
  * each has a leaderboard name. Mirrors what elo.js processEloClientSide
  * wrote, plus user_games entries for unrated games and the verdict.
+ *
+ * `pools` ({ red, blue, now }: each player's ratings/{uid}/{pool} as read,
+ * null when missing, and the server time) adds the Glicko-2 ratings of a
+ * rated game, alongside the Elo, which is written exactly as before: a new
+ * pool rating starts from the player's Elo before the game (glicko.js seed),
+ * and an AI tier is an anchor at its Elo (glicko.js anchor).
  */
-function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
+function ratingUpdates(gameId, record, verdict, users, hasLbName, engine, pools) {
 	const updates = {};
 	const red = users.red || {};
 	const blue = users.blue || {};
@@ -387,8 +400,20 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 		}
 	}
 	const g = 'completed_games/' + gameId + '/';
+	if (pools) {
+		// The user_games entries are written whole here: their glicko goes
+		// inside them (one update may not hold a path and its child).
+		for (const [k, v] of Object.entries(glickoUpdates(gameId, record, verdict, data, uidOf, before, pools, engine))) {
+			const entryPath = k.endsWith('/glicko') && k.startsWith('user_games/') ? k.slice(0, -'/glicko'.length) : null;
+			if (entryPath && updates[entryPath]) updates[entryPath].glicko = v;
+			else updates[k] = v;
+		}
+	}
 	updates[g + 'eloProcessed'] = true;
 	updates[g + 'eloChange'] = points;
+	// The result as rated (an overturned one differs from `winner`), for
+	// tools that replay the ratings (scripts/backfill-glicko.js).
+	updates[g + 'ratedWinner'] = w;
 	updates[g + 'redEloBefore'] = before.red;
 	updates[g + 'blueEloBefore'] = before.blue;
 	updates[g + 'redEloAfter'] = after.red;
@@ -397,7 +422,56 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 	return updates;
 }
 
+/**
+ * The Glicko-2 half of a rated game's writes (ratingUpdates): both players'
+ * pool records, the pool leaderboard rows, and the before/after on the
+ * user_games entries and the game record. `before` is the Elo before the
+ * game, which seeds a player's first rating in the pool.
+ */
+function glickoUpdates(gameId, record, verdict, data, uidOf, before, pools, engine) {
+	const updates = {};
+	const pool = poolOfRecord(record, engine);
+	const now = pools.now;
+	const start = {};
+	for (const c of ['red', 'blue']) {
+		const stored = Glicko.normalize(pools[c]);
+		start[c] = AI_UID.test(uidOf[c])
+			? Glicko.anchor(stored, before[c], now)
+			: (stored || Glicko.seed(before[c], data[c].gamesPlayed || 0, now));
+	}
+	const pRed = verdict.startPos ? verdict.startPos.redWinProb : null;
+	const res = Glicko.rateGame(start.red, start.blue, verdict.winner === 'red' ? 1 : 0, { now, posPA: pRed });
+	const after = { red: res.a, blue: res.b };
+	const rdNow = { red: Glicko.currentRd(start.red, now), blue: Glicko.currentRd(start.blue, now) };
+	const side = (c) => ({ r: start[c].r, rd: Math.round(rdNow[c] * 100) / 100, after: after[c].r, rdAfter: after[c].rd });
+	for (const c of ['red', 'blue']) {
+		const uid = uidOf[c];
+		const o = other(c);
+		updates['ratings/' + uid + '/' + pool] = after[c];
+		const name = data[c].displayName;
+		if (typeof name === 'string' && name.length >= 1 && name.length <= 30) {
+			const row = { displayName: name, r: after[c].r, rd: after[c].rd, n: after[c].n, at: after[c].at };
+			if (AI_UID.test(uid)) row.isAI = true;
+			if (data[c].isDeveloper === true) row.isDeveloper = true;
+			updates['pool_leaderboard/' + pool + '/' + uid] = row;
+		}
+		if (!AI_UID.test(uid)) {
+			updates['user_games/' + uid + '/' + gameId + '/glicko'] = {
+				pool,
+				before: start[c].r, rdBefore: side(c).rd,
+				after: after[c].r, rdAfter: after[c].rd,
+				change: Math.round((after[c].r - start[c].r) * 100) / 100,
+				opponentBefore: start[o].r, opponentRd: side(o).rd,
+			};
+		}
+	}
+	const g = 'completed_games/' + gameId + '/';
+	updates[g + 'pool'] = pool;
+	updates[g + 'glicko'] = { red: side('red'), blue: side('blue'), redExpected: res.expectedA };
+	return updates;
+}
+
 module.exports = {
 	AI_UID, CLOCK_GRACE_MS, ABANDON_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged,
-	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine,
+	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine, poolOfRecord, glickoUpdates, Glicko,
 };

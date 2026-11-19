@@ -24,6 +24,9 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   matchmake      - pairs the players waiting in a matchmaking pool
+ *                    (matchmaking.js) whenever one of their tickets is
+ *                    written; expireClocks sweeps the pools every minute.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -39,12 +42,13 @@ const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabaseWithUrl, ServerValue } = require('firebase-admin/database');
-const { AI_UID, judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = require('./rating');
+const { AI_UID, judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns, poolOfRecord, Glicko } = require('./rating');
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const matchmaking = require('./matchmaking');
 const crypto = require('crypto');
 
 initializeApp();
@@ -160,11 +164,18 @@ exports.rateGame = onValueCreated({
 	}
 	if (deleted.red || deleted.blue) Object.assign(verdict, { rated: false, reason: 'deleted-account' });
 	const uids = { red: record.redUid, blue: record.blueUid };
-	const [redSnap, blueSnap, redLb, blueLb] = await Promise.all([
+	const engine = freshEngine();
+	// Each player's Glicko-2 rating in the game's pool (glicko.js), rated
+	// alongside the Elo.
+	const pool = poolOfRecord(record, engine);
+	const poolRef = (uid) => (verdict.rated ? db.ref('ratings/' + uid + '/' + pool).once('value') : Promise.resolve(null));
+	const [redSnap, blueSnap, redLb, blueLb, redPool, bluePool] = await Promise.all([
 		db.ref('users/' + uids.red).once('value'),
 		db.ref('users/' + uids.blue).once('value'),
 		db.ref('leaderboard/' + uids.red + '/displayName').once('value'),
 		db.ref('leaderboard/' + uids.blue + '/displayName').once('value'),
+		poolRef(uids.red),
+		poolRef(uids.blue),
 	]);
 	// A result the room does not support was the finisher's resignation:
 	// the room shows the corrected result.
@@ -178,7 +189,8 @@ exports.rateGame = onValueCreated({
 	const updates = ratingUpdates(gameId, record, verdict,
 		{ red: redSnap.val(), blue: blueSnap.val() },
 		{ red: redLb.exists(), blue: blueLb.exists() },
-		freshEngine());
+		engine,
+		{ red: redPool && redPool.val(), blue: bluePool && bluePool.val(), now: Date.now() });
 	for (const c of ['red', 'blue']) {
 		if (!deleted[c]) continue;
 		for (const k of Object.keys(updates)) if (k.startsWith('user_games/' + uids[c] + '/')) delete updates[k];
@@ -214,7 +226,7 @@ exports.rateGame = onValueCreated({
 	if (room && room.local !== true && record.roomCode) updates['rooms/' + record.roomCode + '/ratedAt'] = Date.now();
 	await db.ref().update(updates);
 	logger.info('rateGame', { gameId, kind: verdict.kind, rated: verdict.rated, reason: verdict.reason || null,
-		eloChange: updates['completed_games/' + gameId + '/eloChange'] });
+		eloChange: updates['completed_games/' + gameId + '/eloChange'], pool: verdict.rated ? pool : null });
 	// The engine's review of the game, in the background. The rating is
 	// written: nothing here may undo it or make the event retry.
 	if (verdict.rated) {
@@ -333,7 +345,7 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 	// rules refuse a new follow, block or challenge by or of a marked uid,
 	// so none can appear after them.
 	await db.ref('deleted_users/' + uid).set(Date.now());
-	const [games, active, profile, follows, followers, blocks, blockedBy] = await Promise.all([
+	const [games, active, profile, follows, followers, blocks, blockedBy, pools] = await Promise.all([
 		db.ref('user_games/' + uid).once('value'),
 		db.ref('user_active_games/' + uid).once('value'),
 		db.ref('users/' + uid).once('value'),
@@ -341,6 +353,7 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		db.ref('followers/' + uid).once('value'),
 		db.ref('blocks/' + uid).once('value'),
 		db.ref('blockedBy/' + uid).once('value'),
+		db.ref('ratings/' + uid).once('value'),
 	]);
 	const updates = {
 		// users/{uid} holds the puzzle rating, attempts, synced puzzle
@@ -368,7 +381,14 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		// as a deleted one's uid never comes back.
 		['user_flags/' + uid]: null,
 		['report_limits/' + uid]: null,
+		// Glicko-2 pool ratings and their leaderboard rows; a matchmaking
+		// ticket still waiting.
+		['ratings/' + uid]: null,
+		['mm_tickets/' + uid]: null,
 	};
+	const poolIds = new Set(Glicko.POOLS);
+	pools.forEach((p) => { poolIds.add(p.key); });
+	for (const p of poolIds) updates['pool_leaderboard/' + p + '/' + uid] = null;
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
 	// Blocks both ways: theirs of this account (through the blockedBy
@@ -468,6 +488,49 @@ exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION,
 	const ended = await expireRooms(db, now);
 	if (ended || paused) logger.info('expireClocks', { ended, paused });
 	await retryPendingAnalyses(db).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
+	// Matchmaking: stale tickets and matches, and a pairing pass for every
+	// pool (it can overlap a matchmake event; the claims are transactions).
+	const mm = await matchmaking.sweep(db, Date.now(), matchDeps(db)).catch((e) => logger.warn('matchmaking sweep', { error: String(e) }));
+	if (mm && (mm.paired || mm.dropped)) logger.info('matchmaking sweep', mm);
+});
+
+// Account checks for matchmaking, cached for a few minutes: every ticket
+// stamp runs a pairing pass over its pool. Only full accounts are cached: a
+// guest may upgrade the same uid at any moment.
+const ACCOUNT_CACHE_MS = 5 * 60 * 1000;
+const _fullAccountCache = new Map();
+const matchDeps = (db) => ({
+	async isFullAccount(uid) {
+		const hit = _fullAccountCache.get(uid);
+		if (hit && Date.now() - hit.at < ACCOUNT_CACHE_MS) return hit.full;
+		const full = await isFullAccount(uid);
+		if (!full) return false;
+		if (_fullAccountCache.size > 5000) _fullAccountCache.clear();
+		_fullAccountCache.set(uid, { full, at: Date.now() });
+		return full;
+	},
+	async isSuspended(uid) {
+		const until = (await db.ref('user_flags/' + uid + '/banUntil').once('value')).val();
+		return typeof until === 'number' && until > Date.now();
+	},
+});
+
+exports.matchmake = onValueWritten({
+	ref: '/mm_tickets/{uid}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	// One pairing pass at a time, site-wide. A failed pass is not retried:
+	// the next ticket stamp (every 10 s per waiting player) runs another.
+	concurrency: 1,
+	maxInstances: 1,
+	retry: false,
+}, async (event) => {
+	const t = event.data.after.val();
+	// A withdrawn ticket, or one the server already paired or refused.
+	if (!t || t.match || t.error || typeof t.bucket !== 'string') return;
+	const db = event.data.after.ref.root.database;
+	const res = await matchmaking.matchBucket(db, t.bucket, Date.now(), matchDeps(db));
+	if (res.paired.length) logger.info('matchmake', { bucket: t.bucket, paired: res.paired.length, waiting: res.waiting });
 });
 
 // Correspondence vacation: { days: 1..14 } starts one, { days: 0 } ends it

@@ -196,6 +196,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/settings-panel.js?v=35',
 	'./static/scripts/turn-notify.js?v=35',
 	'./static/scripts/friends.js?v=35',
+	// Glicko-2 pool ratings, the rating display flag and matchmaking pools.
+	'./static/scripts/engine/glicko.js?v=1',
+	'./static/scripts/engine/match-pools.js?v=1',
+	'./static/scripts/rating-display.js?v=1',
 	// Spell art is added by spellArtUrls() below.
 ];
 
