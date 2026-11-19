@@ -940,7 +940,11 @@ test('tournaments: events, players, pairings and limits are the server\'s; prese
 	for (const p of ['tournaments/t1', 'tournament_players/t1', 'tournament_pairings/t1', 'tournament_index']) {
 		await assertSucceeds(get(ref(db(null), p)));
 	}
-	// A player's own events list names private events: theirs alone.
+	// A player's own games and events lists name private rooms and events: theirs alone.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_active_games/alice/R1'), { roomCode: 'R1', myColor: 'red' }));
+	await assertSucceeds(get(ref(db('alice'), 'user_active_games/alice')));
+	await assertFails(get(ref(db('bob'), 'user_active_games/alice')));
+	await assertFails(get(ref(db(null), 'user_active_games/alice')));
 	await assertSucceeds(get(ref(db('alice'), 'user_tournaments/alice')));
 	await assertFails(get(ref(db('bob'), 'user_tournaments/alice')));
 	await assertFails(get(ref(db(null), 'user_tournaments/alice')));

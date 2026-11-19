@@ -1045,6 +1045,7 @@ async function create(db, uid, input, ctx) {
 	const L = admin ? LIMITS.admin : LIMITS.user;
 	const t = validateCreate(input, admin, now);
 	if (!admin && (await isSuspended(db, uid, now))) fail('permission-denied', 'suspended');
+	if (await isDeleted(db, uid)) fail('permission-denied', 'deleted');
 	const tid = db.ref('tournaments').push().key;
 	// At most L.open events of one creator not over yet.
 	const lim = await db.ref('tournament_limits/' + uid).transaction((cur) => {
@@ -1064,6 +1065,15 @@ async function create(db, uid, input, ctx) {
 	};
 	if (!t.private) u['tournament_index/' + tid] = indexEntry(t);
 	await db.ref().update(u);
+	// Deleted meanwhile (deleteUserData marks the account before it reads
+	// its events): its scrub may have missed this one, so it goes.
+	if (await isDeleted(db, uid)) {
+		const undo = {};
+		for (const k of Object.keys(u)) undo[k] = null;
+		undo['tournament_limits/' + uid + '/' + tid] = null;
+		await db.ref().update(undo);
+		fail('permission-denied', 'deleted');
+	}
 	return { id: tid };
 }
 
@@ -1140,6 +1150,7 @@ async function act(db, uid, data, ctx) {
 		if (!S) fail('not-found', 'no-event');
 		S.guard = guard;
 		const { t } = S;
+		if (await isDeleted(db, uid)) fail('permission-denied', 'deleted');
 		const owner = uid === t.createdBy || ctx.admin;
 		if (t.status === 'cancelled' || (t.status === 'finished' && action !== 'cancel')) fail('failed-precondition', 'over');
 		if (action === 'join') {
@@ -1179,8 +1190,40 @@ async function act(db, uid, data, ctx) {
 		}
 		await step(S, now, false);
 		await save(S);
+		// Deleted while this ran: the scrub may have read the account's
+		// events before this join wrote it in, so scrub this one now.
+		if (action === 'join' && (await isDeleted(db, uid))) {
+			await scrubInEvent(S, uid);
+			await save(S);
+		}
 		return { ok: true, status: S.t.status };
 	});
+}
+
+const DELETED_NAME = 'Deleted player';
+
+/** A deleted account in one event (held lock, loaded state): scrubbed as scrubUser says. */
+async function scrubInEvent(S, uid) {
+	const { t, db, tid } = S;
+	// An arena loads only its open pairings: the names are in all of them.
+	const all = (await db.ref('tournament_pairings/' + tid).once('value')).val() || {};
+	Object.assign(S.pairings, Object.fromEntries(Object.entries(all).filter(([pid]) => !S.pairings[pid])));
+	const p = S.players[uid];
+	if (p) {
+		Object.assign(p, { name: DELETED_NAME, withdrawn: true, waitingSince: null });
+		if (t.kind === 'arena') p.active = false;
+		touchP(S, uid);
+	}
+	for (const [pid, g] of Object.entries(S.pairings)) {
+		if (g && g.red === uid) { g.redName = DELETED_NAME; touchG(S, pid); }
+		if (g && g.blue === uid) { g.blueName = DELETED_NAME; touchG(S, pid); }
+	}
+	// A series of a deleted creator ends with this edition.
+	if (t.createdBy === uid) { t.createdByName = DELETED_NAME; t.repeat = null; touchT(S); }
+	if (t.host === uid) { t.hostName = DELETED_NAME; touchT(S); }
+	for (const x of t.podium || []) if (x && x.uid === uid) { x.name = DELETED_NAME; touchT(S); }
+	S.extra['tournament_presence/' + tid + '/' + uid] = null;
+	S.extra['user_tournaments/' + uid + '/' + tid] = null;
 }
 
 /**
@@ -1193,7 +1236,6 @@ async function act(db, uid, data, ctx) {
  * record would create a stub row).
  */
 async function scrubUser(db, uid, updates) {
-	const DELETED = 'Deleted player';
 	const mine = (await db.ref('user_tournaments/' + uid).once('value')).val() || {};
 	updates['user_tournaments/' + uid] = null;
 	updates['tournament_limits/' + uid] = null;
@@ -1205,24 +1247,7 @@ async function scrubUser(db, uid, updates) {
 			const S = await load(db, tid);
 			if (!S) return;
 			S.guard = guard;
-			const { t } = S;
-			// An arena loads only its open pairings: the names are in all of them.
-			const all = (await db.ref('tournament_pairings/' + tid).once('value')).val() || {};
-			Object.assign(S.pairings, Object.fromEntries(Object.entries(all).filter(([pid]) => !S.pairings[pid])));
-			const p = S.players[uid];
-			if (p) {
-				Object.assign(p, { name: DELETED, withdrawn: true, waitingSince: null });
-				if (t.kind === 'arena') p.active = false;
-				touchP(S, uid);
-			}
-			for (const [pid, g] of Object.entries(S.pairings)) {
-				if (g && g.red === uid) { g.redName = DELETED; touchG(S, pid); }
-				if (g && g.blue === uid) { g.blueName = DELETED; touchG(S, pid); }
-			}
-			if (t.createdBy === uid) { t.createdByName = DELETED; touchT(S); }
-			if (t.host === uid) { t.hostName = DELETED; touchT(S); }
-			for (const x of t.podium || []) if (x && x.uid === uid) { x.name = DELETED; touchT(S); }
-			S.extra['tournament_presence/' + tid + '/' + uid] = null;
+			await scrubInEvent(S, uid);
 			await save(S);
 		}, 30000).catch((e) => { console.warn('scrubUser', tid, String((e && e.message) || e)); });
 	}

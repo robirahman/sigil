@@ -50,6 +50,7 @@
 		'no-players': 'Nobody has joined yet.',
 		'host': 'You are the host of this simul.',
 		'removed': 'You were removed from this event.',
+		'deleted': 'This account is being deleted.',
 		'no-event': 'This event does not exist.',
 		'no-player': 'That player is not in the event.',
 		'busy': 'The server is busy. Try again in a moment.',

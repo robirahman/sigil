@@ -344,6 +344,10 @@ test('a deleted account leaves the standings, the pairings and its events namele
 	await T.advance(db, id, Date.now());
 	for (const x of await openPairings(id)) assert.ok(x.red !== 'a' && x.blue !== 'a', 'a deleted account is paired');
 	assert.strictEqual((await val('tournament_players/' + id + '/a')).name, 'Deleted player');
+	// A deleted account can neither create nor join.
+	await assert.rejects(T.act(db, 'a', { action: 'create', config: { kind: 'simul', name: 'Ghost', untimed: true } }, { admin: false, now: Date.now() }),
+		(e) => e.message === 'deleted');
+	await assert.rejects(T.act(db, 'a', { action: 'join', id }, { admin: false, now: Date.now() }), (e) => e.message === 'deleted');
 	// Nothing written for an event they only created (no player row appears).
 	const { id: id2 } = await T.act(db, 'b', { action: 'create', config: { kind: 'simul', name: 'Bsimul', untimed: true } }, { admin: false, now: Date.now() });
 	const u2 = {};
@@ -422,4 +426,18 @@ test('a repeating event schedules its next edition for its creator', async () =>
 	assert.strictEqual((await val('user_tournaments/adm/' + t1.repeatedTo)).role, 'creator');
 	assert.ok(await val('tournament_limits/adm/' + t1.repeatedTo));
 	assert.strictEqual(await val('tournament_active/' + t1.repeatedTo), true);
+});
+
+test('a repeating series ends when its creator is deleted', async () => {
+	await addUsers({ adm: 1000 });
+	const { id } = await T.act(db, 'adm', { action: 'create', config: { kind: 'arena', name: 'Doomed series', minutes: 3, durationMin: 10,
+		startsAt: Date.now() + 3600e3, repeat: 'weekly' } }, { admin: true, now: Date.now() });
+	await db.ref('deleted_users/adm').set(Date.now());
+	await T.scrubUser(db, 'adm', {});
+	const t0 = await val('tournaments/' + id);
+	assert.deepStrictEqual([t0.repeat, t0.createdByName], [undefined, 'Deleted player']);
+	await T.advance(db, id, t0.startsAt + 1);
+	await T.advance(db, id, t0.endsAt + 1);
+	const t1 = await val('tournaments/' + id);
+	assert.deepStrictEqual([t1.status, t1.final, t1.repeatedTo], ['finished', true, undefined]);
 });

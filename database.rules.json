@@ -412,7 +412,7 @@
     },
     "user_active_games": {
       "$uid": {
-        ".read": true,
+        ".read": "auth !== null && auth.uid === $uid",
         "$roomCode": {
           ".write": "auth !== null && (auth.uid === $uid || (!newData.exists() && (root.child('rooms/' + $roomCode + '/red/uid').val() === auth.uid || root.child('rooms/' + $roomCode + '/blue/uid').val() === auth.uid)))"
         }
