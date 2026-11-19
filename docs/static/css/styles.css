@@ -3093,3 +3093,29 @@ html[data-zen] body.zen-page .zen-exit {
 	font-size: 0.85rem;
 	cursor: pointer;
 }
+
+/* Practice game vs the AI (game.html?practice=1): the Hint bar above the
+   turn buttons. The hinted nodes reuse live analysis's dashed ring
+   (.stone-node--engine-hint, live-analysis.css). */
+.practice-bar {
+	font-family: 'Overlock', sans-serif;
+	margin: 6px 0;
+	padding: 8px 10px;
+	border: 1px solid #f5c518;
+	border-radius: 6px;
+	background: rgba(245, 197, 24, 0.08);
+	color: var(--color-text-warm, #eee);
+	line-height: 1.4;
+}
+.practice-bar__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.practice-bar__label { font-weight: bold; }
+.practice-bar__count { color: var(--color-text-muted, #aaa); font-size: 0.9em; }
+.practice-bar .action-button { margin: 0; }
+.practice-bar__body:not(:empty) { margin-top: 4px; }
+.practice-bar__eval, .practice-bar__note { color: var(--color-text-muted, #aaa); font-size: 0.9em; }
+.import-form__practice { display: block; margin: 4px 0; }

@@ -753,6 +753,11 @@ function analysisMixin() {
 			if (!sfn || !this.anaCanPlay()) return null;
 			const q = 'sfn=' + encodeURIComponent(sfn);
 			if (kind === 'online') return 'multiplayer.html?' + q;
+			// Practice: unrated, with the engine's hints (game-board-local.js).
+			if (kind === 'practice') {
+				const p = typeof practiceGameHref === 'function' ? practiceGameHref(sfn, this.anaAiTier, '') : { error: 'unavailable' };
+				return p.href || null;
+			}
 			if (kind === 'ai') return 'game.html?' + q + '&ai=' + encodeURIComponent(this.anaAiTier);
 			return 'game.html?' + q;
 		},

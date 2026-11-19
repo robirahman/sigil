@@ -19,6 +19,7 @@ document.addEventListener('alpine:init', () => {
 			tutorialHint: '',                        // shown after a wrong move
 			tutorialHintReset: true,                 // the wrong move reset the lesson (not a wrong prediction)
 			tutorialAnswer: '',                      // shown after a right prediction (an `ask` step)
+			tutorialReveal: false,                   // drills: the current step's rings are shown ("Show me")
 			tutorialTargets: {},                     // nodes the current step wants (gold rings)
 			tutorialTargetAction: '',                // spell / 'dash' / 'pass' the current step wants
 			tutorialDone: {},                        // lesson id -> timestamp (localStorage)
@@ -37,6 +38,13 @@ document.addEventListener('alpine:init', () => {
 			puzzleSolutionNodes: {},                 // nodes of the solution's next turn while walking it (gold rings)
 			puzzleMoves: 0,                          // mover turns played so far
 			puzzleSolutionText: [],
+			// Practice game vs the AI (game.html?practice=1): unrated, never
+			// uploaded, with a Hint button that asks the engine for the best
+			// turn from the start of the player's turn. See _practiceHint.
+			practiceMode: false,
+			practiceHint: practiceHintIdle(),
+			practiceHintNodes: {},                   // nodes of the hinted turn (dashed rings)
+			practiceHintsUsed: 0,
 			activeSpell: '',
 			activeSpellIsCastable: false,
 			awaiting: '',
@@ -639,8 +647,53 @@ document.addEventListener('alpine:init', () => {
 					window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
 					return;
 				}
+				if (this.importPractice && this.importOpponent) {
+					const p = practiceGameHref(sfn, this.importOpponent, '');
+					if (p.error) { alert(p.error); return; }
+					window.location.href = p.href;
+					return;
+				}
 				const ai = this.importOpponent ? '&ai=' + encodeURIComponent(this.importOpponent) : '';
 				window.location.href = '?sfn=' + encodeURIComponent(sfn) + ai;
+			},
+			// Import Position: practise it (unrated, with hints) instead.
+			importPractice: false,
+
+			// Practice: the Hint button. The first press asks the engine and
+			// rings where the best turn starts; the second shows the whole turn.
+			get canHint() {
+				return this.practiceMode && !this.winner && !this.reviewMode && !this.sideOffer
+					&& !!this.whoseTurn && this.whoseTurn === this.myColor && !this.aiThinking;
+			},
+			practiceHintLabel() {
+				const h = this.practiceHint;
+				if (h.status === 'thinking') return 'Thinking\u2026';
+				if (h.status === 'ready' && h.level === 1 && h.allNodes) return 'Show the whole turn';
+				return 'Hint';
+			},
+			requestHint() {
+				if (!this.canHint || typeof this._practiceHint !== 'function') return;
+				const h = this.practiceHint;
+				if (h.status === 'thinking') return;
+				if (h.status === 'ready' && h.level === 1 && h.allNodes) {
+					this.practiceHint = Object.assign({}, h, { level: 2 });
+					this.practiceHintNodes = h.allNodes;
+					return;
+				}
+				if (h.status === 'ready' && h.level >= 2) return;
+				this._practiceHint();
+			},
+
+			// Review: practise the reviewed position against the AI.
+			practiceFromPosition() {
+				if (!this.canRematchFromPosition || this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				const sfn = typeof rematchSfnAt === 'function'
+					? rematchSfnAt(this.reviewSfns, this.reviewIndex) : this.reviewSfns[this.reviewIndex];
+				const p = practiceGameHref(sfn, this.aiMode || 'rust_medium', '');
+				if (p.error) { this.messageHistory.push(p.error); return; }
+				gameLive = false;
+				window.location.href = p.href;
 			},
 
 			// Review: open an online room from the reviewed position.
@@ -1141,6 +1194,9 @@ document.addEventListener('alpine:init', () => {
 				// First turn's pre-turn SFN — persisted so slim saved logs of
 				// games that began from an imported position can be replayed.
 				let _savedSetupSfn = null;
+				// A practice game (?practice=1), kept in the save.
+				let _savedPractice = false;
+				let _savedHints = 0;
 				// A game from a position (?sfn=, kept across resumes) and, when
 				// it is rated, its priced start (position-rating.js).
 				let _fromPosition = !!_startSfnAtLoad;
@@ -1186,6 +1242,10 @@ document.addEventListener('alpine:init', () => {
 							if (_save.setupSfn) {
 								_savedSetupSfn = _save.setupSfn;
 							}
+							if (_save.practice) {
+								_savedPractice = true;
+								_savedHints = _save.hintsUsed | 0;
+							}
 							if (_save.fromPosition) _fromPosition = true;
 							if (_save.tookBack) _tookBack = true;
 							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
@@ -1203,6 +1263,14 @@ document.addEventListener('alpine:init', () => {
 
 				_this.aiMode = aiMode || null;
 				_this.isAiGame = !scripted && !!aiMode;
+				// Practice: a game vs the AI only, never rated or uploaded.
+				const _urlParams = new URLSearchParams(window.location.search);
+				const _practice = !scripted && !analysis && !!aiMode
+					&& (_urlParams.get('practice') === '1' || _savedPractice);
+				_this.practiceMode = _practice;
+				_this.practiceHintsUsed = _savedHints;
+				// The side a practice game was started for (?side=), if any.
+				const _practiceSide = _practice && /^(red|blue)$/.test(_urlParams.get('side') || '') ? _urlParams.get('side') : null;
 				_this.gameVariant = gameVariant;
 				_this.clockOpt = clockOpt;
 
@@ -1211,6 +1279,7 @@ document.addEventListener('alpine:init', () => {
 						const u = new URL(window.location.href);
 						if (_gameId) u.searchParams.set('id', _gameId);
 						if (aiMode) u.searchParams.set('ai', aiMode);
+						if (_practice) u.searchParams.set('practice', '1');
 						if (gameVariant && gameVariant !== 'standard') u.searchParams.set('variant', gameVariant);
 						if (clockOpt && typeof GameClock !== 'undefined') {
 							const lbl = GameClock.label(clockOpt);
@@ -1288,7 +1357,7 @@ document.addEventListener('alpine:init', () => {
 					}
 				} catch (e) { /* sessionStorage blocked */ }
 				let _humanColor = puzzle ? puzzle.mover : tutorial ? 'blue'
-					: (_forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red'));
+					: (_forcedHumanColor || _savedHumanColor || _practiceSide || (Math.random() < 0.5 ? 'blue' : 'red'));
 				let _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
 				// A new game vs AI from a position: the player picks a side in
@@ -1302,7 +1371,7 @@ document.addEventListener('alpine:init', () => {
 						_playOn = raw === _startSfnAtLoad;
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn && !_playOn);
+				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn && !_playOn && !_practiceSide);
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
 				// up here on next page load and feed it into the engine so the new match
@@ -1682,6 +1751,8 @@ document.addEventListener('alpine:init', () => {
 						startPos: _startPos,
 						tookBack: _tookBack,
 						startSfn: _startSfnForUndo,
+						practice: _practice || undefined,
+						hintsUsed: _practice ? _this.practiceHintsUsed : undefined,
 						aiTelemetry: (aiMode && Object.keys(_aiTelemetryByPly).length > 0) ? {
 							v: 1,
 							engineVersion: (typeof RUST_ENGINE_VERSION !== 'undefined') ? RUST_ENGINE_VERSION : (_lastAiMeta && _lastAiMeta.engineVersion ? _lastAiMeta.engineVersion : null),
@@ -1771,7 +1842,7 @@ document.addEventListener('alpine:init', () => {
 						const h = raw ? JSON.parse(raw) : null;
 						if (h && h.sfn === _startSfnAtLoad) handed = h;
 					} catch (e) { /* sessionStorage blocked or bad payload */ }
-					const model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null;
+					const model = (!_practice && typeof loadPositionModel === 'function') ? await loadPositionModel() : null;
 					let info = handed && handed.info, source = 'review', failed = sfn ? '' : 'unreadable position';
 					if (!info && sfn) {
 						source = 'live';
@@ -1787,9 +1858,13 @@ document.addEventListener('alpine:init', () => {
 						offer.oddsText = describePositionOdds(_startPos.redWinProb) + ' with Very Hard AI play on both sides.';
 					}
 					// Ratings: wait for Firebase to restore the session, then read both records.
-					const _user = await firebaseAuthSettled();
+					const _user = _practice ? null : await firebaseAuthSettled();
 					const signedIn = !!(_user && !_user.isAnonymous);
-					if (!_startPos) {
+					if (_practice) {
+						_startPos = null;
+						offer.oddsText = '';
+						offer.note = 'Practice game: unrated, with hints. It is not saved to your profile.';
+					} else if (!_startPos) {
 						offer.note = 'Unrated: ' + (failed ? 'the engine could not evaluate this position (' + failed + ').'
 							: 'this position could not be priced.');
 					} else if (!signedIn) {
@@ -1995,6 +2070,7 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'whoseturndisplay') {
 						handleWhoseTurnEvent(rest);
+						if (_practice) _practiceOnTurnStart(rest.color);
 						if (puzzle) _puzzleOnWhoseTurn(rest);
 						return;
 					}
@@ -2514,6 +2590,72 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				// ---------------------------------------------------------------
+				// Practice hints (game.html?practice=1). At the start of each of
+				// the player's turns the position is noted in the form the AI
+				// searches (side to move); the Hint button searches it on a worker
+				// of its own (practiceHintEngine), checks the turn with the replay
+				// gate the AI's turns pass, and shows it in two steps: where the
+				// turn starts, then the whole turn. A hint is for the start of the
+				// turn: moves already made this turn are not taken into account.
+				// ---------------------------------------------------------------
+				let _practiceTurnSfn = null;
+				let _practiceGen = 0;
+				function _practiceOnTurnStart(color) {
+					if (color !== _humanColor || !_engineRef || !_engineRef.board) {
+						_practiceTurnSfn = null;
+						return;
+					}
+					let sfn = null;
+					try { sfn = boardToSfn(SimBoard.fromSigilBoard(_engineRef.board)); } catch (e) { sfn = null; }
+					// Reset Turn re-announces the same turn: keep its hint.
+					if (sfn && sfn === _practiceTurnSfn) return;
+					_practiceTurnSfn = sfn;
+					++_practiceGen;
+					_this.practiceHint = practiceHintIdle();
+					_this.practiceHintNodes = {};
+				}
+				_this._practiceHint = async function () {
+					const sfn = _practiceTurnSfn;
+					const gen = ++_practiceGen;
+					const mover = _humanColor;
+					const blocker = sfn ? (typeof liveAnalysisBlocker === 'function' ? liveAnalysisBlocker(sfn) : null)
+						: 'the position is not ready yet';
+					if (blocker) {
+						_this.practiceHint = Object.assign(practiceHintIdle(), { status: 'error', note: 'No hint: ' + blocker + '.' });
+						return;
+					}
+					_this.practiceHintsUsed += 1;
+					_persistCurrentGame(_this.currentSfn);
+					_this.practiceHint = Object.assign(practiceHintIdle(), { status: 'thinking', note: 'The engine is looking at the start of your turn\u2026' });
+					// Threefold repetition: the game's earlier turn starts count.
+					const log = (_engineRef && _engineRef._gameLog) || [];
+					const history = log.map(t => t.sfnBefore).filter(Boolean).concat([sfn]).slice(-64);
+					let res;
+					try {
+						res = await practiceHintEngine().search(Object.assign({
+							sfn, timeMs: PRACTICE_HINT_MS, ttBits: PRACTICE_HINT_TT_BITS, historySfns: history,
+							threads: typeof rustThreadCount === 'function' ? rustThreadCount() : 1,
+						}, RUST_REVIEW_SEARCH), (msg) => {
+							if (gen !== _practiceGen || typeof msg.depth !== 'number') return;
+							_this.practiceHint = Object.assign({}, _this.practiceHint, { depth: msg.depth });
+						});
+						if (!res || res.ok === false || !Array.isArray(res.actions) || !res.actions.length) {
+							throw new Error((res && res.error) || 'no turn found');
+						}
+						// The replay gate: the actions must reproduce the engine's own
+						// account of the position after them.
+						await rustActionsToTurn(sfnToSimBoard(sfn), mover, res.actions, res.expected_sfn);
+					} catch (e) {
+						if (gen !== _practiceGen) return;
+						_this.practiceHint = Object.assign(practiceHintIdle(), { status: 'error', note: 'The engine could not give a hint: ' + ((e && e.message) || e) });
+						return;
+					}
+					if (gen !== _practiceGen) return;
+					_this.practiceHint = practiceHintFromResult(res, mover);
+					_this.practiceHintNodes = _this.practiceHint.firstNodes;
+				};
+
+				// ---------------------------------------------------------------
 				// Tutorial (tutorial.html) and practice drills (drills.html). A
 				// lesson is a start position and the input tokens it expects, in
 				// order. Every click reaches the controller as a token (a node,
@@ -2578,6 +2720,7 @@ document.addEventListener('alpine:init', () => {
 							_this.tutorialHint = '';
 							_this.tutorialAnswer = step.right || '';
 							_this.tutorialStep += 1;
+							_this.tutorialReveal = false;
 							_tutorialShowStep();
 						} else {
 							_this.tutorialAnswer = '';
@@ -2598,7 +2741,10 @@ document.addEventListener('alpine:init', () => {
 					}
 					_this.tutorialAnswer = '';
 					_this._tutRemaining = r.remaining;
-					if (!r.remaining) _this.tutorialStep += 1;
+					if (!r.remaining) {
+						_this.tutorialStep += 1;
+						_this.tutorialReveal = false;
+					}
 					_tutorialShowStep();
 					return true;
 				}
@@ -2650,6 +2796,7 @@ document.addEventListener('alpine:init', () => {
 					_this.tutorialHint = hint;
 					_this.tutorialHintReset = true;
 					_this.tutorialAnswer = '';
+					_this.tutorialReveal = false;
 					_this._tutRemaining = null;
 					_this.winner = '';
 					_this.messageHistory = [];
@@ -3065,9 +3212,15 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 
-					// Save the finished game (and rate it, for AI games). Puzzles
-					// and analysis-board lines are never recorded.
-					if (!scripted && !analysis) {
+					// Save the finished game (and rate it, for AI games). Puzzles,
+					// analysis-board lines and practice games are never recorded:
+					// a practice game had the engine's hints on tap.
+					_this.practiceHint = practiceHintIdle();
+					_this.practiceHintNodes = {};
+					if (_practice) {
+						const n = _this.practiceHintsUsed;
+						_this.messageHistory.push('Practice game: unrated and not saved to your profile (' + n + ' hint' + (n === 1 ? '' : 's') + ' used).');
+					} else if (!scripted && !analysis) {
 						_recordFinishedGame(payload.winner, aiMode);
 					}
 				}
@@ -3416,6 +3569,77 @@ function tutorialLessonSfn(lesson) {
 	const score = lead === 0 ? 'tied' : (lead > 0 ? 'b' : 'r') + Math.min(3, Math.abs(lead));
 	return stones + '/' + lesson.spells.join(',') + ' ' + (tc % 2 === 0 ? 'b' : 'r') + ' ' + tc
 		+ ' ' + counts[0] + ':' + counts[1] + ' ' + locks[0] + ':' + locks[1] + ' -:- ' + score;
+}
+
+// Practice hints (game.html?practice=1): the search per hint, on a worker of
+// its own so the AI's table and the live analysis keep theirs. Module-level:
+// Alpine would wrap a Worker in a reactive proxy (see liveAnalysisEngine).
+const PRACTICE_HINT_MS = 3000;
+const PRACTICE_HINT_TT_BITS = 18;
+let _practiceHintWorker = null;
+function practiceHintEngine() {
+	if (!_practiceHintWorker) _practiceHintWorker = new RustEngineWorker();
+	return _practiceHintWorker;
+}
+
+function practiceHintIdle() {
+	return { status: 'idle', level: 0, depth: 0, text: '', firstText: '', evalText: '', note: '', firstNodes: {}, allNodes: null };
+}
+
+/**
+ * A hint from an engine result for `mover`: level 1 names (and rings) where the
+ * turn starts -- its first placement -- and level 2 the whole turn. A turn
+ * with no placement goes straight to level 2.
+ */
+function practiceHintFromResult(res, mover) {
+	const actions = res.actions || [];
+	const allNodes = typeof liveAnalysisHintNodes === 'function' ? liveAnalysisHintNodes(actions) : {};
+	const first = actions.find(a => a && (a.type === 'move' || a.type === 'blink' || a.type === 'hard_move') && a.node);
+	const info = typeof liveAnalysisInfo === 'function' ? liveAnalysisInfo(res, mover) : null;
+	const h = practiceHintIdle();
+	h.status = 'ready';
+	h.depth = res.depth || 0;
+	h.text = typeof describePuzzleActions === 'function' ? describePuzzleActions(actions) : '';
+	h.evalText = (info && typeof describePositionEval === 'function') ? describePositionEval(info) : '';
+	if (first) {
+		h.level = 1;
+		h.firstText = (first.type === 'hard_move' ? 'Start with a hard move onto ' : first.type === 'blink' ? 'Start by blinking to ' : 'Start with your move on ') + first.node + '.';
+		h.firstNodes = { [first.node]: true };
+		h.allNodes = allNodes;
+	} else {
+		h.level = 2;
+		h.firstNodes = allNodes;
+	}
+	return h;
+}
+
+/**
+ * The game.html link of a practice game against the AI: unrated, never
+ * uploaded, with hints. `sfn` is a loadable position (Export Position, the
+ * analysis board, a review) or '' for a new game; `tier` an AI tier; `side`
+ * 'red' | 'blue', or '' to choose in the side picker. Returns { href }, or
+ * { error } for a position the engine cannot play or that is already over.
+ */
+function practiceGameHref(sfn, tier, side) {
+	sfn = String(sfn || '').trim();
+	const q = new URLSearchParams();
+	if (sfn) {
+		let d = null;
+		try { d = sfnToDict(sfn); } catch (e) { d = null; }
+		if (!d || !d.stones || !Array.isArray(d.spell_names)) return { error: 'That position could not be read. Paste an SFN, e.g. from Export Position.' };
+		const v = d.variant || 'standard';
+		if (variantHasPentagon(v) || variantHasDuplicates(v) || variantHasScramble(v)) {
+			return { error: 'The AI cannot practise this variant (Cataclysm, Allow Duplicates or Scramble).' };
+		}
+		if (d.spell_names.some(n => isUnratedSpell(n))) return { error: 'The engine does not play the Panda or Experimental spells.' };
+		if (typeof liveAnalysisDecided === 'function' && liveAnalysisDecided(sfn)) return { error: 'That game is already over.' };
+		q.set('sfn', sfn);
+		if (v !== 'standard') q.set('variant', v);
+	}
+	q.set('ai', tier || 'rust_medium');
+	q.set('practice', '1');
+	if (side === 'red' || side === 'blue') q.set('side', side);
+	return { href: 'game.html?' + q.toString() };
 }
 
 /**
