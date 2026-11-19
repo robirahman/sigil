@@ -526,9 +526,10 @@ test('a scrub put off by a busy event is retried; an edition made during a delet
 	await db.ref('tournament_locks/' + id).set({ by: 'busy-writer', until: Date.now() + 60000 });
 	await db.ref('deleted_users/a').set(Date.now());
 	const updates = {};
-	const orig = T.scrubUser;
-	await orig(db, 'a', updates).catch(() => {});
+	const began = Date.now();
+	await T.scrubUser(db, 'a', updates);
 	assert.ok(updates['tournament_scrubs/a/' + id], 'queued');
+	assert.ok(Date.now() - began < 10000, 'a short wait, not the deletion\'s whole deadline');
 	await db.ref().update(updates);
 	assert.strictEqual((await val('tournament_players/' + id + '/a')).name, 'A');
 	await db.ref('tournament_locks/' + id).remove();

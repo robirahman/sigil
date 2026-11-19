@@ -69,6 +69,10 @@ const BERSERK_MIN_TURNS = 4;
 // Two players who just played may be paired again only after both waited this long.
 const REMATCH_WAIT_MS = 10000;
 const REPEAT_MS = { daily: DAY, weekly: 7 * DAY };
+// Account deletion's tournament scrub: the wait for one busy event, and the
+// whole scrub's budget (the rest is queued for the tick).
+const SCRUB_WAIT_MS = 3000;
+const SCRUB_BUDGET_MS = 20000;
 
 /** What a creator may ask for: players without the admin flag, and admins. */
 const LIMITS = {
@@ -1303,12 +1307,15 @@ async function scrubUser(db, uid, updates) {
 	const mine = (await db.ref('user_tournaments/' + uid).once('value')).val() || {};
 	updates['user_tournaments/' + uid] = null;
 	updates['tournament_limits/' + uid] = null;
+	// A busy event must not hold up the deletion (deleteUserData has 60 s):
+	// a short try each, within a total budget, and the rest is queued
+	// (tournament_scrubs, server-only) for the minute tick to retry. The
+	// pairing skips deleted accounts meanwhile.
+	const deadline = Date.now() + SCRUB_BUDGET_MS;
 	for (const tid of Object.keys(mine)) {
 		if (!/^[A-Za-z0-9_-]{1,40}$/.test(tid)) continue;
-		// An event busy for long must not fail the deletion: it is queued
-		// (tournament_scrubs, server-only) and the minute tick retries it.
-		// The pairing skips deleted accounts meanwhile.
-		if (!(await scrubEvent(db, uid, tid, 30000))) updates['tournament_scrubs/' + uid + '/' + tid] = Date.now();
+		const wait = Math.min(SCRUB_WAIT_MS, deadline - Date.now());
+		if (wait <= 0 || !(await scrubEvent(db, uid, tid, wait))) updates['tournament_scrubs/' + uid + '/' + tid] = Date.now();
 	}
 }
 
