@@ -24,6 +24,11 @@
  *   notifyChallenge - a web push to a player challenged from their profile.
  *   setVacation    - starts or ends the caller's correspondence vacation and
  *                    pauses their games (vacation.js).
+ *   api            - the HTTP API (api.js): public reads, and the bot API
+ *                    for BOT accounts, by personal API token.
+ *   createApiToken / revokeApiToken - the account page's API tokens
+ *                    (api-tokens.js: stored hashed).
+ *   upgradeToBot   - makes the caller's account a BOT account (bot-api.js).
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -31,7 +36,7 @@
  */
 
 const { onValueCreated, onValueWritten } = require('firebase-functions/v2/database');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onTaskDispatched } = require('firebase-functions/v2/tasks');
 const { getFunctions } = require('firebase-admin/functions');
@@ -45,6 +50,11 @@ const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
 const vacation = require('./vacation');
+const { createApiHandler } = require('./api');
+const { createToken, revokeToken, revokeUpdates, TokenError } = require('./api-tokens');
+const { upgradeToBot } = require('./bot-api');
+const { ApiError } = require('./public-api');
+const { sweepRateLimits } = require('./rate-limit');
 const crypto = require('crypto');
 
 initializeApp();
@@ -67,6 +77,12 @@ async function isFullAccount(uid) {
 	} catch (e) {
 		return false;
 	}
+}
+
+// A suspension running now (user_flags/{uid}/banUntil, set by an admin).
+async function isSuspendedIn(db, uid) {
+	const until = (await db.ref('user_flags/' + uid + '/banUntil').once('value')).val();
+	return typeof until === 'number' && until > Date.now();
 }
 
 // How long recordRoom waits after a room finishes for the clients' review
@@ -96,6 +112,14 @@ exports.recordRoom = onValueWritten({
 	const gameRef = db.ref('completed_games/' + gameId);
 	if ((await gameRef.child('winner').once('value')).exists()) return;
 	await gameRef.set(recordFromRoom(room, code, Date.now()));
+	// A bot's game is off its active-games list (no page of its own removes
+	// it, as a player's does).
+	for (const c of ['red', 'blue']) {
+		const u = room[c] && room[c].uid;
+		if (typeof u === 'string' && u && (await db.ref('bots/' + u).once('value')).exists()) {
+			await db.ref('user_active_games/' + u + '/' + code).remove().catch(() => {});
+		}
+	}
 });
 
 exports.rateGame = onValueCreated({
@@ -131,12 +155,11 @@ exports.rateGame = onValueCreated({
 		if (typeof p === 'number') await ref.set({ sfn, redWinProb: p, at: Date.now() });
 		return p;
 	};
-	// A suspension running now (user_flags/{uid}/banUntil, set by an admin).
-	const isSuspended = async (uid) => {
-		const until = (await db.ref('user_flags/' + uid + '/banUntil').once('value')).val();
-		return typeof until === 'number' && until > Date.now();
-	};
-	const verdict = await judgeGame(record, { room, isFullAccount, isSuspended, priceStart: cachedPrice, now: Date.now() });
+	const isSuspended = (uid) => isSuspendedIn(db, uid);
+	// A BOT account (bots/{uid}, upgradeToBot).
+	const isBot = async (uid) => typeof uid === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(uid)
+		&& (await db.ref('bots/' + uid).once('value')).exists();
+	const verdict = await judgeGame(record, { room, isFullAccount, isSuspended, isBot, priceStart: cachedPrice, now: Date.now() });
 	if (verdict.skip) return;
 
 	// One rating per game, however many records claim it (both clients of
@@ -368,7 +391,11 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		// as a deleted one's uid never comes back.
 		['user_flags/' + uid]: null,
 		['report_limits/' + uid]: null,
+		// API tokens (api-tokens.js), and a BOT account's marks.
+		['bots/' + uid]: null,
+		['bot_leaderboard/' + uid]: null,
 	};
+	Object.assign(updates, await revokeUpdates(db, uid, null));
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
 	// Blocks both ways: theirs of this account (through the blockedBy
@@ -468,6 +495,8 @@ exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION,
 	const ended = await expireRooms(db, now);
 	if (ended || paused) logger.info('expireClocks', { ended, paused });
 	await retryPendingAnalyses(db).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
+	// The HTTP API's old rate-limit windows.
+	await sweepRateLimits(db, now).catch((e) => logger.warn('sweepRateLimits', { error: String(e) }));
 });
 
 // Correspondence vacation: { days: 1..14 } starts one, { days: 0 } ends it
@@ -552,4 +581,83 @@ exports.notifyChallenge = onValueCreated({
 	const db = event.data.ref.root.database;
 	const res = await notifyChallenge(db, event.params.target, event.params.room, fcmSend);
 	if (res && res.sent + res.removed > 0) logger.info('notifyChallenge', Object.assign({ room: event.params.room }, res));
+});
+
+// ---- The HTTP API (api.js) and its tokens ----
+
+// Made on the first request, not when the deploy tooling loads this file.
+let apiHandler = null;
+
+exports.api = onRequest({
+	region: REGION,
+	invoker: 'public',
+	// Event streams stay open for minutes (bot-api.js STREAM_MS) and wait
+	// on the database, so one instance serves many; a bot's turn replays the
+	// game with the site's engine (turn-check.js), which wants a whole CPU.
+	cpu: 1,
+	memory: '1GiB',
+	concurrency: 40,
+	maxInstances: 3,
+	timeoutSeconds: 600,
+}, (req, res) => {
+	if (!apiHandler) {
+		apiHandler = createApiHandler({
+			db: database(),
+			engine: freshEngine,
+			isFullAccount,
+			isSuspended: (uid) => isSuspendedIn(database(), uid),
+		});
+	}
+	return apiHandler(req, res);
+});
+
+const tokenError = (e) => {
+	if (e instanceof TokenError) return new HttpsError(e.code, e.message);
+	return e;
+};
+
+// { name, scopes: ['read'] | ['read', 'bot'] } -> { id, token, ... }: the
+// token itself is in this answer only.
+exports.createApiToken = onCall({ region: REGION }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	if (!(await isFullAccount(auth.uid))) throw new HttpsError('permission-denied', 'Sign in with an account first (not a guest).');
+	if ((await database().ref('deleted_users/' + auth.uid).once('value')).exists()) throw new HttpsError('permission-denied', 'Account deleted.');
+	try {
+		const res = await createToken(database(), auth.uid, request.data || {}, Date.now());
+		logger.info('createApiToken', { uid: auth.uid, id: res.id, scopes: res.scopes });
+		return res;
+	} catch (e) {
+		throw tokenError(e);
+	}
+});
+
+exports.revokeApiToken = onCall({ region: REGION }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	try {
+		const done = await revokeToken(database(), auth.uid, request.data && request.data.id);
+		if (!done) throw new HttpsError('not-found', 'No such token.');
+		return { ok: true };
+	} catch (e) {
+		throw tokenError(e);
+	}
+});
+
+// { confirm: 'BOT' }: the caller's account becomes a BOT account, for good.
+exports.upgradeToBot = onCall({ region: REGION }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	if (!request.data || request.data.confirm !== 'BOT') throw new HttpsError('invalid-argument', 'Confirm with { confirm: "BOT" }.');
+	const db = database();
+	try {
+		const res = await upgradeToBot(db, auth.uid, { isFullAccount, isSuspended: (uid) => isSuspendedIn(db, uid) }, Date.now());
+		logger.info('upgradeToBot', { uid: auth.uid });
+		return res;
+	} catch (e) {
+		if (e instanceof ApiError) {
+			throw new HttpsError(e.status === 403 ? 'permission-denied' : 'failed-precondition', e.message, { reason: e.code });
+		}
+		throw e;
+	}
 });

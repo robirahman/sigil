@@ -493,3 +493,42 @@ test('a sequenced room orders its turns by their chain, ties in time included', 
 	const partial = { k3: turns.k3, k9: { color: 'blue', timestamp: 1 } };
 	assert.strictEqual(colors({ seq: true, turns: partial }), 'blue,red');
 });
+
+// ---- BOT accounts (bots/{uid}) ----
+
+test('a bot is rated against a human only when the human opted in, and never against the AI', async () => {
+	const isBot = async (uid) => uid === 'bob';
+	const room = onlineRoom();
+	// The bot's opponent did not choose a rated game against a bot.
+	assert.strictEqual((await judgeGame(onlineRecord(room), ctx({ room, isBot }))).reason, 'bot-opt-in');
+	// Their own challenge said so (rooms/{code}/rateBot, set by its creator).
+	const opted = Object.assign(onlineRoom(), { rateBot: true });
+	const v = await judgeGame(onlineRecord(opted), ctx({ room: opted, isBot }));
+	assert.deepStrictEqual([v.rated, v.winner], [true, ONLINE.winner]);
+	// Two bots: rated as the room says.
+	const both = await judgeGame(onlineRecord(room), ctx({ room, isBot: async () => true }));
+	assert.strictEqual(both.rated, true);
+	// A casual room stays casual.
+	const casual = Object.assign(onlineRoom(), { rateBot: true });
+	const rec = Object.assign(onlineRecord(casual), { ranked: false });
+	assert.strictEqual((await judgeGame(rec, ctx({ room: casual, isBot }))).reason, 'casual');
+	// A bot account's game against the site AI (a record its own client wrote).
+	const ai = await judgeGame(AI.N3WMQJ, ctx({ isBot: async (uid) => uid === AI.N3WMQJ.redUid || uid === AI.N3WMQJ.blueUid }));
+	assert.strictEqual(ai.reason, 'bot-vs-ai');
+});
+
+test('ratingUpdates puts a bot on the bots\' board, never the players\'', async () => {
+	const e = freshEngine();
+	const room = onlineRoom();
+	const v = await judgeGame(onlineRecord(room), ctx({ room, isBot: async () => true }));
+	const users = { red: { elo: 1000, gamesPlayed: 0, wins: 0, losses: 0, displayName: 'Alice' },
+		blue: { elo: 1000, gamesPlayed: 3, wins: 1, losses: 2, displayName: 'RandoBot', isBot: true } };
+	const u = ratingUpdates('G9', onlineRecord(room), v, users, { red: true, blue: false }, e);
+	assert.strictEqual(typeof u['leaderboard/alice/elo'], 'number');
+	assert.strictEqual(u['leaderboard/bob/elo'], undefined);
+	assert.strictEqual(u['bot_leaderboard/bob/elo'], u['users/bob/elo']);
+	assert.strictEqual(u['bot_leaderboard/bob/gamesPlayed'], 4);
+	assert.strictEqual(u['bot_leaderboard/bob/displayName'], 'RandoBot');
+	assert.strictEqual(u['user_games/alice/G9'].opponentIsBot, true);
+	assert.strictEqual(u['user_games/bob/G9'].opponentIsBot, false);
+});

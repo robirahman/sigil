@@ -58,29 +58,45 @@ function fakeDb(initial) {
 			if (Object.keys(chain[i]).length === 0) delete chain[i - 1][ps[i - 1]];
 		}
 	};
+	let pushes = 0;
 	const ref = (path) => {
 		const ps = parts(path);
 		return {
 			key: ps.length ? ps[ps.length - 1] : null,
 			child: (c) => ref(ps.concat(parts(c)).join('/')),
+			// A new child key, in creation order (like a push id).
+			push: () => ref(ps.concat(['-p' + String(++pushes).padStart(8, '0')]).join('/')),
 			async once() {
 				const v = read(get(ps));
 				return { val: () => v, exists: () => v !== null, key: ps[ps.length - 1] };
 			},
-			// orderByChild(c).endAt(x).limitToFirst(n), the one query the tests need.
+			// orderByChild(c) with endAt(x) and limitToFirst(n) / limitToLast(n)
+			// (numeric children only), the queries the tests need.
 			orderByChild(c) {
-				const q = { end: Infinity, n: Infinity };
+				const q = { end: Infinity, n: Infinity, last: false };
 				const api = {
 					endAt(x) { q.end = x; return api; },
 					limitToFirst(n) { q.n = n; return api; },
+					limitToLast(n) { q.n = n; q.last = true; return api; },
 					async once() {
 						const all = read(get(ps)) || {};
-						const kids = Object.entries(all).filter(([, v]) => v && typeof v[c] === 'number' && v[c] <= q.end)
-							.sort((a, b) => a[1][c] - b[1][c]).slice(0, q.n);
-						return { forEach: (f) => kids.forEach(([k, v]) => f({ key: k, val: () => v })) };
+						const sorted = Object.entries(all).filter(([, v]) => v && typeof v[c] === 'number' && v[c] <= q.end)
+							.sort((a, b) => a[1][c] - b[1][c]);
+						const kids = q.last ? sorted.slice(Math.max(0, sorted.length - q.n)) : sorted.slice(0, q.n);
+						return { forEach: (f) => kids.forEach(([k, v]) => f({ key: k, val: () => v })), numChildren: () => kids.length };
 					},
 				};
 				return api;
+			},
+			// limitToFirst(n) by key.
+			limitToFirst(n) {
+				return {
+					async once() {
+						const all = read(get(ps));
+						const kids = all && typeof all === 'object' ? Object.keys(all).sort().slice(0, n) : [];
+						return { exists: () => kids.length > 0, val: () => (kids.length ? Object.fromEntries(kids.map((k) => [k, all[k]])) : null) };
+					},
+				};
 			},
 			async set(v) { put(ps, v); },
 			async remove() { put(ps, null); },

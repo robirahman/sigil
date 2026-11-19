@@ -240,9 +240,12 @@
 				return;
 			}
 			const name = (await db().ref('users/' + c.from + '/displayName').once('value')).val() || (r[creator].displayName) || 'A player';
+			// A BOT account's challenge (the bot API) is tagged, and never rated.
+			const botSnap = await db().ref('bots/' + c.from).once('value').catch(() => null);
+			const isBot = !!(botSnap && botSnap.exists());
 			// Removed (declined, swept by a block) while we were reading.
 			if (uid !== me || !latest[room] || latest[room].from !== c.from) return;
-			challenges[room] = { room, from: c.from, name, tcLabel: tcLabel(r.timeControl), variantLabel: r.startSfn ? 'From a position' : variantLabel(r.variant) };
+			challenges[room] = { room, from: c.from, name, isBot, tcLabel: tcLabel(r.timeControl), variantLabel: r.startSfn ? 'From a position' : variantLabel(r.variant) };
 			renderBanner();
 			emit();
 		} catch (e) { /* unreadable room: no banner */ }
@@ -294,6 +297,7 @@
 			'.challenge-banner__text{flex:1 1 220px;}',
 			'.challenge-banner__text b{color:var(--color-text-bright,#fff);}',
 			'.challenge-banner button{padding:6px 12px;border-radius:6px;border:1px solid var(--color-border,#555);background:var(--color-surface,#333);color:inherit;font-family:inherit;cursor:pointer;}',
+			'.challenge-banner .bot-tag{display:inline-block;margin-left:.35em;padding:0 .35em;border-radius:3px;background:#6d5bd0;color:#fff;font-size:.7em;font-weight:bold;letter-spacing:.05em;vertical-align:middle;}',
 			'.challenge-banner .challenge-banner__accept{background:var(--color-success,#4caf50);border-color:var(--color-success,#4caf50);color:#fff;font-weight:bold;}',
 		].join('\n');
 		document.head.appendChild(st);
@@ -328,7 +332,14 @@
 			text.className = 'challenge-banner__text';
 			const who = document.createElement('b');
 			who.textContent = c.name;
-			text.append(who, ' challenges you: ' + c.tcLabel + ' · ' + c.variantLabel);
+			text.append(who);
+			if (c.isBot) {
+				const t = document.createElement('span');
+				t.className = 'bot-tag';
+				t.textContent = 'BOT';
+				text.append(t);
+			}
+			text.append(' challenges you: ' + c.tcLabel + ' · ' + c.variantLabel + (c.isBot ? ' · casual' : ''));
 			const yes = document.createElement('button');
 			yes.type = 'button';
 			yes.className = 'challenge-banner__accept';

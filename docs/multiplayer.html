@@ -242,6 +242,9 @@
 		.lobby-game__who a:hover { text-decoration: underline; }
 		.challenge-setup { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--color-accent); border-radius: 6px; background: var(--color-surface); font-family: 'Overlock', sans-serif; color: var(--color-text-warm); text-align: left; }
 		.challenge-setup button { margin-left: 8px; }
+		.challenge-setup__bot { margin: 6px 0 0; font-size: 0.9em; color: var(--color-text-dim); }
+		.challenge-setup__bot a, .lobby-bot-note a { color: inherit; }
+		.lobby-bot-note { margin: 12px 0; padding: 8px 12px; border: 1px solid #6d5bd0; border-radius: 6px; font-family: 'Overlock', sans-serif; color: var(--color-text-warm); }
 		.lobby-refresh { background: none; border: none; color: var(--color-border-hover); cursor: pointer; font-family: 'Overlock', sans-serif; text-decoration: underline; }
 		.share-link {
 			display: flex;
@@ -440,7 +443,7 @@
 					<template x-for="g in liveGames" x-bind:key="g.code">
 						<div class="lobby-game" x-bind:data-code="g.code">
 							<div>
-								<div class="lobby-game__who" x-text="g.redName + ' vs ' + g.blueName"></div>
+								<div class="lobby-game__who"><span x-text="g.redName"></span><template x-if="g.redBot"><span class="bot-tag">BOT</span></template> vs <span x-text="g.blueName"></span><template x-if="g.blueBot"><span class="bot-tag">BOT</span></template></div>
 								<div class="lobby-game__meta" x-text="[g.tcLabel, g.variantLabel, g.ratedLabel].join(' \u00b7 ')"></div>
 							</div>
 							<button class="lobby-game__btn" x-on:click="watchGame(g.code)" x-text="g.mine ? 'Resume' : 'Watch'">Watch</button>
@@ -475,15 +478,19 @@
 
 			<!-- A challenge (from a profile or the friends list): the form below sets it up -->
 			<div class="challenge-setup" x-show="challengeTarget" x-cloak>
-				Challenging <strong x-text="challengeTarget ? challengeTarget.name : ''"></strong>: choose the settings below, then send the challenge. Only they can join.
+				Challenging <strong x-text="challengeTarget ? challengeTarget.name : ''"></strong><template x-if="challengeTarget && challengeTarget.isBot"><span class="bot-tag">BOT</span></template>: choose the settings below, then send the challenge. Only they can join.
 				<button class="lobby-game__btn" x-on:click="clearChallenge()">Cancel</button>
+				<p class="challenge-setup__bot" x-show="challengeTarget && challengeTarget.isBot" x-cloak>
+					A bot: an engine playing through the <a href="api.html#bots">bot API</a>. Bots play timed games only. The game is casual unless you choose Rated, which counts it for your rating.
+				</p>
 			</div>
+			<p class="lobby-bot-note" x-show="authIsBot" x-cloak>This is a BOT account: it plays through the <a href="api.html#bots">bot API</a>, not from these pages.</p>
 
 			<!-- Time control selection -->
 			<div class="time-control">
 				<div class="time-control__label">Time Control</div>
 				<div class="time-control__options">
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'none' }" x-on:click="tcType = 'none'">None</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'none' }" x-on:click="tcType = 'none'" x-bind:disabled="!!(challengeTarget && challengeTarget.isBot)">None</button>
 					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'realtime' }" x-on:click="tcType = 'realtime'">Real-time</button>
 					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'correspondence' }" x-on:click="tcType = 'correspondence'">Correspondence</button>
 				</div>
@@ -531,7 +538,7 @@
 					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': !casualGame }" x-on:click="casualGame = false">Rated</button>
 					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': casualGame }" x-on:click="casualGame = true">Casual</button>
 				</div>
-				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin-top: 4px;" x-text="casualGame ? 'Casual: the result does not change either rating.' : 'Rated when both players are signed in and the variant is rated.'"></small>
+				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin-top: 4px;" x-text="casualGame ? 'Casual: the result does not change either rating.' : (challengeTarget && challengeTarget.isBot ? 'Rated: you choose to play this bot for rating.' : 'Rated when both players are signed in and the variant is rated.')"></small>
 			</div>
 
 			<label class="allow-spec" x-show="!challengeTarget">
@@ -698,6 +705,7 @@
 								<template x-if="!redUid">
 									<span class="name" x-text="redName"></span>
 								</template>
+								<template x-if="redIsBot"><span class="bot-tag" title="A bot: an engine playing through the Sigil bot API">BOT</span></template>
 								<span class="emote-bubble emote-bubble--red" aria-hidden="true" x-show="emoteBubble.red" x-text="emoteBubble.red" x-cloak></span>
 							</div>
 							<div class="timer">
@@ -746,6 +754,7 @@
 								<template x-if="!blueUid">
 									<span class="name" x-text="blueName"></span>
 								</template>
+								<template x-if="blueIsBot"><span class="bot-tag" title="A bot: an engine playing through the Sigil bot API">BOT</span></template>
 								<span class="emote-bubble emote-bubble--blue" aria-hidden="true" x-show="emoteBubble.blue" x-text="emoteBubble.blue" x-cloak></span>
 							</div>
 						</div>
@@ -1177,6 +1186,8 @@
 				_blockWatches: [],
 				challengeTarget: null,
 				_challengeRef: null,
+				// A BOT account signed in here: it plays through the bot API only.
+				authIsBot: false,
 				_pendingChallenge: null,
 
 				// A room from a position (?sfn=, from Import Position or a
@@ -1203,7 +1214,9 @@
 							await _authManager.loadProfile(firebase.database());
 							this.authDisplayName = _authManager.displayName;
 							this.authElo = _authManager.elo;
+							this.authIsBot = !!(_authManager.userProfile && _authManager.userProfile.isBot === true);
 						} else {
+							this.authIsBot = false;
 							this.authUser = null;
 							this.authDisplayName = 'Guest';
 							this.authElo = null;
@@ -1706,8 +1719,10 @@
 							} catch (e) {}
 						}
 						if (opts && opts.creatorSide) creatorColor = opts.creatorSide;
+						// A rated challenge to a bot is the human's opt-in (rooms/{code}/rateBot).
 						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition,
-							{ creatorColor, public: isPublic, casual: this.casualGame, invite: challenge ? challenge.uid : null });
+							{ creatorColor, public: isPublic, casual: this.casualGame, invite: challenge ? challenge.uid : null,
+								rateBot: !!(challenge && challenge.isBot && !this.casualGame) });
 						// Random is resolved by createRoom.
 						creatorColor = _firebaseSync.myColor;
 						if (challenge) {
@@ -1910,8 +1925,14 @@
 						try { name = (await firebase.database().ref('users/' + uid + '/displayName').once('value')).val(); } catch (e) { name = null; }
 						if (!name) { this.lobbyError = 'That player was not found.'; return; }
 					}
-					this.challengeTarget = { uid, name };
+					// A bot (bot-tag.js): timed, and casual unless the player opts in.
+					const isBot = window.SigilBots ? await SigilBots.isBot(uid) : false;
+					this.challengeTarget = { uid, name, isBot };
 					this.listPublic = false;
+					if (isBot) {
+						this.casualGame = true;
+						if (this.tcType === 'none') this.tcType = 'realtime';
+					}
 					this.$nextTick(() => {
 						const el = document.querySelector('.challenge-setup');
 						if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -2098,6 +2119,9 @@
 								last,
 								redName: (r.red && r.red.displayName) || 'Guest',
 								blueName: (r.blue && r.blue.displayName) || 'Guest',
+								// A bot's seat is written by the bot API (functions/bot-api.js).
+								redBot: !!(r.red && r.red.bot === true),
+								blueBot: !!(r.blue && r.blue.bot === true),
 								tcLabel: this._formatTimeControl(r.timeControl),
 								variantLabel: r.startSfn ? 'From a position' : this._variantLabel(r.variant),
 								ratedLabel: this._ratedLabel(r),
@@ -2357,6 +2381,7 @@
 	</script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 	<script src="static/scripts/report-dialog.js?v=35"></script>
+	<script src="static/scripts/bot-tag.js"></script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 </body>

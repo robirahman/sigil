@@ -171,6 +171,7 @@ async function replay(engine, spellNames, variant, startSfn, turns) {
  *   room          - rooms/{record.roomCode} (null if absent)
  *   isFullAccount - async uid => true for a signed-in, non-anonymous account
  *   isSuspended   - async uid => true while the player is suspended from rated play
+ *   isBot         - async uid => true for a BOT account (bots/{uid})
  *   priceStart    - async sfn => P(red wins) from that start, or null
  *   now           - server time (ms)
  * @returns {Promise<object>} { rated: true, winner, claimKey, startPos } or
@@ -208,6 +209,15 @@ async function judgeGame(record, ctx) {
 		if (!AI_UID.test(uid) && ctx.isSuspended && (await ctx.isSuspended(uid))) {
 			return Object.assign(unrated('suspended'), carry);
 		}
+	}
+	// A BOT account (bots/{uid}): rated against other bots, against a human
+	// only when the human opted in (rooms/{code}/rateBot, which only the
+	// room's creator writes, and the bot API never does), and never against
+	// the site's AI, whose moves a bot's own client could have made.
+	if (ctx.isBot) {
+		const bot = { red: !AI_UID.test(redUid) && (await ctx.isBot(redUid)), blue: !AI_UID.test(blueUid) && (await ctx.isBot(blueUid)) };
+		if ((bot.red || bot.blue) && aiSide) return Object.assign(unrated('bot-vs-ai'), carry);
+		if (bot.red !== bot.blue && !(ctx.room && ctx.room.rateBot === true)) return Object.assign(unrated('bot-opt-in'), carry);
 	}
 	// A game from a position pays by the position's price. The client's
 	// price is only a claim: the server prices the start itself
@@ -331,6 +341,7 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 		opponent: data[other(c)].displayName || (other(c) === 'red' ? 'Red' : 'Blue'),
 		opponentUid: uidOf[other(c)],
 		opponentIsAI: !!data[other(c)].isAI || AI_UID.test(uidOf[other(c)]),
+		opponentIsBot: data[other(c)].isBot === true,
 		color: c,
 		result: winner === c ? 'win' : 'loss',
 		fromPosition,
@@ -364,8 +375,14 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 		updates['users/' + uid + '/elo'] = after[c];
 		updates['users/' + uid + '/gamesPlayed'] = (d.gamesPlayed || 0) + 1;
 		updates['users/' + uid + '/' + (won ? 'wins' : 'losses')] = (d[won ? 'wins' : 'losses'] || 0) + 1;
-		updates['leaderboard/' + uid + '/elo'] = after[c];
-		updates['leaderboard/' + uid + '/gamesPlayed'] = (d.gamesPlayed || 0) + 1;
+		// A BOT account (users/{uid}/isBot, server-written) is ranked on the
+		// bots' board, never the players'.
+		const board = d.isBot === true && !AI_UID.test(uid) ? 'bot_leaderboard/' : 'leaderboard/';
+		updates[board + uid + '/elo'] = after[c];
+		updates[board + uid + '/gamesPlayed'] = (d.gamesPlayed || 0) + 1;
+		if (board === 'bot_leaderboard/' && typeof d.displayName === 'string' && d.displayName.length >= 1 && d.displayName.length <= 30) {
+			updates[board + uid + '/displayName'] = d.displayName;
+		}
 		// Inactive AIs are pruned from the leaderboard while their profiles
 		// stay: restore the name when one plays again.
 		if (!hasLbName[c] && d.isAI && AI_UID.test(uid) && typeof d.displayName === 'string'

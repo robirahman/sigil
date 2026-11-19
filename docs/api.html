@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
+	<link href="static/css/rules.css?v=35" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>API - Sigil Online</title>
+	<style>
+		.api-page code, .api-page pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+		.api-page pre { background: var(--color-surface-raised, #2b2b2b); color: var(--color-text-warm, #eee); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre; }
+		.api-page :not(pre) > code { background: var(--color-surface-raised, #2b2b2b); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+		.api-table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-family: 'Overlock', sans-serif; }
+		.api-table th, .api-table td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--color-border, #444); }
+		.api-table td:first-child { white-space: nowrap; }
+		.api-try { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+		.api-try input { flex: 1 1 260px; padding: 8px 10px; border-radius: 6px; border: 2px solid var(--color-border, #444); background: var(--color-surface-raised, #2b2b2b); color: var(--color-text-warm, #eee); font-family: ui-monospace, Menlo, Consolas, monospace; }
+		.api-try pre { flex-basis: 100%; max-height: 360px; overflow: auto; }
+		@media (max-width: 600px) { .api-table td:first-child { white-space: normal; } }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="rules-page api-page">
+			<nav class="rules-crumbs" aria-label="Breadcrumb"><a href="./">Home</a> / <span>API</span></nav>
+			<h1>Sigil API</h1>
+			<p>An HTTP API for programs: read players, games, the daily puzzle and the leaderboards, and connect an engine as a <a href="#bots">bot</a> that plays on the site. Everything is JSON. Every endpoint below starts at</p>
+			<pre id="api-base">https://us-central1-sigil-js.cloudfunctions.net/api</pre>
+			<nav class="rules-jump" aria-label="Sections">
+				<a href="#basics">Basics</a><a href="#tokens">Tokens</a><a href="#reads">Public data</a><a href="#bots">Bots</a><a href="#turns">Turn format</a><a href="#errors">Errors</a><a href="#oauth">Sign-in</a>
+			</nav>
+
+			<section class="rules-section" id="basics">
+				<h2>Basics</h2>
+				<ul>
+					<li>Requests are <code>GET</code> or <code>POST</code> (with a JSON body); answers are JSON, with <code>Content-Type: application/json</code>.</li>
+					<li>CORS is open to any origin: a web page can call the API directly. There are no cookies; a caller is known only by its token.</li>
+					<li>Public data needs no token. A token raises your rate limit and is needed for the bot API.</li>
+					<li>Everything the API reads is already public on the site. It never answers anything private: no e-mail addresses, no settings, and not the moves of games against the site's AI, which stay private to the player.</li>
+				</ul>
+				<h3>Rate limits</h3>
+				<table class="api-table">
+					<tr><th>Caller</th><th>Limit</th></tr>
+					<tr><td>No token</td><td>60 requests a minute per IP address</td></tr>
+					<tr><td>With a token</td><td>300 requests a minute per token</td></tr>
+					<tr><td>Event streams</td><td>20 opened a minute per token; at most 8 open at once</td></tr>
+					<tr><td>Bot challenges</td><td>10 a minute; at most 5 waiting at once</td></tr>
+					<tr><td>Bot turns</td><td>120 a minute per token, across all its games</td></tr>
+				</table>
+				<p>Every answer carries <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code> (Unix seconds). Over the limit you get <code>429</code> with <code>Retry-After</code> (seconds).</p>
+			</section>
+
+			<section class="rules-section" id="tokens">
+				<h2>Tokens</h2>
+				<p>Make a personal API token on your <a href="account.html#api-tokens">account page</a> (an account with a sign-in, not a guest). The token is shown once: the site keeps only a hash of it, so it cannot show it again. Revoke it there if it leaks; deleting your account revokes all of them. You may have 10.</p>
+				<p>Send it in the <code>Authorization</code> header:</p>
+				<pre>curl -H "Authorization: Bearer sgl_…" https://us-central1-sigil-js.cloudfunctions.net/api/v1/account</pre>
+				<table class="api-table">
+					<tr><th>Scope</th><th>Lets the token</th></tr>
+					<tr><td><code>read</code></td><td>Read the public endpoints at the token's rate limit.</td></tr>
+					<tr><td><code>bot</code></td><td>Play as the account through the <a href="#bots">bot API</a>. Only a BOT account can make one.</td></tr>
+				</table>
+				<p><code>GET /v1/account</code> answers who the token belongs to: <code>{ uid, name, isBot, scopes, token }</code> (<code>token</code> is the token's id, not the token).</p>
+			</section>
+
+			<section class="rules-section" id="reads">
+				<h2>Public data</h2>
+				<table class="api-table">
+					<tr><th>Endpoint</th><th>Answers</th></tr>
+					<tr><td><code>GET /v1/users/{uid}</code></td><td>A player's profile: name, rating (<code>elo</code>, games, wins, losses, provisional under 10 games), puzzle rating, best Puzzle Storm score, <code>isBot</code>, <code>isAI</code>.</td></tr>
+					<tr><td><code>GET /v1/users/by-name/{name}</code></td><td>The same, by display name.</td></tr>
+					<tr><td><code>GET /v1/users/{uid}/games</code></td><td>Their finished games, newest first: <code>?limit=</code> (up to 50), <code>?before=</code> (a timestamp: the <code>next</code> of the previous page), <code>?moves=1</code> for each online game's moves and positions (up to 10 games).</td></tr>
+					<tr><td><code>GET /v1/games/{room}</code></td><td>A game by its room code: players, result, clock, and every turn with the position (SFN) after it. Long-poll a game in play with <code>?after=N&amp;wait=S</code>: the answer comes when it has more than N turns, or after S seconds (up to 30).</td></tr>
+					<tr><td><code>GET /v1/puzzles/daily</code></td><td>Today's puzzle (UTC), the one on <a href="puzzles.html?daily=1">the puzzles page</a>. <code>?date=YYYY-MM-DD</code> for an earlier day, <code>?solutions=1</code> to include the solutions.</td></tr>
+					<tr><td><code>GET /v1/leaderboard</code></td><td><code>?board=rating</code> (default), <code>puzzles</code>, <code>storm</code> or <code>bots</code>; <code>?limit=</code> up to 100.</td></tr>
+				</table>
+				<p>A game in play whose players turned spectators off is not shown until it ends.</p>
+				<h3>Examples</h3>
+				<pre>curl https://us-central1-sigil-js.cloudfunctions.net/api/v1/puzzles/daily</pre>
+				<pre>{
+  "date": "2026-11-19", "id": "-OpR7…", "number": 412,
+  "url": "https://sigilbattle.com/puzzles.html?daily=1",
+  "kind": "mate", "mate": 2, "mover": "red",
+  "sfn": "rrrbrrbbrb.r.b…/Bewitch,Seal_of_Lightning,… r 15 0:0 -:- -:- b1",
+  "variant": "standard", "difficulty": 3, "tags": ["Cast: Slash"],
+  "rating": { "rating": 1512, "plays": 88 }
+}</pre>
+				<pre>curl https://us-central1-sigil-js.cloudfunctions.net/api/v1/games/ABC234</pre>
+				<pre>{
+  "room": "ABC234", "status": "finished", "variant": "standard", "rated": true,
+  "timeControl": { "type": "realtime", "initialTime": 300000, "increment": 3000 },
+  "players": { "red":  { "uid": "…", "name": "Ann", "isBot": false, "isAI": false },
+               "blue": { "uid": "…", "name": "RandoBot", "isBot": true, "isAI": false } },
+  "spellNames": ["Flourish", "Seal_of_Lightning", …],
+  "winner": "red", "endReason": "play",
+  "startPosition": "…",
+  "moves": [ { "n": 1, "color": "red", "actions": ["a2", "pass"], "sfn": "… r 1 …" }, … ],
+  "sfn": "…"
+}</pre>
+				<h3>Try it</h3>
+				<div class="api-try">
+					<input id="api-try-path" type="text" value="/v1/leaderboard?limit=5" aria-label="Endpoint" />
+					<button class="rules-btn" id="api-try-go" type="button">GET</button>
+					<pre id="api-try-out" aria-live="polite"></pre>
+				</div>
+			</section>
+
+			<section class="rules-section" id="bots">
+				<h2>Bots</h2>
+				<p>A bot is an engine that plays on the site under a BOT account, like a bot on Lichess.</p>
+				<ul>
+					<li><strong>Making one.</strong> Make a new account, then on its <a href="account.html#bot-account">account page</a> choose <em>Make this a BOT account</em>. Only an account that has never played a game can become a bot, and it cannot be undone. Then make a token with the <em>Bot play</em> scope there.</li>
+					<li><strong>Tagged.</strong> A bot carries a <span class="bot-tag">BOT</span> tag wherever its name is shown.</li>
+					<li><strong>Through the API only.</strong> A BOT account cannot play from the site's pages: the database refuses its moves, seats, lobby entries and challenges. Its moves reach a game only through this API, which checks each one against the game's rules first, with the same replay the site's rating uses.</li>
+					<li><strong>Ratings.</strong> Bots are ranked on their own <a href="leaderboard.html?tab=bots">bots' leaderboard</a>, never the players'. Two bots play rated when the challenger asks. A game against a human is rated only when the human chose <em>Rated</em> in their own challenge to the bot; a bot's challenge to a human is always casual. A bot is never rated against the site's AI.</li>
+					<li><strong>Timed games only.</strong> Real-time or correspondence: a bot that stops answering loses on time.</li>
+				</ul>
+				<h3>Endpoints</h3>
+				<p>All need a token with the <code>bot</code> scope.</p>
+				<table class="api-table">
+					<tr><th>Endpoint</th><th>Does</th></tr>
+					<tr><td><code>GET /v1/bot/events</code></td><td>An event stream (Server-Sent Events) of your challenges and games: <code>challenge</code>, <code>challengeCanceled</code>, <code>gameStart</code>, <code>gameFinish</code>. Open challenges and games in play come first.</td></tr>
+					<tr><td><code>GET /v1/bot/games/{room}/stream</code></td><td>One game's stream: <code>gameFull</code> (as <code>GET /v1/games/{room}</code>, plus <code>you</code>, your colour), then <code>gameState</code> after every turn and at the end: <code>{ status, moves, sfn, toMove, clock, winner, endReason }</code>.</td></tr>
+					<tr><td><code>POST /v1/bot/games/{room}/turn</code></td><td>Play your turn: <code>{ "actions": ["a2", "pass"] }</code> (see <a href="#turns">the turn format</a>). Answers <code>{ ok, turn, sfn, gameOver, winner }</code>.</td></tr>
+					<tr><td><code>POST /v1/bot/games/{room}/resign</code></td><td>Resign.</td></tr>
+					<tr><td><code>POST /v1/bot/games/{room}/abort</code></td><td>Abort, before both sides have moved.</td></tr>
+					<tr><td><code>POST /v1/bot/challenges/{room}/accept</code></td><td>Accept a challenge (you take the open seat and the game starts).</td></tr>
+					<tr><td><code>POST /v1/bot/challenges/{room}/decline</code></td><td>Decline one, or withdraw your own.</td></tr>
+					<tr><td><code>POST /v1/bot/challenge/{user}</code></td><td>Challenge a player (uid or display name): <code>{ "timeControl": { "type": "realtime", "initialTime": 300000, "increment": 3000 }, "variant": "standard", "color": "random", "rated": true }</code>. Correspondence: <code>{ "type": "correspondence", "moveTimeout": 86400000 }</code>. Times are in ms. Answers <code>{ room, color, rated, url }</code>.</td></tr>
+				</table>
+				<p>A stream sends a <code>: ping</code> comment every 20 seconds, and ends after about 9 minutes with a <code>reconnect</code> event: open it again. If you cannot hold a stream open, poll <code>GET /v1/games/{room}?after=N&amp;wait=25</code> instead.</p>
+				<pre>event: gameStart
+data: {"room":"K7QXMP","color":"blue","opponent":{"uid":"…","name":"Ann"}}
+
+event: gameState
+data: {"room":"K7QXMP","status":"playing","moves":[{"n":1,"color":"red","actions":["a2","pass"],"sfn":"…"}],"sfn":"…","toMove":"blue","clock":{"red":297000,"blue":300000,"at":1795060000000},"winner":null,"endReason":null,"you":"blue"}</pre>
+				<h3>A reference bot</h3>
+				<p><a href="https://github.com/robirahman/sigil/blob/main/tools/sigil-bot.js"><code>tools/sigil-bot.js</code></a> (Node 22, no dependencies) plays random legal turns. Start from it: replace its <code>randomTurn()</code> with your engine's choice.</p>
+				<pre>node tools/sigil-bot.js --token sgl_… --accept all
+node tools/sigil-bot.js --token sgl_… --challenge OtherBot --tc 5+3 --rated --games 1</pre>
+			</section>
+
+			<section class="rules-section" id="turns">
+				<h2>Turn format</h2>
+				<p>A turn is the list of clicks a player makes on the site, in order: the same tokens the site's own pages send to each other in an online game. Each answers what the game asks next:</p>
+				<ul>
+					<li>a node name (<code>a1</code> … <code>c13</code>): the move, a stone to sacrifice, a stone to keep after a cast, a spell's target, where to push a stone;</li>
+					<li>a spell name, as in the game's <code>spellNames</code> (<code>Fireblast</code>, <code>Seal_of_Spring</code>): cast it;</li>
+					<li><code>dash</code>, <code>pass</code> (end the turn), <code>skip_providence</code>, <code>submit</code> (Rock Slide).</li>
+				</ul>
+				<p>Examples: <code>["a2", "pass"]</code> (move to a2, end the turn); <code>["b4", "dash", "a1", "a3", "b5", "pass"]</code> (move, dash sacrificing a1 and a3, dash-move to b5); <code>["c7", "Fireblast", "c2", "pass"]</code> (move, cast, its target).</p>
+				<p>The server plays the turn with the site's rules engine and refuses it unless the game takes every token and the turn ends exactly at the last one. The engine is in the site's source: <code>docs/static/scripts/engine/</code> (<code>game-controller.js</code> asks the questions). The easiest way to make legal turns is to drive that controller yourself, as the reference bot does.</p>
+			</section>
+
+			<section class="rules-section" id="errors">
+				<h2>Errors</h2>
+				<p>An error answers with a status code and <code>{ "error": code, "message": text }</code>.</p>
+				<table class="api-table">
+					<tr><th>Status</th><th>Codes</th></tr>
+					<tr><td>400</td><td><code>bad-request</code>, <code>bad-actions</code> (a token that is not one), <code>illegal-turn</code> (the rules refuse the turn; the message says why), <code>untimed</code></td></tr>
+					<tr><td>401</td><td><code>unauthenticated</code>: no token, or one revoked or never made</td></tr>
+					<tr><td>403</td><td><code>missing-scope</code>, <code>not-a-bot</code>, <code>not-your-game</code>, <code>not-your-challenge</code>, <code>blocked</code>, <code>private-game</code></td></tr>
+					<tr><td>404</td><td><code>not-found</code></td></tr>
+					<tr><td>409</td><td><code>not-your-turn</code>, <code>not-playing</code>, <code>conflict</code> (the game moved on: read it again), <code>time-out</code> (your clock ran out: the game is lost on time), <code>not-waiting</code>, <code>too-late</code></td></tr>
+					<tr><td>429</td><td><code>rate-limited</code>, <code>too-many-streams</code>, <code>too-many-challenges</code></td></tr>
+				</table>
+			</section>
+
+			<section class="rules-section" id="oauth">
+				<h2>Signing in to other apps</h2>
+				<p>"Sign in with Sigil" for other apps (OAuth) is not available yet. Until it is, an app can ask its users for a <code>read</code> token, which shows nothing that is not public.</p>
+			</section>
+		</div>
+	</div>
+
+	<script>
+	(() => {
+		const base = document.getElementById('api-base').textContent.trim();
+		const out = document.getElementById('api-try-out');
+		document.getElementById('api-try-go').addEventListener('click', async () => {
+			const p = document.getElementById('api-try-path').value.trim();
+			if (!/^\/v1(\/|$)/.test(p)) { out.textContent = 'An endpoint starting with /v1'; return; }
+			out.textContent = '…';
+			try {
+				const res = await fetch(base + p);
+				const text = await res.text();
+				let shown = text;
+				try { shown = JSON.stringify(JSON.parse(text), null, 2); } catch (e) { /* not JSON */ }
+				out.textContent = res.status + '\n' + shown;
+			} catch (e) {
+				out.textContent = 'Could not reach the API (' + (e.message || e) + ').';
+			}
+		});
+	})();
+	</script>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
+</body>
+</html>

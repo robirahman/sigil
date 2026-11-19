@@ -191,8 +191,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Platform
 
-- [ ] **Add a public API with OAuth** (sign in to other apps with a site account).
-- [ ] **Add bot accounts** so outside engines can play on the site.
+- [ ] **Add a public API with OAuth** (sign in to other apps with a site account). Partly done: the HTTP API (`functions/api.js`, `docs/api.html`): public reads (profiles, recent games with moves and SFNs, a game by room, the daily puzzle, leaderboards), JSON, open CORS, per-token / per-IP rate limits, personal tokens made and revoked on the account page (stored hashed, scopes `read` / `bot`); missing: OAuth ("sign in with Sigil" for other apps), design note in the PR.
+- [x] **Add bot accounts** so outside engines can play on the site. Done: an account with no games can become a BOT account (account page, irreversible; BOT tag on profiles, game seats, Watch Live, challenges; its own Bots leaderboard); the bot API (event and game streams, turns checked by the rating replay, resign, abort, challenges) is its only way to play (the rules refuse a bot's writes); rated against a human only when the human picks Rated; reference bot `tools/sigil-bot.js`.
 - [ ] **Add an embeddable board widget** for games and puzzles.
 - [ ] **Add GIF / image export** of games and positions.
 - [ ] **Add a screen-reader mode** and full keyboard control.

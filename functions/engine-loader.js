@@ -50,6 +50,9 @@ function _compiled() {
 	positionExpectedScore, gameStartRedWinProb,
 	// The review panel's reader of game_evals documents (analysis.js tests).
 	rustEvalsToReview, _reviewPositions,
+	// The bot API (turn-check.js, bot-api.js): the spell draw of a room a
+	// bot creates, and the names a turn's tokens may use.
+	GameController, generateSpellList, normalizeSpellNames, variantHasDuplicates, sfnToDict,
 };`);
 	_script = new vm.Script(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });
 	return _script;
