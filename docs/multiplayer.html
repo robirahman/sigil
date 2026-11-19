@@ -1123,6 +1123,9 @@
 		// Store sync and auth outside Alpine to avoid Proxy wrapping Firebase objects
 		let _firebaseSync = null;
 		let _authManager = null;
+		// Matchmaking's database refs (our ticket, its bucket's count, the
+		// match's room), likewise kept out of Alpine.
+		const _mmRefs = { ticket: null, count: null, room: null };
 
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
@@ -1205,12 +1208,9 @@
 				mm: null,
 				mmCount: 0,
 				mmNow: Date.now(),
-				_mmRef: null,
 				_mmPing: null,
 				_mmTick: null,
 				_mmTimer: null,
-				_mmCountRef: null,
-				_mmRoomRef: null,
 
 				// Friends (friends.js): the players we follow, with presence;
 				// players blocked either way (their open games are hidden);
@@ -1283,7 +1283,7 @@
 							this._renderOpenGames();
 						});
 					}
-					window.addEventListener('pagehide', () => { if (this.mm && this._mmRef) this._mmRef.remove().catch(() => {}); });
+					window.addEventListener('pagehide', () => { if (this.mm && _mmRefs.ticket) _mmRefs.ticket.remove().catch(() => {}); });
 
 					const urlChallenge = new URLSearchParams(window.location.search).get('challenge');
 					// Set up once the sign-in is known (it can take longer than
@@ -2458,17 +2458,17 @@
 						return;
 					}
 					ref.onDisconnect().remove();
-					this._mmRef = ref;
+					_mmRefs.ticket = ref;
 					this._mmPing = setInterval(() => { ref.update({ ping: stamp }).catch(() => {}); }, SigilMatch.C.PING_MS);
 					this._mmTick = setInterval(() => { this.mmNow = Date.now(); }, 1000);
 					ref.on('value', (snap) => this._onTicket(snap.val()), () => {});
-					this._mmCountRef = db.ref('mm_counts/' + bucket);
-					this._mmCountRef.on('value', (snap) => { this.mmCount = snap.val() || 0; }, () => {});
+					_mmRefs.count = db.ref('mm_counts/' + bucket);
+					_mmRefs.count.on('value', (snap) => { this.mmCount = snap.val() || 0; }, () => {});
 				},
 
 				_onTicket(t) {
 					const mm = this.mm;
-					if (!mm || !this._mmRef) return;
+					if (!mm || !_mmRefs.ticket) return;
 					if (!t) {
 						// Withdrawn by the server (not stamped for too long) or another tab.
 						if (mm.status === 'queue') {
@@ -2532,7 +2532,7 @@
 						}, SigilMatch.C.HOST_WAIT_MS);
 					} else {
 						const roomRef = db.ref('mm_matches/' + id + '/room');
-						this._mmRoomRef = roomRef;
+						_mmRefs.room = roomRef;
 						this._mmTimer = setTimeout(() => {
 							if (this.mm && this.mm.matchId === id && this.phase === 'lobby') this._requeue(this.mm, mm.opp.name + ' did not start the game; looking again.');
 						}, SigilMatch.C.GUEST_WAIT_MS);
@@ -2540,7 +2540,7 @@
 							const code = snap.val();
 							if (!code || !this.mm || this.mm.matchId !== id) return;
 							roomRef.off();
-							this._mmRoomRef = null;
+							_mmRefs.room = null;
 							this.joinCode = code;
 							try {
 								await this.joinRoom(false, true, true);
@@ -2583,12 +2583,12 @@
 					clearInterval(this._mmTick);
 					clearTimeout(this._mmTimer);
 					this._mmPing = this._mmTick = this._mmTimer = null;
-					if (this._mmCountRef) this._mmCountRef.off();
-					this._mmCountRef = null;
-					if (this._mmRoomRef) this._mmRoomRef.off();
-					this._mmRoomRef = null;
-					const ref = this._mmRef;
-					this._mmRef = null;
+					if (_mmRefs.count) _mmRefs.count.off();
+					_mmRefs.count = null;
+					if (_mmRefs.room) _mmRefs.room.off();
+					_mmRefs.room = null;
+					const ref = _mmRefs.ticket;
+					_mmRefs.ticket = null;
 					if (ref) {
 						ref.off();
 						ref.onDisconnect().cancel().catch(() => {});

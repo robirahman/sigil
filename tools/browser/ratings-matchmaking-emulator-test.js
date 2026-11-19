@@ -80,6 +80,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 
 	const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-proxy-server'] });
 	let ok = true;
+	let pageErrors = 0;
 	const check = (label, cond, extra) => { console.log((cond ? 'ok   ' : 'FAIL ') + label, extra === undefined ? '' : JSON.stringify(extra)); ok = ok && !!cond; };
 	const newPage = async () => {
 		const ctx = await browser.createBrowserContext();
@@ -92,7 +93,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 			if (!url.startsWith('https://www.gstatic.com/firebasejs/')) return req.continue();
 			sdk(url).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }), () => req.continue());
 		});
-		p.on('pageerror', (e) => console.log('pageerror:', e.message));
+		p.on('pageerror', (e) => { console.log('pageerror:', e.message, (e.stack || '').split('\n').slice(1, 3).join(' | ')); pageErrors++; });
 		return p;
 	};
 	const L = '[x-data^="multiplayerLobby"]';
@@ -147,7 +148,8 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		const qa = await lobby(alice);
 		check('Alice waits in the 5+0 rated pool', queued && qa.mm.bucket === 'rt-300-0~standard~r', qa.mm);
 		check('her status shows her rating window', /rated 1150–1850 \(5\+0, Standard, Rated\)/.test(qa.mmText), qa.mmText);
-		const ticket = await dbGet('mm_tickets/' + alice._uid);
+		let ticket = null;
+		for (let i = 0; i < 20 && !ticket; i++) { ticket = await dbGet('mm_tickets/' + alice._uid); if (!ticket) await sleep(300); }
 		check('her ticket is on the server', ticket && ticket.bucket === 'rt-300-0~standard~r' && typeof ticket.at === 'number', ticket);
 		await sleep(300);
 		await call(bob, 'findMatch');
@@ -155,8 +157,8 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		const la = await lobby(alice);
 		const lb = await lobby(bob);
 		check('the server paired them and the game started for both', pa && pb && la.roomCode === lb.roomCode, { a: la.phase, b: lb.phase, err: [la.err, lb.err] });
-		const room = await dbGet('rooms/' + la.roomCode);
-		const creator = room && (room.creatorColor === 'blue' ? room.blue : room.red);
+		const room = la.roomCode ? await dbGet('rooms/' + la.roomCode) : null;
+		const creator = (room && (room.creatorColor === 'blue' ? room.blue : room.red)) || {};
 		check('Alice (waited longer) hosts an invite room for Bob', room && creator.uid === alice._uid && room.invite === bob._uid && room.public !== true, room && { creator: creator.uid, invite: room.invite });
 		check('the room is the pool\'s game, rated', room && room.ranked === true && room.casual !== true && room.variant === 'standard'
 			&& room.timeControl.type === 'realtime' && room.timeControl.initialTime === 300000 && room.timeControl.increment === 0,
@@ -178,7 +180,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		await call(g2, 'findMatch');
 		const [q1, q2] = await Promise.all([phaseIs(g1, 'playing', 90000), phaseIs(g2, 'playing', 90000)]);
 		const r1 = await lobby(g1);
-		const groom = q1 && q2 ? await dbGet('rooms/' + r1.roomCode) : null;
+		const groom = q1 && q2 && r1.roomCode ? await dbGet('rooms/' + r1.roomCode) : null;
 		check('two guests are paired into a casual game', groom && groom.casual === true && groom.ranked === false, groom && { casual: groom.casual, ranked: groom.ranked });
 
 		// ---- 3. Open games: the creator's pool rating, provisional, with its range.
@@ -189,7 +191,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		const frank = await guest();
 		const row = await until(frank, (sel) => {
 			const g = Alpine.$data(document.querySelector(sel)).openGames.find((x) => x.creatorName === 'Erin');
-			return g && g.creatorRating ? g : null;
+			return g && g.creatorRating ? { creatorRating: g.creatorRating, creatorRange: g.creatorRange } : null;
 		}, L, 20000);
 		check('an open game shows the creator\'s Blitz rating, "?" and its 95% range', row && row.creatorRating === '1500?' && row.creatorRange === '1000–2000', row);
 		const shown = await frank.evaluate(() => [...document.querySelectorAll('.lobby-list--open .lobby-game__who')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
@@ -199,7 +201,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		const eloRow = await until(eloPage, (sel) => {
 			const l = Alpine.$data(document.querySelector(sel));
 			const g = l.openGames.find((x) => x.creatorName === 'Erin');
-			return l.ratingMode === 'elo' && g && g.creatorRating !== null ? g : null;
+			return l.ratingMode === 'elo' && g && g.creatorRating !== null ? { creatorRating: g.creatorRating, creatorRange: g.creatorRange } : null;
 		}, L, 20000);
 		check('with ?ratings=elo the list shows the Elo, no range', eloRow && eloRow.creatorRating === 1500 && !eloRow.creatorRange, eloRow);
 
@@ -256,6 +258,7 @@ const dbGet = async (p) => (await fetch(`http://${DB_HOST}/${p}.json?ns=${NS}`, 
 		console.log('FAIL exception', e && e.stack || e);
 		ok = false;
 	}
+	check('no page errors', pageErrors === 0, pageErrors);
 	await browser.close();
 	console.log(ok ? 'ALL OK' : 'SOME CHECKS FAILED');
 	process.exit(ok ? 0 : 1);
