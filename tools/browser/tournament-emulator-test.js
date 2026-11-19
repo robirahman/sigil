@@ -110,6 +110,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		});
 		p.on('pageerror', (e) => { errors.push(name + ': ' + e.message); console.log('pageerror (' + name + '):', e.message); });
 		p.on('dialog', (d) => d.accept());
+		p.on('console', (m) => { if (m.type() === 'error' && /berserk|Sync/i.test(m.text())) console.log('console (' + name + '):', m.text()); });
 		return p;
 	};
 	const open = async (p, url, sel) => {
@@ -120,10 +121,13 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 	const account = async (name, elo) => {
 		const p = await newPage(name);
 		await open(p, 'tournaments.html', '[x-data^="tournamentsPage"]');
-		await p.evaluate(async (n, e) => {
+		const uid = await p.evaluate(async (n) => {
 			const c = await firebase.auth().createUserWithEmailAndPassword(n.toLowerCase() + '@example.test', 'secret123');
-			await firebase.database().ref('users/' + c.user.uid).set({ displayName: n, elo: e, gamesPlayed: 0, wins: 0, losses: 0, created: Date.now() });
-		}, name, elo);
+			await firebase.database().ref('users/' + c.user.uid).set({ displayName: n, elo: 1000, gamesPlayed: 0, wins: 0, losses: 0, created: Date.now() });
+			return c.user.uid;
+		}, name);
+		// A rating a new profile cannot start at (the rules), as the server would set it.
+		await rest('PATCH', 'users/' + uid, { elo });
 		await p.waitForFunction(() => !!(Alpine.$data(document.querySelector('[x-data^="tournamentsPage"]')).authUser), { timeout: 20000 });
 		return p;
 	};
@@ -189,6 +193,14 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		check('the game page shows the event and Berserk, no Abort / Take back / +15 s', bar.label === 'Arena: Browser Arena' && bar.berserk && !bar.abort && !bar.takeback && !bar.gift, bar);
 
 		// ---- 4. Red berserks; blue resigns.
+		const top = await red.$eval('[data-testid="berserk"]', (el) => {
+			el.scrollIntoView({ block: 'center' });
+			const r = el.getBoundingClientRect();
+			const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+			return { onTop: hit === el, hit: hit ? hit.tagName + '.' + hit.className : null, rect: [r.x, r.y, r.width, r.height] };
+		});
+		if (process.env.TOUR_SHOTS) await red.screenshot({ path: process.env.TOUR_SHOTS + '/game-bar.png' });
+		check('the Berserk button can be clicked (nothing covers it)', top.onTop, top);
 		await red.click('[data-testid="berserk"]');
 		const bz = await until(async () => { const r = await rest('GET', 'rooms/' + code); return r && r.berserk && r.berserk.red === true ? r : null; }, 15000);
 		check('red berserked: the room says so and the clock halved', bz && bz.timer && bz.timer.red <= 90000, bz && bz.timer);
