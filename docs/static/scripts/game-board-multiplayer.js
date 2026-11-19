@@ -318,7 +318,7 @@ document.addEventListener('alpine:init', () => {
 				this.premoveNote = note || '';
 			},
 			premoveLabel() {
-				return this.premove ? (typeof this.nodeLabel === 'function' ? this.nodeLabel(this.premove) : this.premove) : '';
+				return this.premove || '';
 			},
 
 			// Preset emotes (SIGIL_EMOTES in firebase-sync.js): a picker beside
