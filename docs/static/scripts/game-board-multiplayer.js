@@ -294,6 +294,33 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleGiveTime() { if (this.canGiveTime) this.sendEvent('give_time'); },
 
+			// Pre-move: during the opponent's turn a click on a node queues
+			// this side's regular placement (never a dash or a cast). When the
+			// placement prompt of our turn arrives it is played through
+			// handleNodeClick, the path a click takes, if the node is still a
+			// legal placement; otherwise it is dropped with a note. Clicking
+			// the queued node again (or Escape) cancels it.
+			premove: '',
+			premoveNote: '',
+			get canPremove() {
+				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode
+					&& !!this.myColor && !!this.whoseTurn && this.whoseTurn !== this.myColor
+					&& (typeof SigilSettings === 'undefined' || SigilSettings.get('premoves') !== false);
+			},
+			togglePremove(node) {
+				if (!this.canPremove || !node || this.nodes[node] === 'X') return;
+				this.premove = this.premove === node ? '' : node;
+				this.premoveNote = '';
+			},
+			cancelPremove(note) {
+				if (!this.premove && !note) return;
+				this.premove = '';
+				this.premoveNote = note || '';
+			},
+			premoveLabel() {
+				return this.premove ? (typeof this.nodeLabel === 'function' ? this.nodeLabel(this.premove) : this.premove) : '';
+			},
+
 			// Preset emotes (SIGIL_EMOTES in firebase-sync.js): a picker beside
 			// the clocks for the seated players, a bubble under the sender's
 			// name for SIGIL_EMOTE_BUBBLE_MS, and a polite live-region line.
@@ -923,6 +950,9 @@ document.addEventListener('alpine:init', () => {
 			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
+				// The opponent's turn: a click queues (or cancels) a pre-move.
+				// Nothing of ours is awaited then, so no click is lost.
+				if (this.canPremove) { this.togglePremove(node); return; }
 				this.currentPlayer = this.whoseTurn;
 				if (this.awaiting === 'node') this.sendEvent(node);
 				else if (this.awaiting === 'action' && (this.actionList.includes('move') || this.actionList.includes('providence'))) this.sendEvent(node);
@@ -1121,13 +1151,52 @@ document.addEventListener('alpine:init', () => {
 					return true;
 				};
 
+				// Pre-moves. Every prompt bumps _promptSeq, so a queued placement
+				// fires only on the prompt it was meant for.
+				let _promptSeq = 0;
+				/**
+				 * Our turn's first prompt with a pre-move queued. Only the regular
+				 * placement prompt plays it (the controller marks it `placement`;
+				 * a cached controller without the mark offers 'move' in its action
+				 * list); any other first prompt (no legal placement, Providence)
+				 * drops it. Played on the next task, through handleNodeClick: the
+				 * controller sets its input resolver right after emitting, and a
+				 * click, Reset Turn, the flag or the game ending in between
+				 * (another prompt, or no longer our turn) wins over it.
+				 */
+				function playPremove(prompt) {
+					const node = _this.premove;
+					const isPlacement = prompt.placement === true
+						|| (prompt.awaiting === 'action' && (prompt.actionlist || []).includes('move'));
+					if (!isPlacement) {
+						_this.cancelPremove('Pre-move cancelled: no stone placement this turn.');
+						return;
+					}
+					if (!prompt.moveoptions || !prompt.moveoptions[node]) {
+						_this.cancelPremove('Pre-move cancelled: ' + _this.premoveLabel() + ' is no longer a legal placement.');
+						return;
+					}
+					const seq = _promptSeq;
+					setTimeout(() => {
+						if (seq !== _promptSeq || _this.premove !== node) return;
+						_this.premove = '';
+						const eng = _this._engine;
+						if (_this.winner || _this.gameAborted || _this.reviewMode || _this.whoseTurn !== _this.myColor
+							|| !eng || eng._timedOut || eng._claiming || (eng.board && eng.board.gameover)) return;
+						_this.premoveNote = '';
+						_this.handleNodeClick(node);
+					}, 0);
+				}
+
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
 					if (type === 'message') {
+						_promptSeq++;
 						_this.actionList = rest.actionlist || []; _this.awaiting = rest.awaiting; _this.message = rest.message; if (rest.moveoptions) _this.validMoves = rest.moveoptions;
 						// Spell cast sound + visual effect
 						maybeSpellFx(_this.message);
 						if (_this.awaiting !== 'action' && rest.message) _this.messageHistory.push(rest.message);
+						if (_this.premove && rest.awaiting && _this.whoseTurn === _this.myColor) playPremove(rest);
 					}
 					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${baseSpellName(v)}.png`; }); }
 					else if (type === 'spelltextsetup') { _this.spells.text = rest; }
@@ -1184,6 +1253,7 @@ document.addEventListener('alpine:init', () => {
 						if (_this.boardMarks && !_this.reviewMode) _this.boardMarks.clear();
 						// Track the most recent opponent turn for annotation eligibility.
 						const t = rest.turn;
+						if (t && t.color === _this.myColor) _this.premoveNote = '';
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
@@ -1248,6 +1318,8 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 					else if (type === 'takeback_state') {
+						// Turns may go away: a queued placement no longer means what it did.
+						if (rest.request) _this.cancelPremove();
 						_this.takebackRequest = rest.request || null;
 						_this.takebackMine = !!rest.mine;
 					}
@@ -1263,12 +1335,14 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'game_aborted') {
 						_this.gameAborted = true;
+						_this.cancelPremove();
 						_this.actionList = [];
 						clearInterval(_this._presenceTimer);
 					}
 					else if (type === 'game_over') {
 						// A settled result replaces a provisional abort.
 						_this.gameAborted = false;
+						_this.cancelPremove();
 						drawPushArrows(_this.$refs.pushArrows, []);
 						if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);

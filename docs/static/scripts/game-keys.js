@@ -109,6 +109,7 @@ function nodeAriaLabel(c, node) {
 	if (c.nodesToRefill && c.nodesToRefill[node]) parts.push('refill choice');
 	if (c.pushSourceNode === node) parts.push('being pushed');
 	if (c.lastPlay === node) parts.push('last play');
+	if (c.premove === node) parts.push('pre-move');
 	return parts.join(', ');
 }
 
