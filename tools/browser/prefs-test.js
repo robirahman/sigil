@@ -191,18 +191,19 @@ const stoneImage = (page, node) => page.$eval('#stone-node--' + node, (el) => ge
 		const clock = await page.evaluate(() => {
 			const t = (v, low, ms) => { SigilSettings.set('clockTenths', v); SigilSettings.set('clockLow', low); return SigilSettings.clockText(ms); };
 			const out = [t('never', 10, 9450), t('low', 10, 9450), t('low', 10, 65000), t('always', 10, 65000), t('low', 0, 9450), t('low', 30, 25000)];
+			// Under a 30 s mark 25 s is low; with no mark nothing is.
 			const low = [SigilSettings.clockLow(25000), (SigilSettings.set('clockLow', 0), SigilSettings.clockLow(1000))];
 			SigilSettings.set('clockTenths', 'low');
 			SigilSettings.set('clockLow', 10);
 			return { out, low };
 		});
 		check('clock text follows "Tenths of a second" and the low-time mark', clock.out.join() === '0:10,0:09.4,1:05,1:05.0,0:09.4,0:25.0'
-			&& clock.low[0] === false && clock.low[1] === false, clock);
+			&& clock.low[0] === true && clock.low[1] === false, clock);
 		await page.close();
 
 		// A clocked game shows tenths under the mark.
 		page = await newPage(browser, errors, { storage: { sigil_settings: JSON.stringify({ clockTenths: 'low', clockLow: 60 }) } });
-		await openGame(page, '?clock=1+0');
+		await openGame(page, '?clock=1%2B0');
 		await sleep(1500);
 		const clockText = await page.$eval('.game-clock__side--red', (e) => e.textContent.trim());
 		check('a 1-minute game under a 60 s mark shows tenths', /^Red 0:5\d\.\d$/.test(clockText), clockText);

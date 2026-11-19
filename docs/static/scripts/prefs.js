@@ -307,14 +307,23 @@ const SigilPrefsSync = {
 	},
 
 	// An account without prefs takes this device's, once its profile exists
-	// (the rules refuse prefs on an account with no profile yet).
-	async _seed(uid) {
+	// (the rules refuse prefs on an account with no profile yet: a sign-up
+	// writes it just after signing in).
+	_seed(uid) {
 		if (this._seeded === uid || !this._ref) return;
 		this._seeded = uid;
 		const ref = this._ref;
 		try {
-			const named = await firebase.database().ref('users/' + uid + '/displayName').once('value');
-			if (named.exists() && this._ref === ref) await ref.update(SigilSettings._accountCopy());
+			const nameRef = firebase.database().ref('users/' + uid + '/displayName');
+			const cb = (named) => {
+				if (!named.exists()) return;
+				nameRef.off('value', cb);
+				if (this._ref !== ref) return;
+				ref.once('value').then((cur) => {
+					if (!cur.exists() && this._ref === ref) return ref.update(SigilSettings._accountCopy());
+				}).catch(() => { /* offline: the next page load tries again */ });
+			};
+			nameRef.on('value', cb, () => { this._seeded = null; });
 		} catch (e) {
 			this._seeded = null;
 		}

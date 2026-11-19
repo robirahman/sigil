@@ -129,3 +129,38 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Preferences and blind mode
+
+```sh
+node tools/browser/prefs-test.js http://localhost:8765 [screenshot-dir]
+```
+
+Checks `preferences.html` and the in-game panel (prefs.js) with Firebase blocked: every setting is
+shown and stored, "Reset to defaults", node names, the last-move ring and legal-move glows, the
+sound groups and the low-time beep, the clock's tenths (a 1-minute game under a 60 s mark), one-click
+forfeit, the old "Mute emotes" carrying over, and blind mode (blind-mode.js): no stone or marker is
+drawn, the nodes keep their accessible names and still play, each change is read out by node name,
+P describes the position, "Show the stones" turns it off, and the analysis board ignores it.
+
+```sh
+(cd docs && python3 -m http.server 8812) &
+cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
+  'node ../tools/browser/prefs-sync-emulator-test.js http://localhost:8812'
+```
+
+`prefs-sync-emulator-test.js`: a signed-in account's settings are written to `users/{uid}/prefs`,
+follow it to a second browser and live to an open game page, a new account takes the device's
+settings, a guest writes nothing, and volume stays per device.
+
+## Name filter
+
+```sh
+node tools/name-filter/check-corpus.js words_alpha.txt first.txt last.txt   # blocked words, by term
+node tools/name-filter/check-corpus.js --pairs first.txt last.txt [stride]   # "First Last" pairs
+node tools/name-filter/audit-names.js --emulator 127.0.0.1:9000              # stored names it refuses
+```
+
+The word list is `docs/static/scripts/engine/name-filter.js`; `functions/test/name-filter.test.js`
+(in `npm test`) checks the blocked and allowed samples and the server's reset, and
+`functions/test/e2e.test.js` the `filterNames` functions on the emulators.

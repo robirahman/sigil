@@ -1,8 +1,8 @@
 /**
  * Blind mode (the "Blind mode" setting, prefs.js), like blindfold chess:
  * the stones are not drawn (styles.css, html[data-blind] on pages with
- * <body class="blind-page">), and a panel above the board reads the game
- * out instead:
+ * <body class="blind-page">), and a panel beside or under the board reads
+ * the game out instead:
  *   - every change to the board, in node names ("Red on c4; blue off b3"),
  *     shown and sent to a polite live region for screen readers;
  *   - "Describe position" (or P): whose turn it is, every stone and wall,
@@ -84,14 +84,17 @@ const SigilBlind = {
 		return panel;
 	},
 
-	// Above the board, inside the component (the board may mount later).
+	// After the board in the page (and to screen readers); on wide screens
+	// pages with <body data-blind-float> pin it beside the board instead
+	// (styles.css), where the game log and buttons already float. The board
+	// may mount later.
 	_place(st) {
 		if (st.panel && st.panel.isConnected) return true;
 		const board = st.c.$el && st.c.$el.querySelector('.game-board-container');
 		const box = board && board.closest('.container');
 		if (!box || !box.parentNode) return false;
 		if (!st.panel) st.panel = this._build(st);
-		box.parentNode.insertBefore(st.panel, box);
+		box.parentNode.insertBefore(st.panel, box.nextSibling);
 		return true;
 	},
 

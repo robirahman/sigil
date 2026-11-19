@@ -2894,6 +2894,19 @@ html[data-blind] body.blind-page .blind-only { display: revert; }
 	padding: 10px 14px;
 }
 .blind-panel[hidden] { display: none; }
+/* Wide screens: beside the board, under the settings buttons. */
+@media (min-width: 1100px) {
+	body[data-blind-float] .blind-panel {
+		margin: 0;
+		max-height: calc(100vh - 80px);
+		overflow-y: auto;
+		position: fixed;
+		right: 12px;
+		top: 60px;
+		width: 240px;
+		z-index: 5;
+	}
+}
 .blind-panel__title {
 	color: var(--color-text-warm);
 	font-family: 'Arvo', serif;

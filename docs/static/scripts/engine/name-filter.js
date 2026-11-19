@@ -19,7 +19,7 @@
  * Avoiding false positives (the "Scunthorpe problem"): a term is blocked
  * inside other text only when it is not part of ordinary words or names
  * (ANYWHERE, checked against 370k English words, 108k given and family
- * names and 29M "First Last" pairs with tools/name-filter/check-corpus.js);
+ * names and 17.6M "First Last" pairs with tools/name-filter/check-corpus.js);
  * otherwise only as a whole word, between non-letters (WORD), so
  * "Scunthorpe", "Dickens", "grape", "analysis", "therapist", "Pakistan" and
  * "Essex" pass. An ANYWHERE term may name single letters that, right before
