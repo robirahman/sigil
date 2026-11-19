@@ -40,7 +40,7 @@ function rateLive(games) {
 	const db = { users: {
 		a: { displayName: 'Ann', elo: 1000, gamesPlayed: 0, wins: 0, losses: 0 },
 		b: { displayName: 'Bob', elo: 1000, gamesPlayed: 0, wins: 0, losses: 0 },
-		c: { displayName: 'Cy', elo: 1000, gamesPlayed: 0, wins: 0, losses: 0 },
+		c: { displayName: 'Cy', elo: 1000, gamesPlayed: 0, wins: 0, losses: 0, isDeveloper: true },
 		__ai_rust_hard__: { displayName: 'AI (Hard) (Rust)', elo: 1600, gamesPlayed: 50, wins: 25, losses: 25, isAI: true },
 	}, leaderboard: {}, ratings: {}, user_games: {}, completed_games: {}, pool_leaderboard: {} };
 	const e = freshEngine();
@@ -75,7 +75,7 @@ test('the replay gives the ratings the function writes game by game', () => {
 	const live = rateLive(history());
 	const old = withoutGlicko(live);
 	const ix = indexes(old.leaderboard, old.users, old.user_games);
-	const plan = buildPlan(old.completed_games, ix.names, ix.entries);
+	const plan = buildPlan(old.completed_games, ix.names, ix.entries, ix.devs);
 	assert.strictEqual(plan.stats.games, 10);
 	assert.deepStrictEqual(plan.stats.perPool, { blitz: 5, competitive: 2, bullet: 1, correspondence: 1, untimed: 1 });
 	// Every pool record, leaderboard row and per-game glicko matches.
@@ -94,6 +94,7 @@ test('the replay gives the ratings the function writes game by game', () => {
 	}
 	// The AI is anchored at its Elo before each game; its pool record moved
 	// only its counters.
+	assert.strictEqual(plan.set['pool_leaderboard/blitz/c'].isDeveloper, true);
 	const ai = plan.set['ratings/__ai_rust_hard__/competitive'];
 	assert.deepStrictEqual([ai.n, ai.w, ai.l, ai.ai], [2, 1, 1, true]);
 	assert.strictEqual(ai.r, live.completed_games.G5.redEloBefore);
@@ -115,14 +116,14 @@ test('apply and undo on a database', async () => {
 	const old = withoutGlicko(live);
 	const db = fakeDb(old);
 	const ix = indexes(old.leaderboard, old.users, old.user_games);
-	const plan = buildPlan(old.completed_games, ix.names, ix.entries);
+	const plan = buildPlan(old.completed_games, ix.names, ix.entries, ix.devs);
 	await applyPlan(db, plan.set);
 	const d = db.dump();
 	// (As stored: the database drops nulls.)
 	assert.deepStrictEqual(d.ratings, live.ratings);
 	assert.deepStrictEqual(d.user_games, fakeDb(live).dump().user_games);
 	// Running it again changes nothing.
-	await applyPlan(db, buildPlan(d.completed_games, ix.names, ix.entries).set);
+	await applyPlan(db, buildPlan(d.completed_games, ix.names, ix.entries, ix.devs).set);
 	assert.deepStrictEqual(db.dump().ratings, live.ratings);
 	// Undo: back to the database as it was (ratedWinner aside, which only the new function writes).
 	const after = db.dump();

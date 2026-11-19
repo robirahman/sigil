@@ -452,6 +452,7 @@ function glickoUpdates(gameId, record, verdict, data, uidOf, before, pools, engi
 		if (typeof name === 'string' && name.length >= 1 && name.length <= 30) {
 			const row = { displayName: name, r: after[c].r, rd: after[c].rd, n: after[c].n, at: after[c].at };
 			if (AI_UID.test(uid)) row.isAI = true;
+			if (data[c].isDeveloper === true) row.isDeveloper = true;
 			updates['pool_leaderboard/' + pool + '/' + uid] = row;
 		}
 		if (!AI_UID.test(uid)) {

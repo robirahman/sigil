@@ -82,7 +82,8 @@ function ratedGames(completed) {
  * `entries`: uid -> the gameIds of their user_games (only those get a glicko).
  * @returns {{ set: object, stats: object }} the paths to write
  */
-function buildPlan(completed, names, entries) {
+function buildPlan(completed, names, entries, devs) {
+	devs = devs || {};
 	const engine = freshEngine();
 	const games = ratedGames(completed);
 	const state = {}; // uid -> pool -> record
@@ -96,7 +97,7 @@ function buildPlan(completed, names, entries) {
 			// gamesPlayed decides a seed's deviation (glicko.js seed): any rated
 			// game before, or an Elo that has moved.
 			const n = (played[uidOf[c]] || 0) + (g.before[c] !== DEFAULT_ELO ? 1 : 0);
-			data[c] = { displayName: names[uidOf[c]], gamesPlayed: n };
+			data[c] = { displayName: names[uidOf[c]], gamesPlayed: n, isDeveloper: devs[uidOf[c]] === true };
 		}
 		const pool = Glicko.poolOf(engine.normalizeVariant(g.variant), g.timeControl);
 		const pools = {
@@ -130,6 +131,7 @@ function buildPlan(completed, names, entries) {
 			if (typeof name === 'string' && name.length >= 1 && name.length <= 30) {
 				const row = { displayName: name, r: rec.r, rd: rec.rd, n: rec.n, at: rec.at };
 				if (AI_UID.test(uid)) row.isAI = true;
+				if (devs[uid] === true) row.isDeveloper = true;
 				set['pool_leaderboard/' + pool + '/' + uid] = row;
 			}
 		}
@@ -169,11 +171,15 @@ async function applyPlan(db, set, log) {
 /** names and user_games ids from the leaderboard and user_games nodes. */
 function indexes(leaderboard, users, userGames) {
 	const names = {};
-	for (const [uid, v] of Object.entries(users || {})) if (v && typeof v.displayName === 'string') names[uid] = v.displayName;
+	const devs = {};
+	for (const [uid, v] of Object.entries(users || {})) {
+		if (v && typeof v.displayName === 'string') names[uid] = v.displayName;
+		if (v && v.isDeveloper === true) devs[uid] = true;
+	}
 	for (const [uid, v] of Object.entries(leaderboard || {})) if (v && typeof v.displayName === 'string') names[uid] = v.displayName;
 	const entries = {};
 	for (const [uid, games] of Object.entries(userGames || {})) entries[uid] = new Set(Object.keys(games || {}));
-	return { names, entries };
+	return { names, entries, devs };
 }
 
 function summary(plan) {
@@ -244,7 +250,7 @@ async function main() {
 	} else {
 		const [leaderboard, users] = await Promise.all([read('leaderboard'), read('users')]);
 		const ix = indexes(leaderboard, users, userGames);
-		plan = buildPlan(completed, ix.names, ix.entries);
+		plan = buildPlan(completed, ix.names, ix.entries, ix.devs);
 		console.log(summary(plan));
 	}
 	if (args.plan) {
