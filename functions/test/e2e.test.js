@@ -18,6 +18,8 @@ const NS = 'sigil-js-default-rtdb';
 const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const FN_PORT = Number(process.env.FUNCTIONS_EMULATOR_PORT || 5001);
+// The emulators' project (emulators:exec sets it): callables are served under it.
+const PROJECT = process.env.GCLOUD_PROJECT || 'demo-sigil';
 let seq = 0;
 
 // The emulator applies firebase.json's rules to the project's default
@@ -30,7 +32,7 @@ test.before(async () => {
 });
 
 async function player(name) {
-	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
+	const app = initializeApp({ projectId: PROJECT, apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
 	const auth = getAuth(app);
 	connectAuthEmulator(auth, 'http://' + AUTH_HOST, { disableWarnings: true });
 	const db = getDatabase(app);
@@ -161,7 +163,7 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	// The upheld claim adds to bob's record of abandonments; the refused one to nobody's.
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'abandons' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'abandons' + seq));
 	const flags = async (u) => (await admin.ref('user_flags/' + u.uid + '/abandons').once('value')).val();
 	assert.deepStrictEqual([await flags(bob), await flags(alice), await flags(carol), await flags(dave)], [1, null, null, null]);
 	// Counted once per room: the same record rated again (a retried
@@ -181,7 +183,7 @@ test('the server ends a game whose clock ran out with nobody watching', async ()
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const { expireRooms } = require('../rooms');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin' + seq));
 	const alice = await player('alice');
 	const bob = await player('bob');
 	const code = await playRoom(alice, bob, 3, { type: 'realtime', initialTime: 3000, increment: 0 });
@@ -234,7 +236,7 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	{
 		const { initializeApp: adminApp } = require('firebase-admin/app');
 		const { getDatabaseWithUrl } = require('firebase-admin/database');
-		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-flags' + seq));
+		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-flags' + seq));
 		await a.ref('user_flags/' + dave.uid).set({ banUntil: Date.now() + 86400000, reason: 'x', abandons: 1, abandonedGames: { ABC234: true } });
 		await a.ref('report_limits/' + dave.uid).set(Date.now());
 		// Dave's puzzle rating, synced progress, Storm record and both public
@@ -252,7 +254,7 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	// Push tokens go too (only the server can read them now).
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-del' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-del' + seq));
 	assert.strictEqual((await admin.ref('push_tokens/' + dave.uid).once('value')).exists(), false, 'push_tokens/');
 	// No follow or block on either side still names the deleted account.
 	for (const p of [`follows/${dave.uid}`, `followers/${dave.uid}`, `follows/${erin.uid}/${dave.uid}`, `followers/${erin.uid}/${dave.uid}`,
@@ -268,7 +270,7 @@ test('a correspondence move is pushed to the player to move, from their own toke
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const { notifyTurn } = require('../notify');
-	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-push' + seq));
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: PROJECT }, 'admin-push' + seq));
 	const alice = await player('alice');
 	const bob = await player('bob');
 	const carol = await player('carol');

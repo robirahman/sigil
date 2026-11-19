@@ -1165,12 +1165,15 @@ function recordEnding(rec) {
  *            own animation delays live instead of instant. 0 (default) is the
  *            silent instant rebuild every existing caller gets.
  *   result — an object to receive how the transcript ends: { gameover,
- *            winner }, counting a Seal of Destruction still held when the
- *            next turn would start (the rating function's result check).
+ *            winner }, as the players' game loop ends it: counting threefold
+ *            repetition (a Blue win) and a Seal of Destruction still held
+ *            when the next turn would start (the rating function's result
+ *            check). With it, a turn after a third occurrence is past the
+ *            end of the game, like a turn after any other ending.
  *   onBoard — called at the end with the replay board, whose
  *            allLoopingSnapshotCounts hold the threefold-repetition counts of
- *            every turn-start position (a spectator joining mid-game seeds
- *            its own board with them).
+ *            every turn-start position (a client opening a room mid-game
+ *            seeds its own board with them: replayRoomHistory).
  */
 async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
@@ -1202,7 +1205,16 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	AI_REPLAY_INSTANT = paceMs === 0;
 	try {
 		for (const t of turns) {
-			board.takeSnapshot();
+			const reps = board.takeSnapshot();
+			// Threefold repetition: the third occurrence of a turn-start
+			// position ends the game as a Blue win (the game loops check it
+			// first, before the counter moves on). Only with `result`: other
+			// callers rebuild stored records as they were played.
+			if (opts && opts.result && reps >= 3) {
+				board.gameover = true;
+				board.winner = 'blue';
+				break;
+			}
 			// Derive the counter from the transcript (not a blind ++): games
 			// exported after starting from an imported position begin at an
 			// arbitrary turn number, and sfnBefore-style setup SFNs already
@@ -1286,7 +1298,22 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 		AI_REPLAY_INSTANT = wasInstant;
 	}
 	if (opts && opts.result) {
-		// Beginning-of-turn trigger for the turn after the transcript.
+		// Beginning-of-turn checks for the turn after the transcript, in the
+		// game loops' order: threefold repetition, then the Seal of
+		// Destruction. The repetition count is looked at, not kept: onBoard
+		// callers take the counts up to the last turn played.
+		if (!board.gameover && rebuilt.length) {
+			const counts = board.allLoopingSnapshotCounts;
+			const snap = board.snapshot;
+			board.allLoopingSnapshotCounts = Object.assign({}, counts);
+			const reps = board.takeSnapshot();
+			board.allLoopingSnapshotCounts = counts;
+			board.snapshot = snap;
+			if (reps >= 3) {
+				board.gameover = true;
+				board.winner = 'blue';
+			}
+		}
 		if (!board.gameover && rebuilt.length) {
 			const next = board.enemy(rebuilt[rebuilt.length - 1].color);
 			if (board.chargedSpells[next].includes('Seal_of_Destruction')) {
@@ -1299,4 +1326,95 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	}
 	if (opts && typeof opts.onBoard === 'function') opts.onBoard(board);
 	return rebuilt;
+}
+
+/**
+ * The game before the position a client opens a room on mid-game (a
+ * spectator joining, a player whose page reloaded). The room's currentSfn
+ * says nothing of the positions before it, which threefold repetition
+ * counts: replay the room's turns so far (`turns`, { color, actions } in
+ * play order) from its start (`startSfn`, else the standard start), and
+ * check the replay against `roomSfn`, the position the client opened on
+ * (stones, turn counter, counters, locks, springlocks, score and Providence
+ * banks; not the side token, which record forms differ on).
+ *
+ * Resolves to null, with a console warning tagged `who`, when the replay
+ * fails or never reaches roomSfn. Otherwise to { board, log, sfns, sfn, behind }:
+ *   board  — the replay board: allLoopingSnapshotCounts (the counts of every
+ *            turn-start position before the current one) and silenced
+ *            (Silence: part of the repetition key, not of the SFN);
+ *   log    — the turns as rebuilt (color, turnNumber, kind, actions,
+ *            sfnBefore, sfnAfter), as a client that played them logged them;
+ *   sfns   — the position before each turn, oldest first (the start first);
+ *   sfn    — the position after the last turn: where the game stands;
+ *   behind — roomSfn is an EARLIER position of the replay. Each client
+ *            writes currentSfn after a turn's moves, so it can trail the
+ *            turns by a write; the turns are the record (the rating function
+ *            replays them), so `sfn` is the position to go on from.
+ */
+async function replayRoomHistory(spellNames, variant, startSfn, turns, roomSfn, who) {
+	const tag = '[' + (who || 'Replay') + ']';
+	if (!Array.isArray(turns) || !turns.length) return null;
+	let start;
+	try {
+		start = _roomStart(spellNames, variant, startSfn);
+	} catch (e) {
+		console.warn(tag + ' could not read the start position:', e);
+		return null;
+	}
+	const numbered = _numberRoomTurns(turns, start.tc);
+	let board = null;
+	let log;
+	try {
+		log = await reconstructGameLog(spellNames, variant, startSfn || null, numbered,
+			{ onBoard: (b) => { board = b; } });
+	} catch (e) {
+		console.warn(tag + ' could not replay the game so far; repetition counts start now:', e);
+		return null;
+	}
+	const key = (x) => {
+		const p = String(x || '').trim().split(/\s+/);
+		return [p[0], p[2], p[3], p[4], p[5], p[6], p.find((t) => t.startsWith('pm:')) || ''].join(' ');
+	};
+	const sfns = [start.sfn].concat(log.map((t) => t.sfnAfter));
+	// SFNs carry the turn counter, so the room's position matches at most one.
+	const at = roomSfn ? sfns.map(key).lastIndexOf(key(roomSfn)) : -1;
+	if (!board || log.length !== turns.length || at < 0) {
+		console.warn(tag + ' the replayed game does not reach the room\'s position; repetition counts start now.',
+			{ replayed: sfns[sfns.length - 1], room: roomSfn });
+		return null;
+	}
+	return { board, log, sfns: sfns.slice(0, -1), sfn: sfns[sfns.length - 1], behind: at < sfns.length - 1 };
+}
+
+/**
+ * How a room's turns (as replayRoomHistory takes them) end, by the rating
+ * function's own check (reconstructGameLog's `result`): { gameover, winner },
+ * or null when they do not all replay. Either seated player can close a room
+ * with any winner, so a client that missed a natural end the other recorded
+ * takes it only when this agrees (MultiplayerController._endAsRoom).
+ */
+async function replayRoomResult(spellNames, variant, startSfn, turns) {
+	if (!Array.isArray(turns) || !turns.length) return null;
+	try {
+		const start = _roomStart(spellNames, variant, startSfn);
+		const numbered = _numberRoomTurns(turns, start.tc);
+		const result = {};
+		const log = await reconstructGameLog(spellNames, variant, startSfn || null, numbered, { result });
+		return log.length === numbered.length ? result : null;
+	} catch (e) {
+		return null;
+	}
+}
+
+/** A room's start position: its turn counter and SFN. Throws on a bad startSfn. */
+function _roomStart(spellNames, variant, startSfn) {
+	const b = new SigilBoard(spellNames, variant);
+	if (startSfn) b.loadFromSfn(startSfn); else b.setupInitial();
+	return { tc: b.turnCounter, sfn: boardToSfn(b) };
+}
+
+/** Room turns numbered as the game loop plays them, from the start's counter. */
+function _numberRoomTurns(turns, startCounter) {
+	return turns.map((t, i) => ({ color: t.color, actions: t.actions, turnNumber: startCounter + 1 + i }));
 }

@@ -107,6 +107,25 @@ room's turns (and falls back with a warning when they do not replay); a spectato
 the finished game offers it to anyone and follows the reviewed position; game.html
 offers it in review only. `LIVE_ANALYSIS_SHOTS=<dir>` also saves screenshots.
 
+## A player reloads mid-game
+
+```sh
+node tools/reload-seed-smoke.js     # headless: MultiplayerController with a stub sync
+(cd docs && python3 -m http.server 8801) &
+cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
+  'node ../tools/browser/reload-threefold-emulator-test.js http://localhost:8801'
+```
+
+A seated player whose page reloads replays the room's turns so far (`_seedHistory`,
+`replayRoomHistory` in game-review.js), so threefold repetition counts the positions before
+the reload. Two signed-in players reach a twofold, each reloads, and both pages end the game
+at the third occurrence as a Blue win with the same review and a full record in the room;
+then a reload whose transcript cannot be replayed misses the threefold and takes the room's
+result from the other page once the room's turns show it; a room closed with a win its moves do
+not show (a modified client) is not taken. With the functions emulator (or `--functions`) the
+threefold games are recorded and rated as Blue wins, not overturned, and the forged close as the
+closer's resignation. The smoke test also covers a currentSfn that trails the room's turns.
+
 ## Live analysis on early-return review paths
 
 ```sh

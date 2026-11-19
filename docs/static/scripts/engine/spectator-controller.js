@@ -79,57 +79,34 @@ class SpectatorController {
 	 * A spectator who joins mid-game starts from the room's currentSfn, which
 	 * says nothing about the positions before it. Replay the turns played so
 	 * far (sync.spectatorJoinTurns, from the room snapshot the join already
-	 * read) from the room's start, and when the replay lands on currentSfn:
+	 * read) with replayRoomHistory (game-review.js, shared with a player
+	 * whose page reloaded), and when the replay reaches currentSfn:
 	 *   - take its threefold-repetition counts, so this board warns and ends
-	 *     on a repetition as the players' boards do;
-	 *   - emit { type: 'history', sfns } (the loadable SFN after each earlier
-	 *     turn, oldest first, the start position first), for live analysis.
+	 *     on a repetition as the players' boards do, and its Silence state,
+	 *     which the SFN cannot carry but the repetition key includes (without
+	 *     it, a join right after a Silence cast would count the next position
+	 *     under the unsilenced key and could declare a threefold the players'
+	 *     boards do not);
+	 *   - go on from the replay's last position when currentSfn trailed the
+	 *     turns (the join skips every turn it read);
+	 *   - emit { type: 'history', sfns } (the loadable SFN before each turn,
+	 *     oldest first, the start position first), for live analysis.
 	 * On any mismatch or failure the board keeps today's behaviour (no
 	 * history), with a warning.
 	 */
 	async _seedHistory(currentSfn, variant) {
 		const raw = (this.sync && this.sync.spectatorJoinTurns) || [];
-		if (!raw.length || typeof reconstructGameLog !== 'function') return;
-		const startSfn = (this.sync && this.sync.startSfn) || null;
-		let start;
-		try {
-			const b = new SigilBoard(this.spellNames, variant);
-			if (startSfn) b.loadFromSfn(startSfn); else b.setupInitial();
-			start = { tc: b.turnCounter, sfn: boardToSfn(b) };
-		} catch (e) {
-			console.warn('[Spectator] could not read the start position:', e);
-			return;
+		if (!raw.length || typeof replayRoomHistory !== 'function') return;
+		const h = await replayRoomHistory(this.spellNames, variant, (this.sync && this.sync.startSfn) || null,
+			raw, boardToSfn(this.board), 'Spectator');
+		if (!h) return;
+		if (h.behind) {
+			this.board.loadFromSfn(h.sfn);
+			this.emit(this.board.getBoardStatePayload());
 		}
-		const turns = raw.map((t, i) => ({ color: t.color, actions: t.actions, turnNumber: start.tc + 1 + i }));
-		let replayBoard = null;
-		let rebuilt;
-		try {
-			rebuilt = await reconstructGameLog(this.spellNames, variant, startSfn, turns,
-				{ onBoard: (b) => { replayBoard = b; } });
-		} catch (e) {
-			console.warn('[Spectator] could not replay the game so far; repetition counts start now:', e);
-			return;
-		}
-		// The replay must land on the room's position (stones, turn counter,
-		// counters, locks, springlocks, score and Providence banks; not the
-		// side token, which records forms differ on).
-		const key = (x) => {
-			const p = String(x || '').trim().split(/\s+/);
-			return [p[0], p[2], p[3], p[4], p[5], p[6], p.find((t) => t.startsWith('pm:')) || ''].join(' ');
-		};
-		const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
-		if (!replayBoard || rebuilt.length !== turns.length || key(last) !== key(boardToSfn(this.board))) {
-			console.warn('[Spectator] the replayed game does not reach the room\'s position; repetition counts start now.',
-				{ replayed: last, room: currentSfn });
-			return;
-		}
-		this.board.allLoopingSnapshotCounts = Object.assign({}, replayBoard.allLoopingSnapshotCounts);
-		// Silence is state the SFN cannot carry, and it is part of the
-		// repetition key (board.js takeSnapshot): without it, a join right after
-		// a Silence cast would count the next position under the unsilenced key
-		// and could declare a threefold the players' boards do not.
-		if (replayBoard.silenced) this.board.silenced = Object.assign({}, replayBoard.silenced);
-		this.emit({ type: 'history', sfns: [start.sfn].concat(rebuilt.slice(0, -1).map((t) => t.sfnAfter)) });
+		this.board.allLoopingSnapshotCounts = Object.assign({}, h.board.allLoopingSnapshotCounts);
+		if (h.board.silenced) this.board.silenced = Object.assign({}, h.board.silenced);
+		this.emit({ type: 'history', sfns: h.sfns });
 	}
 
 	/** Same arithmetic as MultiplayerController._tickTimer, display only. */
