@@ -2126,7 +2126,8 @@
 						let range = '';
 						let rangeTitle = '';
 						if (glicko && !seat.anon && seat.uid) {
-							const pool = SigilRatings.poolOf(r);
+							// A variant that is never rated shows the Standard pool of its clock.
+							const pool = unratedReason(null, r.variant, null, null) ? SigilGlicko.timeClass(r.timeControl) : SigilRatings.poolOf(r);
 							const rec = this._poolCache[seat.uid + '|' + pool];
 							if (rec === undefined) this._fetchPoolRating(seat.uid, pool);
 							rating = rec ? SigilRatings.format(rec) : null;
@@ -2181,7 +2182,8 @@
 					if (this.authElo === null || this.authElo === undefined) return null;
 					if (this.ratingMode !== 'glicko' || typeof SigilRatings === 'undefined') return String(this.authElo);
 					const s = this._seekSettings();
-					const pool = SigilGlicko.poolOf(s.variant, s.timeControl);
+					// A variant that is never rated: the Standard pool of the clock.
+					const pool = unratedReason(null, s.variant, null, null) ? SigilGlicko.timeClass(s.timeControl) : SigilGlicko.poolOf(s.variant, s.timeControl);
 					const rec = this.myPools[pool] || SigilRatings.seedFromElo(this.authElo, this.authGamesPlayed);
 					return SigilRatings.label(pool) + ' ' + SigilRatings.format(rec);
 				},

@@ -101,6 +101,47 @@ test('an online game is recorded and rated once, by the server', async () => {
 	assert.deepStrictEqual([mine.rated, mine.eloChange, mine.result], [true, won ? 16 : -16, won ? 'win' : 'loss']);
 	assert.strictEqual((await get(ref(bob.db, `users/${bob.uid}/elo`))).val(), won ? 984 : 1016);
 	assert.strictEqual((await get(ref(bob.db, `leaderboard/${alice.uid}/gamesPlayed`))).val(), 1);
+	// The Glicko-2 pool rating alongside (an untimed Standard game), seeded
+	// from the Elo of a new account (1000, deviation 350), public and the
+	// server's alone.
+	assert.strictEqual(mine.glicko.pool, 'untimed');
+	assert.deepStrictEqual([mine.glicko.before, mine.glicko.rdBefore], [1000, 350]);
+	const pool = (await get(ref(bob.db, `ratings/${alice.uid}/untimed`))).val();
+	assert.deepStrictEqual([pool.n, pool.w, pool.r > 1000], [1, won ? 1 : 0, won]);
+	assert.strictEqual((await get(ref(bob.db, `pool_leaderboard/untimed/${alice.uid}/displayName`))).val(), 'alice');
+	await assert.rejects(set(ref(alice.db, `ratings/${alice.uid}/untimed/r`), 3000));
+});
+
+test('matchmaking pairs two waiting players on the server; each sees the match', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const bucket = 'rt-300-0~standard~r';
+	await set(ref(alice.db, 'mm_tickets/' + alice.uid), { bucket, at: serverTimestamp(), ping: serverTimestamp() });
+	await new Promise((r) => setTimeout(r, 50));
+	await set(ref(bob.db, 'mm_tickets/' + bob.uid), { bucket, at: serverTimestamp(), ping: serverTimestamp() });
+	const matchA = await waitFor(alice.db, `mm_tickets/${alice.uid}/match`);
+	const matchB = await waitFor(bob.db, `mm_tickets/${bob.uid}/match`);
+	assert.strictEqual(matchA, matchB);
+	const m = (await get(ref(bob.db, 'mm_matches/' + matchA))).val();
+	// Alice waited longer: she hosts. Both start from their Elo, provisional.
+	assert.deepStrictEqual([m.host, m.guest, m.hostName, m.guestName, m.hostRating, m.hostRd, m.bucket],
+		[alice.uid, bob.uid, 'alice', 'bob', 1000, 350, bucket]);
+	// The host names an invite room for the guest; the guest takes the seat.
+	const code = 'MM' + ++seq + 'AB';
+	await set(ref(alice.db, 'rooms/' + code), {
+		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false, creatorColor: 'red', invite: bob.uid,
+		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
+		timeControl: { type: 'realtime', initialTime: 300000, increment: 0 }, allowSpectators: true, variant: 'standard', seq: true,
+	});
+	await assert.rejects(set(ref(bob.db, `mm_matches/${matchA}/room`), code));
+	await set(ref(alice.db, `mm_matches/${matchA}/room`), code);
+	assert.strictEqual(await waitFor(bob.db, `mm_matches/${matchA}/room`), code);
+	await update(ref(bob.db, 'rooms/' + code), {
+		blue: { uid: bob.uid, displayName: 'bob', connected: true, seq: true }, status: 'playing', ranked: true,
+	});
+	// A guest in a rated pool is refused by the rules.
+	const carol = await player('carol');
+	await assert.rejects(set(ref(carol.db, 'mm_tickets/' + alice.uid), { bucket, at: serverTimestamp(), ping: serverTimestamp() }));
 });
 
 test('finishing a game early with a false result is a resignation', async () => {
