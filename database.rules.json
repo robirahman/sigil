@@ -150,7 +150,7 @@
         },
         "unratedReason": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
-          ".validate": "newData.val() === 'suspended' && newData.parent().child('ranked').val() === false && ((root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() > now) || (root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() > now))"
+          ".validate": "newData.val() === 'suspended' && newData.parent().child('ranked').val() === false && ((root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').isNumber() && root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() > now) || (root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').isNumber() && root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() > now))"
         },
         "public": {
           ".validate": "newData.isBoolean()"
@@ -479,29 +479,105 @@
       ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",
       "$uid": {
         ".read": "auth !== null && (auth.uid === $uid || root.child('admins/' + auth.uid).val() === true)",
-        ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
         "banUntil": {
+          ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
           ".validate": "newData.isNumber()"
         },
         "reason": {
+          ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
           ".validate": "newData.isString() && newData.val().length <= 500"
+        },
+        "by": {
+          ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+          ".validate": "newData.val() === auth.uid"
+        },
+        "at": {
+          ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+          ".validate": "newData.val() === now"
+        },
+        "auto": {
+          ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true && !newData.exists()",
+          ".validate": "false"
         },
         "abandons": {
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
-        "by": {
-          ".validate": "newData.val() === auth.uid"
-        },
-        "at": {
-          ".validate": "newData.val() === now"
+        "stalls": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
         },
         "abandonedGames": {
           ".validate": "false"
+        },
+        "offenses": {
+          "$room": {
+            "forgiven": {
+              ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+              ".validate": "newData.isBoolean() && data.parent().exists()"
+            }
+          }
+        },
+        "restrictions": {
+          "$key": {
+            "overturned": {
+              ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+              ".validate": "newData.isBoolean() && data.parent().exists()"
+            },
+            "overturnedBy": {
+              ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+              ".validate": "newData.val() === auth.uid && data.parent().exists()"
+            },
+            "overturnedAt": {
+              ".write": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+              ".validate": "newData.val() === now && data.parent().exists()"
+            }
+          }
         },
         "$other": {
           ".validate": false
         }
       }
+    },
+    "appeals": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",
+      ".indexOn": [
+        "status",
+        "at"
+      ],
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && newData.exists() && ((auth.uid === $uid && auth.provider !== 'anonymous' && (!data.exists() || (data.child('status').val() !== 'open' && data.child('banAt').val() !== newData.child('banAt').val()))) || (data.exists() && root.child('admins/' + auth.uid).val() === true))",
+        ".validate": "newData.hasChildren(['banAt', 'text', 'at', 'status']) && (newData.child('status').val() === 'open' ? (auth.uid === $uid && newData.child('at').val() === now && newData.child('banAt').val() === root.child('user_flags/' + $uid + '/at').val() && root.child('user_flags/' + $uid + '/banUntil').isNumber() && root.child('user_flags/' + $uid + '/banUntil').val() > now && !newData.child('adminNote').exists() && !newData.child('resolvedBy').exists() && !newData.child('resolvedAt').exists() && !newData.child('until').exists()) : (data.child('status').val() === 'open' && newData.child('banAt').val() === data.child('banAt').val() && newData.child('text').val() === data.child('text').val() && newData.child('at').val() === data.child('at').val() && newData.child('resolvedBy').val() === auth.uid && newData.child('resolvedAt').val() === now && (newData.child('status').val() === 'kept' || newData.child('banAt').val() === root.child('user_flags/' + $uid + '/at').val())))",
+        "banAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "text": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 1000"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "status": {
+          ".validate": "newData.val() === 'open' || newData.val() === 'lifted' || newData.val() === 'kept' || newData.val() === 'extended'"
+        },
+        "adminNote": {
+          ".validate": "newData.isString() && newData.val().length <= 1000"
+        },
+        "until": {
+          ".validate": "newData.isNumber()"
+        },
+        "resolvedBy": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "resolvedAt": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "fairplay_reports": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true"
     },
     "reports": {
       ".read": "auth !== null && root.child('admins/' + auth.uid).val() === true",

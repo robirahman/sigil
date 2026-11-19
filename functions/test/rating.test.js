@@ -228,6 +228,38 @@ test('an upheld abandonment claim names the player who left', async () => {
 	assert.deepStrictEqual([early.rated, early.winner, early.overturned, early.abandonedBy], [true, 'blue', true, undefined]);
 });
 
+test('a loss on time sat out with a healthy clock names the staller', async () => {
+	const room = onlineRoom();
+	delete room.gameLog;
+	const keys = Object.keys(room.turns).sort().slice(0, 9);
+	room.turns = Object.fromEntries(keys.map((k) => [k, room.turns[k]]));
+	const first = room.turns[keys[0]].timestamp;
+	const last = room.turns[keys[8]];
+	const loser = last.color === 'red' ? 'blue' : 'red';
+	// Ten seconds a turn (onlineRoom), on a ten-minute clock.
+	Object.assign(room, { timeControl: { type: 'realtime', initialTime: 600_000, increment: 0 }, startedAt: first - 10_000,
+		endReason: 'time', winner: last.color, finishedBy: last.color });
+	const left = 600_000 - 4 * 10_000;
+	room.closedAt = last.timestamp + left + 1000;
+	const rec = Object.assign(onlineRecord(room), { winner: last.color });
+	const v = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.stalledBy, v.abandonedBy], [true, last.color, loser, undefined]);
+	assert.deepStrictEqual(v.stall, { satMs: left + 1000, leftMs: left, medianMs: 10_000, turns: 4 });
+	// Counted in a casual game too.
+	const casual = Object.assign({}, room, { ranked: false, casual: true });
+	const vc = await judgeGame(Object.assign({}, rec, { ranked: false }), ctx({ room: casual }));
+	assert.deepStrictEqual([vc.rated, vc.reason, vc.stalledBy], [false, 'casual', loser]);
+	// A flag in time trouble is no stall.
+	const tight = Object.assign({}, room, { timeControl: { type: 'realtime', initialTime: 100_000, increment: 0 } });
+	tight.closedAt = last.timestamp + 60_000 + 1000;
+	const vt = await judgeGame(rec, ctx({ room: tight }));
+	assert.deepStrictEqual([vt.rated, vt.winner, vt.stalledBy], [true, last.color, undefined]);
+	// A claim made before the clock ran out: the claimer's loss, nobody's stall.
+	const early = Object.assign({}, room, { closedAt: last.timestamp + 60_000 });
+	const ve = await judgeGame(rec, ctx({ room: early }));
+	assert.deepStrictEqual([ve.winner, ve.overturned, ve.stalledBy], [loser, true, undefined]);
+});
+
 test('a loss on time is recomputed from the turn timestamps', () => {
 	const t0 = 1_000_000;
 	const room = {

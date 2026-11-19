@@ -2,7 +2,7 @@
 
 | function | trigger | what it does |
 |---|---|---|
-| `rateGame` | new `completed_games/{id}` | Checks the result (`rating.js`) and is the only writer of Elo, `gamesPlayed` / `wins` / `losses`, the leaderboard ratings and `user_games`. |
+| `rateGame` | new `completed_games/{id}` | Checks the result (`rating.js`) and is the only writer of Elo, `gamesPlayed` / `wins` / `losses`, the leaderboard ratings and `user_games`. Records abandonments and stalls, and suspends repeat offenders from rated play (see Fair play). |
 | `recordRoom` | `rooms/{code}/status` → finished | Writes the game's `completed_games` record and `rooms/{code}/gameId`. |
 | `expireClocks` | every minute | Ends playing rooms whose clock ran out with no tab open (from the turns' server timestamps). |
 | `settleAbort` | new `rooms/{code}/abortedBy` | An abort after both players moved becomes a forfeit by the aborter. |
@@ -26,6 +26,13 @@
 - **Rating:** both humans need full (non-anonymous) accounts. The game must be rated under `unratedReason` (`docs/static/scripts/engine/elo.js`), which the lobby uses too.
 - **Duplicates:** each game is rated once. `rating_claims/` is keyed by room, or by a hash of an AI game's transcript.
 - **Unrated games** are written to `user_games` with `rated: false` and the reason.
+
+## Fair play
+
+- **Offenses** (`rateGame`, `user_flags/{uid}/offenses/{room}`, counted once per room, rated game or not): an upheld abandonment claim, or a **stall**: a live game lost on time in which the loser's clock at the start of their final turn held at least 2 minutes and at least 5 times their median time per turn earlier in that game (3 turns at least), from the turns' server timestamps (`rating.js stalled`). Correspondence and untimed games have no stalls.
+- **Automatic suspensions** from rated play: 2 offenses within 30 days, and every further one inside the window, suspend for 1, 3, 7, then 30 days by level; the level counts the automatic suspensions of the last 90 days that were not overturned. A suspension never shortens a longer one already running. The policy is `docs/static/scripts/engine/fair-play.js`, which the account page loads too (`engine-loader.js requireShared`).
+- **Appeals**: one per suspension, `appeals/{uid}`, filed on the account page by the suspended player and decided once in `admin.html` (lift, optionally forgiving the games behind it; keep; or extend from its end). Lifting an automatic suspension marks it `overturned`, so it does not raise the next one's level.
+- **Engine-correlation scan**: `engine/harness/fair_play_scan.py`, run by hand on a `completed_games` dump (its header). Reports go to `fairplay_reports/` (admins read; written only with a service account) or are opened as files on `admin.html`. Flags are for human review only.
 
 ## Whose move, and the clocks
 

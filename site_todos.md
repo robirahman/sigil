@@ -185,9 +185,9 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### Fair play & moderation
 
 - [x] **Add reporting** of players and games, and a moderation panel to handle reports. Done: "Report" on profiles and the online game-over modal writes create-only `reports/`; `admin.html` (admins/{uid}) lists them, resolves them with a note and suspends players from rated play (`user_flags/{uid}/banUntil`). Turns are also sequenced by the rules now (`rooms/{id}/last`), closing the extra-turns cheat.
-- [ ] **Add engine-correlation cheat detection** (Lichess's Irwin).
+- [x] **Add engine-correlation cheat detection** (Lichess's Irwin). Done: `engine/harness/fair_play_scan.py` (select / eval / report / upload, run by Robi on a `completed_games` dump; its header is the how-to) searches each player's recent rated turns with the shipped engine and reports engine-match rate and centistone loss with game-bootstrap intervals against similarly rated players, the site's AI as anchors; `admin.html` "Engine scan" shows the latest `fairplay_reports/` run or a report file. Flags are for human review only.
 - [ ] **Add profanity filters** on chat and names.
-- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process. Partly done: admins can suspend from rated play (shown with its reason on the account page) and `rateGame` counts upheld abandonments in `user_flags/{uid}/abandons`; no automatic bans, no appeals flow yet.
+- [x] **Add temporary bans** for players who abandon or stall games, and an appeals process. Done: `rateGame` records upheld abandonments and stalls (a live game lost on time with 2+ minutes and 5x the player's usual turn left, from the turns' server timestamps) per room; two in 30 days suspend from rated play automatically for 1, 3, 7, then 30 days (`docs/static/scripts/engine/fair-play.js`, shared with the account page, which shows the reason, end, games and standing); one appeal per suspension (`appeals/{uid}`), decided in `admin.html`'s queue (lift and forgive, keep, extend).
 
 ### Platform
 

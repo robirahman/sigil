@@ -95,6 +95,32 @@
 			padding: 12px 16px;
 		}
 		.admin-link { color: var(--color-accent); font-family: 'Overlock', sans-serif; }
+		.fair-play-notice {
+			background: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			margin-bottom: 16px;
+			padding: 12px 16px;
+			text-align: left;
+		}
+		.ban-notice { text-align: left; overflow-wrap: anywhere; }
+		.fair-play__games { margin: 8px 0 0; padding-left: 20px; font-size: 0.9em; }
+		.fair-play__games a, .ban-notice a { color: var(--color-accent); }
+		.fair-play__appeal { margin-top: 10px; }
+		.fair-play__appeal label { display: block; font-size: 0.9em; margin: 6px 0 4px; color: var(--color-text-dim); }
+		.fair-play__appeal textarea {
+			background: var(--color-surface);
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			box-sizing: border-box;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			padding: 8px;
+			width: 100%;
+		}
 		.profile-card {
 			background: var(--color-surface);
 			border-radius: 8px;
@@ -302,15 +328,57 @@
 		<div class="account" x-show="!loading && user" x-cloak>
 			<h2>Your Profile</h2>
 
-			<!-- A suspension an admin set (admin.html): user_flags/{uid}, which
-			     only the player and admins can read. -->
+			<!-- A suspension from rated play: user_flags/{uid}, which only the
+			     player and admins can read. Set by an admin (admin.html) or by
+			     the server for abandoned and stalled games (fair-play.js); the
+			     player may appeal it once (appeals/{uid}, admin.html's queue). -->
 			<div class="ban-notice" x-show="banActive" x-cloak data-testid="ban-notice">
 				<strong>Your account is suspended from rated play</strong>
 				<span x-text="banUntilText"></span>.
 				<template x-if="flags && flags.reason"><span> Reason: <span x-text="flags.reason"></span></span></template>
 				You can still play casual games.
+				<template x-if="banGames.length">
+					<ul class="fair-play__games" data-testid="ban-games">
+						<template x-for="o in banGames" x-bind:key="o.room">
+							<li><a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(o.room)" x-text="o.room"></a>: <span x-text="offenseText(o)"></span></li>
+						</template>
+					</ul>
+				</template>
+				<div class="fair-play__appeal" data-testid="appeal">
+					<template x-if="appealForBan && appealForBan.status === 'open'">
+						<p data-testid="appeal-status" x-text="'You appealed on ' + when(appealForBan.at) + '. An admin will review it.'"></p>
+					</template>
+					<template x-if="appealForBan && appealForBan.status !== 'open'">
+						<p data-testid="appeal-status" x-text="appealDecisionText(appealForBan)"></p>
+					</template>
+					<template x-if="!appealForBan && canAppeal">
+						<div>
+							<button class="link-button" x-show="!appealOpen" x-on:click="appealOpen = true" data-testid="appeal-open">Appeal this suspension</button>
+							<div x-show="appealOpen">
+								<label for="appeal-text">Why should it be lifted? An admin reads this once, with the games.</label>
+								<textarea id="appeal-text" rows="4" maxlength="1000" x-model="appealText" x-bind:disabled="appealBusy"></textarea>
+								<button class="account-button" x-on:click="sendAppeal" x-bind:disabled="appealBusy || !appealText.trim()" data-testid="appeal-send">Send appeal</button>
+							</div>
+						</div>
+					</template>
+					<p class="error-msg" x-show="appealError" x-text="appealError"></p>
+				</div>
 			</div>
-			<p x-show="isAdmin" x-cloak><a class="admin-link" href="admin.html">Admin panel: reports and suspensions</a></p>
+			<!-- No suspension running: an appeal decided lately, and any
+			     abandoned or stalled games still counting. -->
+			<div class="fair-play-notice" x-show="!banActive && recentAppeal" x-cloak data-testid="appeal-result">
+				<span x-text="recentAppeal ? appealDecisionText(recentAppeal) : ''"></span>
+			</div>
+			<div class="fair-play-notice" x-show="!banActive && standing && standing.count > 0" x-cloak data-testid="fair-play-standing">
+				<strong>Fair play:</strong>
+				<span x-text="standingText"></span>
+				<ul class="fair-play__games">
+					<template x-for="o in (standing ? standing.recent : [])" x-bind:key="o.room">
+						<li><a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(o.room)" x-text="o.room"></a>: <span x-text="offenseText(o)"></span></li>
+					</template>
+				</ul>
+			</div>
+			<p x-show="isAdmin" x-cloak><a class="admin-link" href="admin.html">Admin panel: reports, suspensions and appeals</a></p>
 
 			<div class="profile-card">
 				<div class="profile-card__name" x-text="profile?.displayName || user?.displayName || 'Player'"></div>
@@ -497,6 +565,7 @@
 
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/vacation-bank.js?v=35"></script>
+	<script src="static/scripts/engine/fair-play.js?v=35"></script>
 	<script src="static/scripts/auth-status.js?v=35"></script>
 
 	<script>
@@ -513,14 +582,87 @@
 				signupEmail: '',
 				signupPassword: '',
 				renameName: '',
-				// user_flags/{uid} (a suspension, the abandonment count) and admins/{uid}.
+				// user_flags/{uid} (a suspension, the abandoned and stalled
+				// games), admins/{uid}, and the player's appeal (appeals/{uid}).
 				flags: null,
 				isAdmin: false,
+				appeal: null,
+				appealOpen: false,
+				appealText: '',
+				appealBusy: false,
+				appealError: '',
 				get banActive() { return !!(this.flags && typeof this.flags.banUntil === 'number' && this.flags.banUntil > Date.now()); },
 				get banUntilText() {
 					if (!this.banActive) return '';
 					// A ban past 2100 is permanent.
 					return this.flags.banUntil > 4102444800000 ? ' indefinitely' : ' until ' + new Date(this.flags.banUntil).toLocaleString();
+				},
+				// The games behind an automatic suspension (its restriction record).
+				get banGames() {
+					const f = this.flags;
+					if (!this.banActive || !f || f.auto !== true || !f.restrictions) return [];
+					const keys = Object.keys(f.restrictions).filter((k) => f.restrictions[k] && f.restrictions[k].at === f.at);
+					const r = keys.length ? f.restrictions[keys[0]] : null;
+					const offenses = f.offenses || {};
+					return r && r.rooms ? Object.keys(r.rooms).map((room) => Object.assign({ room, kind: r.rooms[room] }, offenses[room] || {})) : [];
+				},
+				// The appeal of this suspension, or one still open for an earlier
+				// one (the rules take one open appeal at a time).
+				get appealForBan() {
+					const a = this.appeal;
+					return a && this.flags && (a.banAt === this.flags.at || a.status === 'open') ? a : null;
+				},
+				get canAppeal() { return this.banActive && typeof this.flags.at === 'number' && !this.isOffline; },
+				// An appeal decided in the last 30 days, shown once the suspension is over.
+				get recentAppeal() {
+					const a = this.appeal;
+					return a && a.status !== 'open' && typeof a.resolvedAt === 'number' && a.resolvedAt > Date.now() - 30 * 86400000 ? a : null;
+				},
+				get standing() {
+					return this.flags && typeof fairPlayStanding === 'function' ? fairPlayStanding(this.flags, Date.now()) : null;
+				},
+				get standingText() {
+					const s = this.standing;
+					if (!s || !s.count) return '';
+					const days = Math.round(FAIR_PLAY.WINDOW_MS / FAIR_PLAY_DAY_MS);
+					const games = s.count === 1 ? '1 online game' : s.count + ' online games';
+					const next = s.left === 0
+						? 'One more within ' + days + ' days suspends you from rated play for ' + fairPlayDuration(s.nextMs) + '.'
+						: s.left + ' more within ' + days + ' days suspend you from rated play.';
+					return 'you left or let the clock run out in ' + games + ' in the last ' + days + ' days. ' + next
+						+ ' Leaving counts when your opponent claims the game after you have been gone a minute; a stall when you sit out a live clock of 2 minutes or more without moving.';
+				},
+				offenseText(o) {
+					if (o.kind === 'stall') {
+						const min = (ms) => Math.round(ms / 60000);
+						return 'clock run out' + (typeof o.leftMs === 'number' ? ' (' + min(o.leftMs) + ' min left, ' + Math.round((o.medianMs || 0) / 1000) + ' s a turn before)' : '')
+							+ (typeof o.at === 'number' ? ', ' + this.when(o.at) : '');
+					}
+					return 'left the game' + (typeof o.at === 'number' ? ', ' + this.when(o.at) : '');
+				},
+				appealDecisionText(a) {
+					const note = a.adminNote ? ' Admin\'s note: ' + a.adminNote : '';
+					if (a.status === 'lifted') return 'Your appeal was upheld and the suspension lifted.' + note;
+					if (a.status === 'extended') return 'Your appeal was refused and the suspension extended' + (typeof a.until === 'number' && a.until > Date.now() ? ' until ' + new Date(a.until).toLocaleString() : '') + '.' + note;
+					return 'Your appeal was reviewed and the suspension stands.' + note;
+				},
+				when(ts) { return new Date(ts).toLocaleString(); },
+				async sendAppeal() {
+					const text = this.appealText.trim().slice(0, 1000);
+					if (!text || !this.user || !this.canAppeal) return;
+					this.appealBusy = true;
+					this.appealError = '';
+					try {
+						const db = firebase.database();
+						await db.ref('appeals/' + this.user.uid).set({ banAt: this.flags.at, text, at: firebase.database.ServerValue.TIMESTAMP, status: 'open' });
+						this.appeal = (await db.ref('appeals/' + this.user.uid).once('value')).val();
+						this.appealOpen = false;
+						this.appealText = '';
+					} catch (e) {
+						console.warn('[Account] appeal:', e);
+						this.appealError = 'The appeal could not be sent: ' + (e.message || e);
+					}
+					this.appealBusy = false;
 				},
 				guest: false,
 				linkConflict: '',
@@ -641,6 +783,7 @@
 					} else {
 						this.profile = null;
 						this.flags = null;
+						this.appeal = null;
 						this.isAdmin = false;
 						this.annotationMode = false;
 						this.showAiThinkReport = false;
@@ -655,6 +798,7 @@
 					const db = firebase.database();
 					try { this.flags = (await db.ref('user_flags/' + uid).once('value')).val(); } catch (e) { this.flags = null; }
 					try { this.isAdmin = (await db.ref('admins/' + uid).once('value')).val() === true; } catch (e) { this.isAdmin = false; }
+					try { this.appeal = (await db.ref('appeals/' + uid).once('value')).val(); } catch (e) { this.appeal = null; }
 				},
 
 				async _loadVacation() {
