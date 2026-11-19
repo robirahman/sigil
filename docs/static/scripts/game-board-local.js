@@ -3600,8 +3600,14 @@ function practiceHintFromResult(res, mover) {
 	h.status = 'ready';
 	h.depth = res.depth || 0;
 	h.text = typeof describePuzzleActions === 'function' ? describePuzzleActions(actions) : '';
-	h.evalText = (info && typeof describePositionEval === 'function') ? describePositionEval(info) : '';
-	if (first) {
+	// The engine's view, by side ("Blue +1.0", "Red wins in 3", "even").
+	if (info && info.mateIn && typeof describePositionEval === 'function') h.evalText = describePositionEval(info);
+	else if (info && typeof info.stones === 'number') {
+		h.evalText = Math.abs(info.stones) < 0.05 ? 'even' : (info.stones > 0 ? 'Red +' : 'Blue +') + Math.abs(info.stones).toFixed(1);
+	}
+	// A turn that is only its placement has nothing more to show at level 2.
+	const steps = actions.filter(a => a && a.type !== 'pass');
+	if (first && steps.length > 1) {
 		h.level = 1;
 		h.firstText = (first.type === 'hard_move' ? 'Start with a hard move onto ' : first.type === 'blink' ? 'Start by blinking to ' : 'Start with your move on ') + first.node + '.';
 		h.firstNodes = { [first.node]: true };
