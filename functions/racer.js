@@ -34,11 +34,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// The emulator tests may shorten the race and pick from their own pool
+// (SIGIL_RACER_MS, SIGIL_RACER_COUNTDOWN_MS, SIGIL_RACER_POOL).
+const EMULATOR = process.env.FUNCTIONS_EMULATOR === 'true';
+const emulated = (name, value) => (EMULATOR && Number(process.env[name]) > 0 ? Number(process.env[name]) : value);
+
 const RACE_MAX_PLAYERS = 10;
 const RACE_MIN_PLAYERS = 2;
 const RACE_PUZZLES = 60;               // more than anyone solves in RACE_MS
-const RACE_COUNTDOWN_MS = 10000;       // from the start call to the first puzzle
-const RACE_MS = 120000;                // the race itself
+const RACE_COUNTDOWN_MS = emulated('SIGIL_RACER_COUNTDOWN_MS', 10000);   // from the start call to the first puzzle
+const RACE_MS = emulated('SIGIL_RACER_MS', 120000);                     // the race itself
 const RACE_LOBBY_TTL_MS = 30 * 60000;  // a lobby nobody starts
 const RACE_KEEP_MS = 2 * 3600000;      // a finished race (results, rematch link)
 const RACE_SWEEP_MIN_AGE_MS = 2 * 60000;   // a lobby everyone left (a reload is not leaving)
@@ -65,7 +70,9 @@ let _pool = null;
 function racePool() {
 	if (_pool) return _pool;
 	const copied = path.join(__dirname, 'data', 'racer-pool.json');
-	if (fs.existsSync(copied)) {
+	if (EMULATOR && process.env.SIGIL_RACER_POOL) {
+		_pool = JSON.parse(fs.readFileSync(process.env.SIGIL_RACER_POOL, 'utf8'));
+	} else if (fs.existsSync(copied)) {
 		_pool = JSON.parse(fs.readFileSync(copied, 'utf8'));
 	} else {
 		const set = path.resolve(__dirname, '..', 'docs', 'static', 'puzzles', 'mate_puzzles.json');

@@ -10,6 +10,8 @@
 | `analyzeGame` | task queue, enqueued by `rateGame` for each rated game | The Rust engine's review of the game (`analysis.js`) at the Quick-review preset, 10 positions per task, re-enqueued until done; writes `game_evals/{roomCode}`, which the review panel reads. Progress in `game_evals_progress/{gameId}` (server-only). Fills and reads the eval cache `position_evals/{key}`. |
 | `evalPositions` | callable (signed in) | Up to 10 positions a browser Quick review searched itself: each is checked (it must read back to itself) and searched again here before it is cached in `position_evals`, so clients cannot poison the cache. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
+| `puzzleRace` | callable (guests too) | Puzzle Racer (`racer.js`): opens, joins, leaves, starts and rematches races. It names the racers, picks each race's 60 puzzles (Puzzle Storm's ramp, from `data/racer-pool.json`, which `copy-engine.js` writes at deploy) and its start, 10 s after the call. The puzzles sit in `puzzle_race_seq/{id}`, unreadable before the start; a racer writes only their own progress (rules). |
+| `sweepPuzzleRaces` | every 5 minutes | Deletes Racer lobbies nobody started within 30 minutes or everyone left, closed races, and finished races after two hours. |
 
 ## How a result is checked
 

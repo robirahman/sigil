@@ -409,7 +409,7 @@ async function bootRacer(all, params) {
 			result(status === 'solved');
 		};
 		$('storm-end').style.display = 'none';
-		document.body.classList.add('storm-mode', 'racer-mode');
+		document.body.classList.add('storm-mode');
 		if (!load()) return;
 		render();
 		if (window.SIGIL_PUZZLE_BOARD) window.SIGIL_PUZZLE_BOARD.puzzleLoad(run.current);
@@ -503,7 +503,7 @@ async function bootRacer(all, params) {
 	}
 
 	function hideBoard() {
-		document.body.classList.remove('storm-mode', 'racer-mode');
+		document.body.classList.remove('storm-mode');
 		const pr = $('puzzle-root');
 		if (pr) pr.style.display = 'none';
 	}

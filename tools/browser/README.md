@@ -129,3 +129,21 @@ Seal of Spring takes a side's lock highlight while that side's locked spell is s
 second time through the Seal). Checks a live second cast and Reset Turn on game.html, springlocks
 loaded from a position, review navigation on game.html and multiplayer.html (all non-local requests
 blocked, so it never reaches Firebase), and the analysis board.
+
+## Puzzle Racer
+
+```sh
+cd functions && SIGIL_RACER_MS=90000 SIGIL_RACER_COUNTDOWN_MS=5000 SIGIL_RACER_POOL=/tmp/racer-pool.json \
+  firebase emulators:exec --only auth,database,functions --project demo-sigil \
+  'node ../tools/browser/puzzle-racer-emulator-test.js ../docs 8811'
+```
+
+Three scripted racers (a signed-in host, two guests) and a spectator race through the real
+`puzzleRace` callable: open a public race, find it under Open races, join by the list and by the link,
+only the host starts; nothing is readable or writable early; a countdown, then the same first puzzle
+on every board; solves by board clicks, by the result hook and a skip; every page's track follows
+every car; forged progress (two puzzles at once, a point without a puzzle, someone else's car, a
+back-dated or late write) is refused; the same ranking on every page at the end; a rematch the
+others join; Leave, a closed tab (onDisconnect), a private race kept off the list, and the sweep.
+The `SIGIL_RACER_*` variables (honoured on the emulators only) shorten the race and make it pick
+one-click mates; `RACER_SHOTS=<dir>` saves phone-width screenshots.
