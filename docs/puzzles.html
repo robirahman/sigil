@@ -243,6 +243,10 @@
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" x-show="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random" x-show="window.SIGIL_PUZZLE_NAV.random">Random</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back" x-text="window.SIGIL_PUZZLE_NAV.backLabel || 'Back to the game'">Back to the game</a>
+									<!-- Only once the puzzle is over: a hint would solve it. -->
+									<a class="action-button puzzle-practice" x-show="puzzleStatus !== 'playing' && !window.SIGIL_STORM"
+										x-bind:href="(typeof practiceGameHref === 'function' && practiceGameHref(puzzleImportSfn(puzzle.sfn), 'rust_medium', puzzle.mover).href) || null"
+										title="Play this position against the AI, with hints (unrated)">Practise vs AI</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>

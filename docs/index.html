@@ -349,7 +349,7 @@
 					saves.forEach(function(s) {
 						var modeLabel = s.mode === 'local_1v1'
 							? 'Local 1v1'
-							: ('vs ' + (AI_LABELS[s.aiMode] || s.aiMode || 'AI'));
+							: ((s.practice ? 'practice ' : '') + 'vs ' + (AI_LABELS[s.aiMode] || s.aiMode || 'AI'));
 						var _vs = s.variant || 'standard';
 						var _vparts = [];
 						if (_vs.indexOf('competitive') !== -1) _vparts.push('Competitive');
@@ -362,6 +362,7 @@
 						var a = document.createElement('a');
 						var resumeHref = 'game.html?id=' + encodeURIComponent(s.id);
 						if (s.aiMode) resumeHref += '&ai=' + encodeURIComponent(s.aiMode);
+						if (s.practice) resumeHref += '&practice=1';
 						if (s.variant && s.variant !== 'standard') resumeHref += '&variant=' + encodeURIComponent(s.variant);
 						if (s.clock && s.clock.baseMs > 0) {
 							var min = s.clock.baseMs / 60000;
@@ -833,6 +834,9 @@
 				<section class="menu-group" aria-labelledby="menu-learn">
 					<h3 class="menu-group__title" id="menu-learn">Learn</h3>
 					<a class="menu-link" href="tutorial.html">Tutorial<small>Learn the rules on the board, step by step</small></a>
+					<a class="menu-link" href="drills.html">Practice Drills<small>Short exercises: pushes, dashing, when to cast</small></a>
+					<a class="menu-link" href="nodes.html">Node Trainer<small>Learn the board's node names in timed rounds</small></a>
+					<a class="menu-link" href="drills.html#practice-ai">Practise vs AI<small>Any position against the AI, with hints (unrated)</small></a>
 					<a class="menu-link" href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">Rulebook<small>Official rules (PDF)</small></a>
 					<a class="menu-link" href="variants.html">Variant Rules<small>Competitive, Deathmatch, Scramble, Cataclysm and more</small></a>
 					<a class="menu-link" href="strategy-guide.html">Strategy Guide<small>How to think about the game</small></a>

@@ -385,6 +385,28 @@ test('puzzle storm: own uid only, a sane score, runs count up, best is the max',
 	await assertSucceeds(update(ref(db('alice')), { [st]: run(31, 4, 31), 'storm_leaderboard/alice': { displayName: 'Alice', score: 31 } }));
 });
 
+test('node trainer: own account only, one mode per path, runs count up, best is the max', async () => {
+	await seed({ users: { alice: profile } });
+	const find = 'users/alice/nodeTrainer/find';
+	const round = (best, runs, last) => ({ best, runs, last, at: serverTimestamp() });
+	await assertSucceeds(set(ref(db('alice'), find), round(14, 1, 14)));
+	await assertSucceeds(set(ref(db('alice'), find), round(14, 2, 9)));       // a worse round keeps the best
+	await assertSucceeds(set(ref(db('alice'), find), round(22, 3, 22)));
+	await assertSucceeds(set(ref(db('alice'), 'users/alice/nodeTrainer/name'), round(8, 1, 8)));  // modes count apart
+	await assertFails(set(ref(db('alice'), find), round(30, 4, 7)));          // best must be max(old best, last)
+	await assertFails(set(ref(db('alice'), find), round(15, 4, 15)));         // best never drops
+	await assertFails(set(ref(db('alice'), find), round(23, 3, 23)));         // runs must count up
+	await assertFails(set(ref(db('alice'), find), round(201, 4, 201)));       // out of range
+	await assertFails(set(ref(db('alice'), find), round(22.5, 4, 22.5)));     // not an integer
+	await assertFails(set(ref(db('alice'), find), { best: 23, runs: 4, last: 23, at: Date.now() + 3600000 }));
+	await assertFails(set(ref(db('alice'), find), Object.assign(round(23, 4, 23), { extra: 1 })));
+	await assertFails(set(ref(db('alice'), 'users/alice/nodeTrainer/speed'), round(5, 1, 5)));  // unknown mode
+	await assertFails(set(ref(db('bob'), find), round(30, 4, 30)));
+	await assertFails(set(ref(anon('alice'), find), round(30, 4, 30)));      // guests keep theirs on the device
+	const got = await assertSucceeds(get(ref(db(null), find)));
+	assert.strictEqual(got.val().best, 22);
+});
+
 test('push tokens: only their owner reads or writes them', async () => {
 	const h = '0123456789abcdef0123456789abcdef';
 	const tok = { token: 'fcm-token', created: serverTimestamp() };

@@ -98,6 +98,27 @@
             ".validate": false
           }
         },
+        "nodeTrainer": {
+          ".validate": "auth.uid === $uid && auth.provider !== 'anonymous'",
+          "$mode": {
+            ".validate": "$mode.matches(/^(find|name)$/) && newData.hasChildren(['best', 'runs', 'last', 'at']) && newData.child('runs').val() === (data.child('runs').exists() ? data.child('runs').val() : 0) + 1 && newData.child('best').val() === (newData.child('last').val() > (data.child('best').exists() ? data.child('best').val() : 0) ? newData.child('last').val() : (data.child('best').exists() ? data.child('best').val() : 0))",
+            "best": {
+              ".validate": "newData.isNumber()"
+            },
+            "runs": {
+              ".validate": "newData.isNumber()"
+            },
+            "last": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200 && newData.val() % 1 === 0"
+            },
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() <= now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
         "puzzleAttempts": {
           "$pid": {
             ".validate": "!data.exists() && newData.hasChildren(['solved', 'at', 'delta']) && newData.child('solved').isBoolean() && newData.child('at').isNumber() && newData.child('delta').isNumber() && newData.parent().parent().child('puzzle/last').val() === $pid && newData.parent().parent().child('puzzle/plays').val() === (data.parent().parent().child('puzzle/plays').exists() ? data.parent().parent().child('puzzle/plays').val() : 0) + 1"

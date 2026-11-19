@@ -735,6 +735,11 @@
 									</select>
 								</label>
 								<a class="ana-btn ana-play-ai" x-bind:href="anaPlayHref('ai')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play vs AI</a>
+								<!-- Practice (unrated, with hints): practiceGameHref is game-board-local.js's,
+								     so this page's analysis-board.js needs no change for it. -->
+								<a class="ana-btn ana-practice-ai" x-show="typeof practiceGameHref === 'function'"
+									x-bind:href="(anaCanPlay() && typeof practiceGameHref === 'function' && practiceGameHref(anaMode === 'edit' ? edSfn : anaCurrentSfn(), anaAiTier, '').href) || null"
+									x-bind:class="{ 'is-disabled': !anaCanPlay() }" title="Unrated, with the engine's hints">Practise vs AI</a>
 								<a class="ana-btn ana-play-online" x-bind:href="anaPlayHref('online')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play a friend online</a>
 								<a class="ana-btn ana-play-local" x-bind:href="anaPlayHref('local')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play a friend on this device</a>
 							</div>
