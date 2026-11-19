@@ -74,7 +74,8 @@ async function pushNotice(db, uid, type, p, send) {
  *
  * A collapsed entry pushes only its first unread repeat (one push for a busy
  * thread until it is read); opts.quietMs pushes again only that long after
- * the entry's last write (a follow toggled on and off).
+ * the entry's last write (a follow toggled on and off); opts.token names the
+ * notice, and the same token again (a retried step) is not pushed twice.
  */
 async function notify(db, uid, key, entry, opts) {
 	const o = opts || {};
@@ -104,11 +105,13 @@ async function notify(db, uid, key, entry, opts) {
 		written = res.snapshot.val();
 		fresh = !repeat && res.committed && (written && written.n) === 1;
 	} else {
-		if (o.quietMs) {
+		if (o.quietMs || o.token) {
 			const prev = await val(db, 'notifications/' + uid + '/' + key);
-			fresh = !(prev && typeof prev.at === 'number' && prev.at > entry.at - o.quietMs);
+			if (o.quietMs) fresh = !(prev && typeof prev.at === 'number' && prev.at > entry.at - o.quietMs);
+			// The same notice again (a retried step): written, not pushed.
+			if (o.token) fresh = fresh && !(prev && prev.tok === o.token);
 		}
-		await ref.set(entry);
+		await ref.set(o.token ? Object.assign({}, entry, { tok: o.token }) : entry);
 	}
 	if (o.push && fresh) await pushNotice(db, uid, entry.type, o.push, o.send).catch(() => null);
 	return written;
@@ -323,7 +326,7 @@ async function onBattleCreated(db, bid, battle, now, send) {
  * Tell the battle's players (its roster, up to BATTLE_NOTIFY_MAX a team; the
  * accepted teams' members if it has none).
  */
-async function tellBattleTeams(db, bid, battle, entry, push, send) {
+async function tellBattleTeams(db, bid, battle, entry, push, send, token) {
 	const roster = (await val(db, 'team_battle_scores/' + bid + '/roster')) || {};
 	const byTeam = {};
 	for (const t of battleTeams(battle)) byTeam[t] = [];
@@ -332,7 +335,7 @@ async function tellBattleTeams(db, bid, battle, entry, push, send) {
 	for (const t of Object.keys(byTeam)) {
 		const players = byTeam[t].length ? byTeam[t] : Object.keys((await val(db, 'team_members/' + t)) || {});
 		for (const uid of players.slice(0, BATTLE_NOTIFY_MAX)) {
-			if (await notify(db, uid, 'battle-' + bid, Object.assign({ team: t }, entry), { send, push })) told++;
+			if (await notify(db, uid, 'battle-' + bid, Object.assign({ team: t }, entry), { send, push, token })) told++;
 		}
 	}
 	return told;
@@ -367,7 +370,7 @@ async function battleTick(db, now, send) {
 			if (!(await claimStep(db, bid, 'starting', now))) continue;
 			await ensureRoster(db, bid, b, now);
 			await tellBattleTeams(db, bid, b, { type: 'team', event: 'battle-start', battle: bid, name: cut(b.name, 80), at: now },
-				{ title: 'Team battle started', body: '“' + cut(b.name, 60) + '” is on: rated games against the other teams count.', url, tag: 'sigil-battle-' + bid }, send);
+				{ title: 'Team battle started', body: '“' + cut(b.name, 60) + '” is on: rated games against the other teams count.', url, tag: 'sigil-battle-' + bid }, send, 'start');
 			await db.ref('team_battles/' + bid + '/startedAt').set(now);
 			out.started++;
 		}
@@ -427,7 +430,11 @@ async function ensureRoster(db, bid, battle, now) {
  */
 async function scoreGame(db, uid, gameId, entry, now, send) {
 	if (!entry || entry.rated !== true || entry.opponentIsAI || !human(uid) || !human(entry.opponentUid)) return [];
-	const ts = entry.timestamp;
+	// When the game ended: the room's closing time (the server's clock, set
+	// with the result). The entry's own timestamp is when it was recorded,
+	// seconds later (recordRoom waits); it stands in only once the room is gone.
+	const closed = entry.roomCode ? await val(db, 'rooms/' + entry.roomCode + '/closedAt') : null;
+	const ts = typeof closed === 'number' ? closed : entry.timestamp;
 	if (typeof ts !== 'number') return [];
 	const snap = await db.ref('team_battles').orderByChild('end').startAt(ts).once('value');
 	const battles = [];
@@ -497,7 +504,7 @@ async function announceEnd(db, bid, battle, standings, now, send, corrected) {
 	const url = 'teams.html?battle=' + encodeURIComponent(bid);
 	return tellBattleTeams(db, bid, battle, {
 		type: 'team', event: 'battle-end', battle: bid, name: cut(battle.name, 80), winner: win, winnerName: winName ? cut(winName, 40) : null, at: now,
-	}, { title: corrected ? 'Team battle result corrected' : 'Team battle over', body: '“' + cut(battle.name, 60) + '”: ' + (winName ? cut(winName, 40) + ' won.' : 'a tie.'), url, tag: 'sigil-battle-' + bid }, send);
+	}, { title: corrected ? 'Team battle result corrected' : 'Team battle over', body: '“' + cut(battle.name, 60) + '”: ' + (winName ? cut(winName, 40) + ' won.' : 'a tie.'), url, tag: 'sigil-battle-' + bid }, send, 'end-' + (win || 'tie'));
 }
 
 /** A correspondence game's result in the inbox (realtime ones are seen live). */
@@ -544,8 +551,9 @@ async function disbandTeam(db, tid, uid, now) {
 
 /**
  * Add to `updates` the removal of team `tid`: the team, its members,
- * requests, bans, forum, and the battles it hosts that have not started.
- * (The members' user_teams entries are the caller's.)
+ * requests, bans, forum, the battles it hosts that have not started, and
+ * its place in the others not yet started. (The members' user_teams
+ * entries are the caller's.)
  */
 async function teamRemoval(db, tid, now, updates) {
 	Object.assign(updates, {
@@ -556,8 +564,16 @@ async function teamRemoval(db, tid, now, updates) {
 		['forum_threads/team:' + tid]: null,
 		['forum_posts/team:' + tid]: null,
 	});
-	const hosted = await db.ref('team_battles').orderByChild('start').startAt(now).once('value');
-	hosted.forEach((c) => { if (c.val() && c.val().host === tid) updates['team_battles/' + c.key] = null; });
+	// Battles not yet started: those it hosts go; in the others it was
+	// invited to or joined, it is struck off (one already running keeps it,
+	// with its scores).
+	const future = await db.ref('team_battles').orderByChild('start').startAt(now).once('value');
+	future.forEach((c) => {
+		const b = c.val();
+		if (!b) return;
+		if (b.host === tid) updates['team_battles/' + c.key] = null;
+		else if (b.teams && b.teams[tid]) updates['team_battles/' + c.key + '/teams/' + tid] = null;
+	});
 	return updates;
 }
 

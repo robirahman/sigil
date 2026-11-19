@@ -82,6 +82,12 @@ test('inbox: written once per subject, pushed only when switched on', async () =
 	const e = await get('notifications/bob/forum-t1');
 	assert.deepStrictEqual([e.n, e.actor, e.read], [1, 'dave', undefined]);
 	assert.strictEqual(sent.length, before + 2);
+	// The same notice again (a retried step) is not pushed twice; a new one is.
+	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 10 }, { send, push: p, token: 'end-reds' });
+	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 11 }, { send, push: p, token: 'end-reds' });
+	assert.strictEqual(sent.length, before + 3);
+	await community.notify(db, 'bob', 'battle-x', { type: 'team', event: 'battle-end', at: 12 }, { send, push: p, token: 'end-blues' });
+	assert.strictEqual(sent.length, before + 4);
 });
 
 test('challenges and messages', async () => {
@@ -239,6 +245,10 @@ test('team battles: scored games, the start, the result', async () => {
 	// Carol leaves the reds before her game is rated: it still counts for them.
 	await db.ref().update({ 'team_members/reds/carol': null, 'user_teams/carol/reds': null });
 	assert.deepStrictEqual(await community.scoreGame(db, 'carol', 'g10', game('bob', 'loss', { timestamp: now + 20 })), [{ battle: 'tb1', team: 'reds', win: false }]);
+	// A game's end is its room's closing time, not when it was recorded
+	// (seconds later): one that ended just before the end counts.
+	await db.ref('rooms/LATE1/closedAt').set(now + HOUR - 1000);
+	assert.deepStrictEqual(await community.scoreGame(db, 'carol', 'g14', game('dave', 'loss', { timestamp: now + HOUR + 4000, roomCode: 'LATE1' })), [{ battle: 'tb1', team: 'reds', win: false }]);
 	// The start is announced once, to both teams' members (and the old
 	// battle, never closed, is closed).
 	const tick = await community.battleTick(db, now, null);
@@ -307,11 +317,14 @@ test('disbanding a team, and deleting an account', async () => {
 		'forum_threads/team:reds/t1': { title: 'Hi', by: 'bob', at: 1, lastAt: 1, lastBy: 'bob', lastPost: 'p1' },
 		'forum_posts/team:reds/t1/p1': { by: 'bob', at: 1, text: 'x' },
 		'team_battles/soon': { name: 'Soon', host: 'reds', by: 'alice', created: 1, start: now + HOUR, end: now + 3 * HOUR, topN: 3, teams: { reds: 'accepted' } },
+		// Another team's battle the reds were invited to: they are struck off.
+		'team_battles/other': { name: 'Other', host: 'greens', by: 'x', created: 1, start: now + HOUR, end: now + 3 * HOUR, topN: 3, teams: { greens: 'accepted', reds: 'invited' } },
 	});
 	await assert.rejects(community.disbandTeam(db, 'reds', 'bob', now), /Only the leader/);
 	await assert.rejects(community.disbandTeam(db, 'nope', 'alice', now), /No such team/);
 	assert.strictEqual(await community.disbandTeam(db, 'reds', 'alice', now), 2);
 	for (const p of ['teams/reds', 'team_members/reds', 'user_teams/bob', 'forum_threads/team:reds', 'team_battles/soon']) assert.strictEqual(await get(p), null, p);
+	assert.deepStrictEqual(await get('team_battles/other/teams'), { greens: 'accepted' });
 
 	// Deletion: alice leads a team with others, talks to bob, blogs, is in the inbox.
 	await db.ref().update({

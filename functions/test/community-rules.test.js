@@ -408,6 +408,8 @@ test('teams: found, join, leave, staff and leadership', async () => {
 	// The leader cannot just leave; they hand over first.
 	await assertFails(update(ref(db('alice')), { 'team_members/reds/alice': null, 'user_teams/alice/reds': null }));
 	await assertFails(update(ref(db('bob')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader', 'team_members/reds/alice/role': 'member' }));
+	// Handing over without stepping down is refused (two leaders).
+	await assertFails(update(ref(db('alice')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader' }));
 	await assertSucceeds(update(ref(db('alice')), { 'teams/reds/leader': 'bob', 'team_members/reds/bob/role': 'leader', 'team_members/reds/alice/role': 'member' }));
 	await assertSucceeds(update(ref(db('alice')), { 'team_members/reds/alice': null, 'user_teams/alice/reds': null }));
 	// Edits: staff only, the fields the rules know.
