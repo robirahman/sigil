@@ -218,9 +218,6 @@ async function leaveRace(db, id, uid) {
 async function startRace(db, id, uid, now, pick) {
 	const seq = (pick || ((n) => pickRaceSequence(racePool(), n)))(RACE_PUZZLES);
 	if (!Array.isArray(seq) || !seq.length) throw new RaceError('no-puzzles');
-	// The sequence first: nobody can read it before startAt, and startAt
-	// does not exist until the transaction below.
-	await db.ref('puzzle_race_seq/' + id).set(seq);
 	let why = null;
 	const startAt = now + RACE_COUNTDOWN_MS;
 	const { committed, race } = await raceTransaction(db, id, (r) => {
@@ -246,13 +243,11 @@ async function startRace(db, id, uid, now, pick) {
 		r.len = seq.length;
 		return r;
 	});
-	if (!committed || !race || race.startAt !== startAt) {
-		// Not this call's start (refused, or another start won): its sequence goes.
-		if (!race || race.startAt !== startAt) await db.ref('puzzle_race_seq/' + id).remove().catch(() => {});
-		if (!race) throw new RaceError('not-found');
-		throw new RaceError(why || 'started');
-	}
-	await db.ref('puzzle_race_lobby/' + id).remove();
+	if (!race) throw new RaceError('not-found');
+	if (!committed || race.startAt !== startAt) throw new RaceError(why || 'started');
+	// Only the start that won writes the sequence, well inside the
+	// countdown: the rules hide it until startAt.
+	await db.ref().update({ ['puzzle_race_seq/' + id]: seq, ['puzzle_race_lobby/' + id]: null });
 	return { id, startAt: race.startAt, endAt: race.endAt };
 }
 
